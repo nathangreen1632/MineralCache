@@ -1,0 +1,239 @@
+@import url('https://fonts.googleapis.com/css?family=Inter:wght@400;600;800&display=swap');
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    /* --------------------- LIGHT MODE (180° complements, lightened) --------------------- */
+    /* Base palette (A light ⇢ E dark text) */
+    --c-a: #FAFAFA; /* A  | complement of White → kept very light */
+    --c-b: #F2EEED; /* B  | complement of Payne's Gray, lightened */
+    --c-c: #EDDEDE; /* C  | complement of Tiffany Blue, lightened */
+    --c-d: #ECD4CA; /* D  | complement of Gun Metal, lightened */
+    --c-e: #300D0D; /* E  | complement of Rich Black, kept dark for text */
+
+    /* Extended palette (complements, lightened for UI) */
+    --c-f: #EAE9EC; /* Ash Gray → cool, light input/surfaces */
+    --c-g: #EEDCE9; /* Shamrock Green → soft success tint */
+    --c-h: #E9D7DA; /* Dark Slate Gray → alt card */
+    --c-i: #D6F4F5; /* Auburn → warning complement (teal-ish) */
+    --c-j: #38302E; /* Moonstone → link complement (warm) */
+    --c-k: #343036; /* Black Olive → dark hover for buttons/links */
+    --c-l: #E9D7E1; /* Veridian → secondary green complement */
+    --c-m: #C1EDF0; /* Burnt Umber → info/error-adjacent complement */
+    --c-n: #F2F2F2; /* Erie Black → neutral hover/alt */
+
+    /* LIGHT MODE theme mapping */
+    --theme-bg: var(--c-b);
+    --theme-surface: var(--c-a);
+    --theme-text: var(--c-e);
+    --theme-text-white: var(--c-a);
+    --theme-accent: var(--c-e);
+    --theme-border: var(--c-c);
+    --theme-strip: var(--c-b);
+    --theme-strip-text: var(--c-e);
+    --theme-textbox: var(--c-f);
+    --theme-placeholder: var(--c-e);
+    --theme-pencil: var(--c-e);
+    --theme-superscript: var(--c-e);
+    --theme-moveto: var(--c-f);
+    --theme-scripture: var(--c-f);
+    --theme-verse: var(--c-f);
+
+    /* buttons */
+    --theme-button: var(--c-e);
+    --theme-button-blue: var(--c-d);
+    --theme-button-blue-hover: var(--c-c);
+    --theme-button-gray: var(--c-c);
+    --theme-button-dark: var(--c-a);
+    --theme-button-hover: var(--c-k);
+    --theme-pill-green: var(--c-l);
+    --theme-pill-orange: var(--c-m);
+
+    /* links */
+    --theme-link: var(--c-j);
+    --theme-link-hover: #E9D1CB; /* slightly darker than --c-j */
+
+    /* semantic */
+    --theme-success: var(--c-g);
+    --theme-warning: var(--c-i);
+    --theme-info: var(--c-j);
+
+    /* cards & interactive */
+    --theme-card: var(--c-b);
+    --theme-card-hover: var(--c-c);
+    --theme-card-hover-alt: var(--c-b);
+    --theme-card-alt-inverse: var(--c-h);
+    --theme-card-alt-hover: var(--c-n);
+    --theme-card-alt: var(--c-f);
+    --theme-hover: var(--c-d);
+
+    /* focus & elevation */
+    --theme-focus: var(--c-d);
+    --theme-shadow: rgba(48, 13, 13, 0.25); /* from --c-e */
+
+    /* error */
+    --theme-error: #ef4444;
+    --theme-button-error: #c43838;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* ---------------------------- DARK MODE (your palette) ---------------------------- */
+    /* Base palette (A light text ⇢ E darkest surface) */
+    --c-a: #FCFCFC; /* White (text on dark) */
+    --c-b: #57737A; /* Payne's Gray */
+    --c-c: #85BDBF; /* Tiffany Blue */
+    --c-d: #122932; /* Gun Metal */
+    --c-e: #040F0F; /* Rich Black */
+
+    /* Extended palette (your supplied colors) */
+    --c-f: #A1A499; /* Ash Gray (inputs, subtle fills) */
+    --c-g: #4DA167; /* Shamrock Green (success) */
+    --c-h: #2C514C; /* Dark Slate Gray (alt card) */
+    --c-i: #A22C29; /* Auburn (warning) */
+    --c-j: #46ACC2; /* Moonstone (links/info) */
+    --c-k: #30332E; /* Black Olive (hover) */
+    --c-l: #41785A; /* Veridian (green pill/cta) */
+    --c-m: #902923; /* Burnt Umber (orange/danger alt) */
+    --c-n: #191919; /* Erie Black (neutral alt) */
+    /* (Also available if needed: Night #0F0E0E) */
+
+    /* DARK MODE theme mapping — mirrors your previous logic */
+    --theme-bg: var(--c-e);
+    --theme-surface: var(--c-e);
+    --theme-text: var(--c-a);
+    --theme-text-white: var(--c-e);
+    --theme-accent: var(--c-a);
+    --theme-border: var(--c-b);
+    --theme-strip: var(--c-d);
+    --theme-strip-text: var(--c-a);
+    --theme-textbox: var(--c-f);
+    --theme-placeholder: var(--c-e);
+    --theme-pencil: var(--c-f);
+    --theme-superscript: var(--c-f);
+    --theme-moveto: var(--c-e);
+    --theme-scripture: var(--c-e);
+    --theme-verse: var(--c-e);
+
+    /* buttons */
+    --theme-button: var(--c-a);
+    --theme-button-blue: var(--c-b);
+    --theme-button-blue-hover: var(--c-a);
+    --theme-button-gray: var(--c-b);
+    --theme-button-dark: var(--c-e);
+    --theme-button-hover: var(--c-k);
+    --theme-pill-green: var(--c-l);
+    --theme-pill-orange: var(--c-m);
+
+    /* links */
+    --theme-link: var(--c-j);
+    --theme-link-hover: #74C7D6; /* brighter hover for dark */
+
+    /* semantic */
+    --theme-success: var(--c-g);
+    --theme-warning: var(--c-i);
+    --theme-info: var(--c-j);
+
+    /* cards & interactive */
+    --theme-card: var(--c-d);
+    --theme-card-hover: var(--c-b);
+    --theme-card-hover-alt: var(--c-b);
+    --theme-card-alt: var(--c-h);
+    --theme-card-alt-inverse: var(--c-f);
+    --theme-hover: var(--c-b);
+    --theme-card-alt-hover: var(--c-n);
+
+    /* focus & elevation */
+    --theme-focus: var(--c-a);
+    --theme-shadow: rgba(204, 218, 209, 0.25);
+
+    /* error */
+    --theme-error: #ef4444;
+    --theme-button-error: #c43838;
+  }
+}
+
+/* PLACEHOLDER COLOR */
+@layer base {
+  input::placeholder {
+    color: var(--theme-text);
+    opacity: 0.7;
+  }
+}
+
+/* GLOBAL STYLES */
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--theme-bg);
+  color: var(--theme-text);
+}
+
+/* GLOBAL SCROLLBAR */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--theme-scrollbar-thumb) var(--theme-scrollbar-track);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  border-radius: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: var(--theme-scrollbar-track);
+  border-radius: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--theme-scrollbar-thumb);
+  border-radius: 8px;
+  border: 2px solid var(--theme-scrollbar-track);
+}
+
+/* Hide scrollbars only for the header nav */
+.header-nav--no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.header-nav--no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* LIGHT MODE scrollbar */
+:root {
+  --theme-scrollbar-track: var(--theme-surface);
+  --theme-scrollbar-thumb: var(--theme-accent);
+}
+
+/* DARK MODE scrollbar */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --theme-scrollbar-track: var(--theme-bg);
+    --theme-scrollbar-thumb: var(--theme-accent);
+  }
+}
+
+/* --- Mobile WebKit helpers --- */
+html { -webkit-text-size-adjust: 100%; }
+@supports (-webkit-touch-callout: none) {
+  html, body, a, button, input, label, select, textarea { touch-action: manipulation; }
+  * { -webkit-tap-highlight-color: rgba(0,0,0,0); }
+}
+
+/* Subtle 3D text variants */
+.text-3d-raised {
+  text-shadow:
+          0 1px 0 var(--theme-surface),
+          0 2px 0 var(--theme-border),
+          0 3px 4px var(--theme-shadow);
+}
+.text-3d-engraved {
+  text-shadow:
+          0 -1px 0 var(--theme-surface),
+          0 -2px 0 var(--theme-border),
+          0 -3px 4px var(--theme-shadow);
+}
+
+/* Keep corners pretty with scrollbars present */
+.scrollpad { scrollbar-gutter: stable both-edges; }
