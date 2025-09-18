@@ -1,0 +1,22 @@
+{
+  "name": "server",
+  "private": true,
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "nodemon --watch src --ext ts --exec \"npm run build && node ./dist/server.js\"",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "db:migrate": "NODE_ENV=development sequelize-cli db:migrate",
+    "db:undo": "NODE_ENV=development sequelize-cli db:migrate:undo",
+    "db:reset": "NODE_ENV=development sequelize-cli db:migrate:undo:all && NODE_ENV=development sequelize-cli db:migrate",
+    "db:seed": "NODE_ENV=development sequelize-cli db:seed:all",
+    "db:seed:undo": "NODE_ENV=development sequelize-cli db:seed:undo:all"
+  },
+  "keywords": [],
+  "author": "One Guy Productions",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "dotenv": "^17.2.2"
+  }
+}
