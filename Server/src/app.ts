@@ -5,6 +5,8 @@ import compression from 'compression';
 import cookieSession from 'cookie-session';
 import morgan from 'morgan';
 import apiRouter from './routes/index.js';
+import { db } from './models/sequelize.js';
+import 'dotenv/config';
 
 const app = express();
 
@@ -29,11 +31,38 @@ app.use(cookieSession({
   secure: process.env.NODE_ENV === 'production',
 }));
 
-// Health
-app.get('/api/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
+// ----------------------
+// Health endpoints
+// ----------------------
+const HEALTH_PATH = '/api/health';
+const READY_PATH = '/api/ready';
+
+app.get(HEALTH_PATH, (_req, res) =>
+  res.json({ ok: true, ts: new Date().toISOString() })
+);
+
+app.get(READY_PATH, async (_req, res) => {
+  const result = await db.ping();
+  if (result.ok) {
+    res.json({ ok: true, db: 'up', ts: new Date().toISOString() });
+  } else {
+    res
+      .status(503)
+      .json({ ok: false, db: 'down', error: result.error, ts: new Date().toISOString() });
+  }
+});
+
+// Print easy dev hints once this module loads (works when imported by server.ts)
+if (process.env.NODE_ENV !== 'production') {
+  const port = Number(process.env.PORT || 4000);
+  const url = `http://localhost:${port}`;
+  // eslint-disable-next-line no-console
+  console.log(`[health] GET ${HEALTH_PATH}  →  ${url}${HEALTH_PATH}`);
+  // eslint-disable-next-line no-console
+  console.log(`[health] GET ${READY_PATH}   →  ${url}${READY_PATH}`);
+}
 
 // Mount your API routers under /api
-
 app.use('/api', apiRouter);
 
 // Static uploads (Render disk)
