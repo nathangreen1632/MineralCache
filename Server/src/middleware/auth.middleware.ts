@@ -1,11 +1,21 @@
-// Server/src/middleware/auth.middleware.ts
 import type { Request, Response, NextFunction } from 'express';
 
-export async function requireAuth(_req: Request, _res: Response, next: NextFunction): Promise<void> {
-  // TODO: real auth; allow all for now
+export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const u = (req.session as any)?.user;
+  if (!u?.id) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  req.user = u;
   next();
 }
-export async function requireAdmin(_req: Request, _res: Response, next: NextFunction): Promise<void> {
-  // TODO: check role; allow all for now
+
+export async function requireAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const u = (req.session as any)?.user;
+  if (!u?.id || u.role !== 'admin') {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+  req.user = u;
   next();
 }
