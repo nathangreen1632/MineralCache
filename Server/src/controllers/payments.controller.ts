@@ -4,8 +4,8 @@ import { createPaymentIntent as createPI } from '../services/stripe.service.js';
 
 export async function createPaymentIntent(req: Request, res: Response): Promise<void> {
   try {
-    const amountCentsRaw = (req.body as any)?.amountCents;
-    const currencyRaw = (req.body as any)?.currency;
+    const amountCentsRaw = (req.body)?.amountCents;
+    const currencyRaw = (req.body)?.currency;
 
     const amountCents = Number(amountCentsRaw);
     if (!Number.isFinite(amountCents) || amountCents <= 0) {
