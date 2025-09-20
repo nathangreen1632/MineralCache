@@ -1,17 +1,44 @@
 // Server/src/controllers/payments.controller.ts
 import type { Request, Response } from 'express';
-import { createPaymentIntent as createPI, StripeDisabledError } from '../services/stripe.service.js';
+import { createPaymentIntent as createPI } from '../services/stripe.service.js';
 
 export async function createPaymentIntent(req: Request, res: Response): Promise<void> {
   try {
-    const amountCents = Number(req.body?.amountCents ?? 0);
+    const amountCentsRaw = (req.body as any)?.amountCents;
+    const currencyRaw = (req.body as any)?.currency;
+
+    const amountCents = Number(amountCentsRaw);
     if (!Number.isFinite(amountCents) || amountCents <= 0) {
-      res.status(400).json({ error: 'Bad amount' }); return;
+      res.status(400).json({ error: 'Bad amount' });
+      return;
     }
-    const out = await createPI({ amountCents });
-    res.json(out);
-  } catch (e) {
-    if (e instanceof StripeDisabledError) { res.status(503).json({ error: 'Payments disabled' }); return; }
+
+    const currency =
+      typeof currencyRaw === 'string' && currencyRaw.trim().length > 0
+        ? currencyRaw.trim().toLowerCase()
+        : undefined;
+
+    const result = await createPI({ amountCents, currency });
+
+    if (result.ok) {
+      res.json({ ok: true, clientSecret: result.clientSecret });
+      return;
+    }
+
+    // Map common error text from the service to appropriate HTTP codes
+    const msg = (result.error ?? '').toLowerCase();
+    if (msg.includes('not configured')) {
+      res.status(503).json({ error: 'Payments disabled' });
+      return;
+    }
+    if (msg.includes('invalid amount')) {
+      res.status(400).json({ error: 'Bad amount' });
+      return;
+    }
+
+    // Fallback
+    res.status(502).json({ error: result.error || 'Failed to create intent' });
+  } catch {
     res.status(500).json({ error: 'Failed to create intent' });
   }
 }
