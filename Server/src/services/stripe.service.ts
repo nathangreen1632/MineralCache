@@ -6,7 +6,6 @@ export const stripeEnabled = secret.length > 0;
 
 let stripe: Stripe | null = null;
 if (stripeEnabled) {
-  // Use a stable, current API version
   stripe = new Stripe(secret, { apiVersion: '2025-08-27.basil', maxNetworkRetries: 2 });
 }
 
@@ -15,85 +14,67 @@ export async function createPaymentIntent(args: {
   currency?: string;
 }): Promise<{ ok: true; clientSecret: string } | { ok: false; clientSecret: null; error: string }> {
   if (!stripeEnabled || !stripe) {
-    return { ok: false, clientSecret: null, error: 'Stripe is not configured' };
+    return { ok: false, clientSecret: null, error: 'Payments disabled' };
   }
-
-  const amount = Number(args.amountCents);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return { ok: false, clientSecret: null, error: 'Invalid amount' };
-  }
-
   try {
     const pi = await stripe.paymentIntents.create({
-      amount,
-      currency: args.currency && args.currency.length > 0 ? args.currency : 'usd',
+      amount: Math.trunc(args.amountCents),
+      currency: (args.currency || 'usd').toLowerCase(),
       automatic_payment_methods: { enabled: true },
     });
-    const secretVal = pi?.client_secret || '';
-    if (secretVal.length === 0) {
-      return { ok: false, clientSecret: null, error: 'Missing client secret' };
-    }
-    return { ok: true, clientSecret: secretVal };
+    if (!pi.client_secret) return { ok: false, clientSecret: null, error: 'No client secret' };
+    return { ok: true, clientSecret: pi.client_secret };
   } catch (e: any) {
-    const message = typeof e?.message === 'string' && e.message.length > 0 ? e.message : 'Failed to create PaymentIntent';
-    return { ok: false, clientSecret: null, error: message };
+    return { ok: false, clientSecret: null, error: e?.message || 'Stripe error' };
   }
 }
 
-// ---------- Stripe Connect helpers (graceful, no throws)
+// ---------- Stripe Connect helpers
 
 export async function ensureVendorStripeAccount(vendor: {
   stripeAccountId?: string | null;
   displayName?: string | null;
 }): Promise<{ accountId: string | null; error?: string }> {
-  if (!stripeEnabled || !stripe) {
-    return { accountId: null, error: 'Stripe is not configured' };
-  }
+  if (!stripeEnabled || !stripe) return { accountId: null, error: 'Stripe is not configured' };
 
   const hasId = typeof vendor.stripeAccountId === 'string' && vendor.stripeAccountId.length > 0;
-  if (hasId) {
-    return { accountId: String(vendor.stripeAccountId) };
-  }
-
-  const name = typeof vendor.displayName === 'string' && vendor.displayName.length > 0 ? vendor.displayName : 'Vendor';
+  if (hasId) return { accountId: String(vendor.stripeAccountId) };
 
   try {
-    const acct = await stripe.accounts.create({
+    const account = await stripe.accounts.create({
       type: 'express',
-      business_type: 'individual',
-      business_profile: { name },
+      business_profile: { name: vendor.displayName || undefined },
       capabilities: { transfers: { requested: true } },
     });
-    return { accountId: acct.id };
+    return { accountId: account.id };
   } catch (e: any) {
-    const message = typeof e?.message === 'string' && e.message.length > 0 ? e.message : 'Failed to create Connect account';
-    return { accountId: null, error: message };
+    return { accountId: null, error: e?.message || 'Failed to create account' };
   }
 }
 
-export async function createAccountLink(accountId: string): Promise<{ url: string | null; error?: string }> {
-  if (!stripeEnabled || !stripe) {
-    return { url: null, error: 'Stripe is not configured' };
-  }
-
-  const platform = process.env.PLATFORM_URL && process.env.PLATFORM_URL.length > 0
-    ? process.env.PLATFORM_URL
-    : 'http://localhost:5173';
-
+export async function createAccountLink(args: {
+  accountId: string;
+  platformBaseUrl: string; // e.g., https://mineralcache.com
+}): Promise<{ url: string | null; error?: string }> {
+  if (!stripeEnabled || !stripe) return { url: null, error: 'Stripe is not configured' };
   try {
     const link = await stripe.accountLinks.create({
-      account: accountId,
+      account: args.accountId,
       type: 'account_onboarding',
-      refresh_url: `${platform}/vendor/onboarding/refresh`,
-      return_url: `${platform}/vendor/dashboard`,
+      refresh_url: `${args.platformBaseUrl}/vendor/onboarding/refresh`,
+      return_url: `${args.platformBaseUrl}/vendor/dashboard`,
     });
-    const url = typeof link?.url === 'string' && link.url.length > 0 ? link.url : '';
-    if (url.length === 0) {
-      return { url: null, error: 'Failed to create onboarding link' };
-    }
-    return { url };
+    return { url: link.url || null };
   } catch (e: any) {
-    const message = typeof e?.message === 'string' && e.message.length > 0 ? e.message : 'Failed to create onboarding link';
-    return { url: null, error: message };
+    return { url: null, error: e?.message || 'Failed to create onboarding link' };
   }
+}
+
+// ---------- Webhook verification
+
+export function verifyStripeWebhook(rawBody: Buffer, sig: string | null) {
+  if (!stripeEnabled || !stripe) throw new Error('Stripe disabled');
+  const whSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
+  if (!whSecret) throw new Error('No STRIPE_WEBHOOK_SECRET');
+  return stripe.webhooks.constructEvent(rawBody, sig || '', whSecret);
 }
