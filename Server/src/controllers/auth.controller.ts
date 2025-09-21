@@ -5,27 +5,47 @@ import bcrypt from 'bcryptjs';
 import { Op } from 'sequelize';
 import { User } from '../models/user.model.js';
 
-// ---------- Schemas (use z.email() per new zod)
+/** ------------------------------------------------------------------------
+ * Email schema (no deprecated .email() method)
+ * - Use z.email() if present (newer Zod).
+ * - Otherwise, use string + refine with a reasonable pattern (no deprecations).
+ * -----------------------------------------------------------------------*/
+const EmailSchema: z.ZodString = (typeof (z as any).email === 'function')
+  ? (z as any).email()
+  : z
+    .string()
+    .refine(
+      (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
+      { message: 'Invalid email' }
+    );
+
 const RegisterSchema = z.object({
-  email: z.email().max(320),
+  email: EmailSchema.max(320),
   password: z.string().min(8).max(200),
   dobVerified18: z.boolean().optional(),
 });
 
 const LoginSchema = z.object({
-  email: z.email().max(320),
+  email: EmailSchema.max(320),
   password: z.string().min(8).max(200),
 });
 
-// ---------- Helpers
+/** ------------------------------------------------------------------------
+ * Error details serializer (no deprecated .flatten())
+ * Pref: z.treeifyError (new) → err.format() → minimal fallback
+ * -----------------------------------------------------------------------*/
 function zDetails(err: ZodError) {
-  // z.treeifyError exists on newer zod; fall back to flatten for older versions
-  return (z as any).treeifyError ? (z as any).treeifyError(err) : err.flatten();
+  const anyZ = z as any;
+  if (typeof anyZ.treeifyError === 'function') return anyZ.treeifyError(err);
+  if (typeof (err as any).format === 'function') return (err as any).format();
+  // minimal fallback to keep a stable shape
+  return { formErrors: [err.message], fieldErrors: {} as Record<string, string[]> };
 }
 
-function setSessionUser(req: Request, user: {
-  id: number; role: 'buyer'|'vendor'|'admin'; dobVerified18: boolean; email?: string;
-}) {
+function setSessionUser(
+  req: Request,
+  user: { id: number; role: 'buyer' | 'vendor' | 'admin'; dobVerified18: boolean; email?: string }
+) {
   (req.session as any).user = {
     id: user.id,
     role: user.role,
@@ -56,9 +76,7 @@ export async function register(req: Request, res: Response): Promise<void> {
 
   const passwordHash = await bcrypt.hash(password, 10);
 
-  // NOTE: createdAt/updatedAt included to satisfy typings if your model
-  // doesn’t mark them CreationOptional. If you fix the model (see below),
-  // you can remove these two fields from create().
+  // createdAt/updatedAt included if your model doesn't mark CreationOptional
   const now = new Date();
   const user = await User.create({
     email: normEmail,
@@ -133,6 +151,6 @@ export async function verify18(req: Request, res: Response): Promise<void> {
 
 export async function logout(req: Request, res: Response): Promise<void> {
   (req.session as any).user = null;
-  req.user = null;
+  req.user = null as any;
   res.json({ ok: true });
 }
