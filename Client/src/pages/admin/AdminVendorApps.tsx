@@ -1,17 +1,8 @@
 // Client/src/pages/AdminVendorApps.tsx
 import React, { useEffect, useState } from 'react';
-import { api } from '../../lib/api';
-
-type Vendor = {
-  id: number;
-  userId: number;
-  displayName: string;
-  slug: string;
-  approvalStatus: 'pending' | 'approved' | 'rejected';
-  logoUrl?: string | null;
-  country?: string | null;
-  createdAt?: string;
-};
+import { get, patch } from '../../lib/api';
+import type { Ok } from '../../types/api.types';
+import {type Vendor} from "../../types/adminVendorApps.types.ts";
 
 export default function AdminVendorApps(): React.ReactElement {
   const [items, setItems] = useState<Vendor[]>([]);
@@ -20,7 +11,9 @@ export default function AdminVendorApps(): React.ReactElement {
 
   async function load(): Promise<void> {
     setMsg(null);
-    const { data, error, status } = await api<{ items: Vendor[]; total?: number }>('/admin/vendor-apps');
+    const { data, error, status } = await get<{ items: Vendor[]; total?: number }>(
+      '/admin/vendor-apps'
+    );
     if (error) {
       setMsg(status === 403 ? 'Admin only.' : error);
       return;
@@ -28,18 +21,20 @@ export default function AdminVendorApps(): React.ReactElement {
     setItems(data?.items ?? []);
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+  }, []);
 
   async function approve(id: number) {
     setMsg(null);
     setBusyId(id);
-    const { data, error } = await api<{
+    const { data, error } = await patch<{
       ok: boolean;
       onboardingUrl?: string | null;
       enabled?: boolean;
       message?: string;
       warning?: string;
-    }>(`/admin/vendors/${id}/approve`, { method: 'PATCH' });
+    }>(`/admin/vendors/${id}/approve`);
     setBusyId(null);
 
     if (error) {
@@ -58,10 +53,10 @@ export default function AdminVendorApps(): React.ReactElement {
   async function reject(id: number) {
     setMsg(null);
     setBusyId(id);
-    const { error } = await api<{ ok: boolean }>(`/admin/vendors/${id}/reject`, {
-      method: 'PATCH',
-      body: JSON.stringify({ reason: 'Not a fit at this time.' }),
-    });
+    const { error } = await patch<Ok, { reason: string }>(
+      `/admin/vendors/${id}/reject`,
+      { reason: 'Not a fit at this time.' }
+    );
     setBusyId(null);
 
     if (error) {

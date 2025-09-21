@@ -1,4 +1,3 @@
-# .github/workflows/ci.yml
 name: CI
 on:
   pull_request:
@@ -28,3 +27,20 @@ jobs:
       - name: Build
         working-directory: ${{ matrix.app }}
         run: npm run build
+
+  sonarcloud:
+    name: SonarCloud
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history improves PR analysis
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # You said you stored the token as an Actions variable called MineralCacheToken:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        # No args needed because we added sonar-project.properties at repo root
