@@ -1,5 +1,5 @@
 // Server/src/middleware/authz.middleware.ts
-import type { Request, Response, NextFunction } from 'express';
+import type {NextFunction, Request, Response} from 'express';
 
 /** If you want Request.user typed in TS (pulled from req.session.user) */
 declare module 'express-serve-static-core' {
@@ -15,8 +15,7 @@ declare module 'express-serve-static-core' {
 
 /** Utility: copy session user onto req.user so downstream code is typed */
 export function attachUser(req: Request, _res: Response, next: NextFunction): void {
-  const u = (req.session as any)?.user ?? null;
-  req.user = u;
+  req.user = (req.session as any)?.user ?? null;
   next();
 }
 
