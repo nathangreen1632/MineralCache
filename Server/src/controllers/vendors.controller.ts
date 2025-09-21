@@ -32,7 +32,7 @@ function zDetails(err: ZodError) {
 const ApplySchema = z.object({
   displayName: z.string().min(2).max(120),
   bio: z.string().max(5000).optional().nullable(),
-  // Use z.url() for URL validation; keep length limit via refine (no deprecated .url())
+  // Validate URL without deprecated APIs
   logoUrl: z
     .string()
     .max(500)
@@ -63,10 +63,9 @@ function slugify(input: string): string {
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
-    // Group alternation explicitly to satisfy the linter
     .replace(/(^-+)|(-+$)/g, '');
   if (base.length > 0) {
-    return base;
+    return base.slice(0, 140);
   }
   return `vendor-${Date.now()}`;
 }
@@ -147,7 +146,6 @@ export async function linkStripeOnboarding(req: Request, res: Response): Promise
       return;
     }
 
-    // TODO: create/connect Express account & return onboarding link
     if (!stripeEnabled) {
       res.json({ onboardingUrl: null, enabled: false, message: 'Stripe not configured' });
       return;
@@ -172,7 +170,8 @@ export async function linkStripeOnboarding(req: Request, res: Response): Promise
       await vendor.save();
     }
 
-    const link = await createAccountLink(ensured.accountId);
+    const platformBaseUrl = process.env.PLATFORM_URL || 'http://localhost:5173';
+    const link = await createAccountLink({ accountId: ensured.accountId, platformBaseUrl });
     if (!link.url) {
       res.status(502).json({
         onboardingUrl: null,
@@ -263,7 +262,8 @@ export async function approveVendor(req: Request, res: Response): Promise<void> 
       await vendor.save();
     }
 
-    const link = await createAccountLink(ensured.accountId);
+    const platformBaseUrl = process.env.PLATFORM_URL || 'http://localhost:5173';
+    const link = await createAccountLink({ accountId: ensured.accountId, platformBaseUrl });
     if (!link.url) {
       res.json({
         ok: true,
