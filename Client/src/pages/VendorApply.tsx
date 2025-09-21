@@ -1,6 +1,7 @@
 // Client/src/pages/VendorApply.tsx
 import React, { useState } from 'react';
-import { api } from '../lib/api';
+import { post } from '../lib/api';
+import type { VendorApplyReq, VendorApplyRes } from '../types/api.types';
 
 export default function VendorApply(): React.ReactElement {
   const [form, setForm] = useState({ displayName: '', bio: '', logoUrl: '', country: '' });
@@ -17,16 +18,13 @@ export default function VendorApply(): React.ReactElement {
     setMsg(null);
     setBusy(true);
 
-    const { data, error, status } = await api<{ ok: boolean; vendorId: number; status: string }>(
+    const { data, error, status } = await post<VendorApplyRes, VendorApplyReq>(
       '/vendors/apply',
       {
-        method: 'POST',
-        body: JSON.stringify({
-          displayName: form.displayName,
-          bio: form.bio || null,
-          logoUrl: form.logoUrl || null,
-          country: form.country || null,
-        }),
+        displayName: form.displayName,
+        bio: form.bio || null,
+        logoUrl: form.logoUrl || null,
+        country: form.country || null,
       }
     );
 
