@@ -8,6 +8,9 @@ import apiRouter from './routes/index.js';
 import { db } from './models/sequelize.js';
 import 'dotenv/config';
 
+// ✅ attach session user onto req.user everywhere
+import { attachUser } from './middleware/authz.middleware.js';
+
 const app = express();
 
 // Trust proxy (Render)
@@ -18,18 +21,23 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: 'same-site' } }));
 app.use(compression());
 app.use(morgan('tiny'));
 
-// Body parsers
+// Body parsers (JSON/urlencoded). Stripe webhook uses route-level raw parser.
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Session cookie (same-origin, no CORS)
-app.use(cookieSession({
-  name: 'msession',
-  secret: process.env.SESSION_SECRET || 'dev-secret',
-  sameSite: 'lax',
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-}));
+app.use(
+  cookieSession({
+    name: 'msession',
+    secret: process.env.SESSION_SECRET || 'dev-secret',
+    sameSite: 'lax',
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+  })
+);
+
+// ✅ Make the user available on req.user for all downstream handlers
+app.use(attachUser);
 
 // ----------------------
 // Health endpoints
@@ -67,12 +75,15 @@ app.use('/api', apiRouter);
 
 // Static uploads (Render disk)
 const uploadsDir = process.env.UPLOADS_DIR || '/var/data/uploads';
-app.use('/uploads', express.static(uploadsDir, {
-  fallthrough: true,
-  setHeaders: (res) => {
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-  }
-}));
+app.use(
+  '/uploads',
+  express.static(uploadsDir, {
+    fallthrough: true,
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    },
+  })
+);
 
 // In production, serve the client build from the API server (same origin)
 if (process.env.NODE_ENV === 'production') {
