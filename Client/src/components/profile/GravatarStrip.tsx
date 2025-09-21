@@ -1,3 +1,4 @@
+// Client/src/components/profile/GravatarStrip.tsx
 import React, { useState } from 'react';
 import { Info } from 'lucide-react';
 import { useAuthStore } from '../../stores/useAuthStore.ts';
