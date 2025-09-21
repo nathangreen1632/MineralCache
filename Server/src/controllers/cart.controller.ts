@@ -1,30 +1,7 @@
 // Server/src/controllers/cart.controller.ts
 import type { Request, Response } from 'express';
 import { stripeEnabled, createPaymentIntent } from '../services/stripe.service.js';
-
-/** ------------------------------------------------------------------------
- * Helpers (auth + age gate)
- * -----------------------------------------------------------------------*/
-function ensureAuthed(req: Request, res: Response): req is Request & {
-  user: { id: number; role: 'buyer' | 'vendor' | 'admin'; dobVerified18: boolean }
-} {
-  const u = (req.session as any)?.user;
-  if (!u?.id) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return false;
-  }
-  (req as any).user = u;
-  return true;
-}
-
-function ensureAdult(req: Request, res: Response): boolean {
-  const u = (req.session as any)?.user;
-  if (!u?.dobVerified18) {
-    res.status(403).json({ error: 'Age verification required' });
-    return false;
-  }
-  return true;
-}
+import { ensureAuthed, ensureAdult } from '../middleware/authz.middleware.js';
 
 /** ------------------------------------------------------------------------
  * Cart endpoints
