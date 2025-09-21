@@ -117,3 +117,4 @@ export default function AdminVendorApps(): React.ReactElement {
     </section>
   );
 }
+
