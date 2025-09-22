@@ -59,7 +59,11 @@ export async function placeBid(req: Request, res: Response): Promise<void> {
   if (!ensureAdult(req, res)) return;
 
   // TODO: validate bid amount with zod; apply proxy bid logic; emit socket update
-  res.json({ ok: true });
+  res.status(501).json({
+    ok: false,
+    code: 'AUCTIONS_NOT_READY',
+    message: 'Auctions will be enabled soon.',
+  });
 }
 
 /** ------------------------------------------------------------------------
@@ -70,5 +74,9 @@ export async function buyNow(req: Request, res: Response): Promise<void> {
   if (!ensureAdult(req, res)) return;
 
   // TODO: validate; lock auction; create reserved checkout; emit socket end
-  res.json({ ok: true });
+  res.status(501).json({
+    ok: false,
+    code: 'AUCTIONS_NOT_READY',
+    message: 'Auctions will be enabled soon.',
+  });
 }
