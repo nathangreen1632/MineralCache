@@ -11,6 +11,7 @@ import { buildSessionMiddleware } from './middleware/session.middleware.js';
 import { attachUser } from './middleware/authz.middleware.js';
 import { requestId } from './middleware/requestId.middleware.js';
 import { jsonErrorHandler } from './middleware/error.middleware.js';
+import { getVersionInfo } from './utils/version.util.js'; // ✅ NEW
 
 const app = express();
 
@@ -40,6 +41,7 @@ app.use(attachUser);
 // ----------------------
 const HEALTH_PATH = '/api/health';
 const READY_PATH = '/api/ready';
+const VERSION_PATH = '/api/version'; // ✅ NEW
 
 app.get(HEALTH_PATH, (_req, res) =>
   res.json({ ok: true, ts: new Date().toISOString() })
@@ -56,14 +58,28 @@ app.get(READY_PATH, async (_req, res) => {
   }
 });
 
+// ✅ Version endpoint (git SHA if available; graceful when unknown)
+app.get(VERSION_PATH, (_req, res) => {
+  const v = getVersionInfo();
+  res.json({
+    ok: true,
+    sha: v.short ?? null,   // short first for readability
+    fullSha: v.sha,         // full 40-char if available
+    source: v.source,
+    buildTime: v.buildTime,
+  });
+});
+
 // Print easy dev hints once this module loads (works when imported by server.ts)
 if (process.env.NODE_ENV !== 'production') {
   const port = Number(process.env.PORT || 3001);
   const url = `http://localhost:${port}`;
   // eslint-disable-next-line no-console
-  console.log(`[health] GET ${HEALTH_PATH}  →  ${url}${HEALTH_PATH}`);
+  console.log(`[health]  GET ${HEALTH_PATH}   →  ${url}${HEALTH_PATH}`);
   // eslint-disable-next-line no-console
-  console.log(`[health] GET ${READY_PATH}   →  ${url}${READY_PATH}`);
+  console.log(`[health]  GET ${READY_PATH}    →  ${url}${READY_PATH}`);
+  // eslint-disable-next-line no-console
+  console.log(`[version] GET ${VERSION_PATH}  →  ${url}${VERSION_PATH}`); // ✅ NEW
 }
 
 // Mount your API routers under /api
