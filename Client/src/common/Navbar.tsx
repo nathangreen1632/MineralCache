@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { Home, Store, ClipboardList, LayoutDashboard } from 'lucide-react';
+import { Home, Store, ClipboardList, LayoutDashboard, PlusCircle } from 'lucide-react';
 
 type LinkItem = {
   to: string;
@@ -60,10 +60,9 @@ export default function Navbar(): React.ReactElement {
         <SideNavLink to="/" end label="Home" Icon={Home} />
         <SideNavLink to="/vendor/apply" label="Apply as Vendor" Icon={Store} />
         <SideNavLink to="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard} />
+        <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
         <SideNavLink to="/admin/vendor-apps" label="Admin · Vendor Apps" Icon={ClipboardList} />
       </nav>
-
-      {/* (Optional) footer actions or status can go here */}
     </aside>
   );
 }
