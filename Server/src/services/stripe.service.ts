@@ -6,22 +6,36 @@ export const stripeEnabled = secret.length > 0;
 
 let stripe: Stripe | null = null;
 if (stripeEnabled) {
+  // keep your pinned version
   stripe = new Stripe(secret, { apiVersion: '2025-08-27.basil', maxNetworkRetries: 2 });
 }
 
 export async function createPaymentIntent(args: {
   amountCents: number;
   currency?: string;
+  /** optional metadata passthrough (additive) */
+  metadata?: Record<string, string>;
+  /** optional idempotency key for retried submits */
+  idempotencyKey?: string;
 }): Promise<{ ok: true; clientSecret: string } | { ok: false; clientSecret: null; error: string }> {
   if (!stripeEnabled || !stripe) {
     return { ok: false, clientSecret: null, error: 'Payments disabled' };
   }
   try {
-    const pi = await stripe.paymentIntents.create({
-      amount: Math.trunc(args.amountCents),
-      currency: (args.currency || 'usd').toLowerCase(),
-      automatic_payment_methods: { enabled: true },
-    });
+    const options: Stripe.RequestOptions | undefined = args.idempotencyKey
+      ? { idempotencyKey: args.idempotencyKey }
+      : undefined;
+
+    const pi = await stripe.paymentIntents.create(
+      {
+        amount: Math.trunc(args.amountCents),
+        currency: (args.currency || 'usd').toLowerCase(),
+        automatic_payment_methods: { enabled: true },
+        ...(args.metadata ? { metadata: args.metadata } : {}),
+      },
+      options
+    );
+
     if (!pi.client_secret) return { ok: false, clientSecret: null, error: 'No client secret' };
     return { ok: true, clientSecret: pi.client_secret };
   } catch (e: any) {
