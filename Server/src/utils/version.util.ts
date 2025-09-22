@@ -1,16 +1,47 @@
 // Server/src/utils/version.util.ts
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 type Source = 'env' | 'render' | 'vercel' | 'git' | 'unknown';
 
 export type VersionInfo = {
-  sha: string | null;      // full 40-char if available
-  short: string | null;    // first 12 chars
+  sha: string | null;   // full 40-char if available
+  short: string | null; // first 12 chars
   source: Source;
-  buildTime: string;       // ISO
+  buildTime: string;    // ISO
 };
 
-/** Detect commit SHA from common envs, else try `git rev-parse`. */
+function tryGitRevParse(): string | null {
+  const override = (process.env.GIT_BIN || '').trim();
+
+  let candidates: string[];
+  if (override) {
+    candidates = [override];
+  } else if (process.platform === 'win32') {
+    candidates = [
+      'C:\\Program Files\\Git\\bin\\git.exe',
+      'C:\\Program Files\\Git\\cmd\\git.exe',
+    ];
+  } else {
+    candidates = ['/usr/bin/git', '/usr/local/bin/git', '/bin/git'];
+  }
+
+  for (const bin of candidates) {
+    try {
+      const out = execFileSync(bin, ['rev-parse', 'HEAD'], {
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+        .toString()
+        .trim();
+      if (out) return out;
+    } catch {
+      // try next candidate
+    }
+  }
+  return null;
+}
+
+
+/** Detect commit SHA from common envs, else try a safe git invocation (no PATH). */
 function detect(): VersionInfo {
   const buildTime = new Date().toISOString();
 
@@ -26,13 +57,9 @@ function detect(): VersionInfo {
     if (v) return { sha: v, short: v.slice(0, 12), source, buildTime };
   }
 
-  try {
-    const out = execSync('git rev-parse HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
-      .toString()
-      .trim();
-    if (out) return { sha: out, short: out.slice(0, 12), source: 'git', buildTime };
-  } catch {
-    // ignore — git not available in container
+  const gitSha = tryGitRevParse();
+  if (gitSha) {
+    return { sha: gitSha, short: gitSha.slice(0, 12), source: 'git', buildTime };
   }
 
   return { sha: null, short: null, source: 'unknown', buildTime };
