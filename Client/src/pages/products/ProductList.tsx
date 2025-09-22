@@ -162,17 +162,12 @@ export default function ProductList(): React.ReactElement {
     setParams(next, { replace: true });
   }
 
-  // Stable keys for skeletons
+  // Stable keys for skeletons (no PRNG → satisfies Sonar)
   const skeletonKeys = useMemo(
-    () =>
-      Array.from({ length: 9 }, () => {
-        const id =
-          (globalThis.crypto as any)?.randomUUID?.() ??
-          Math.random().toString(36).slice(2, 10);
-        return `sk-${id}`;
-      }),
+    () => Array.from({ length: 9 }, (_, i) => `sk-${i}`),
     []
   );
+
 
   // styles
   const card: React.CSSProperties = {
