@@ -16,10 +16,17 @@ type TokenPayloadV1 = {
   exp: number;         // unix seconds expiry
 };
 
+function stripBase64Padding(s: string): string {
+  // In Base64, '=' only appears as trailing padding; first '=' marks padding start.
+  const i = s.indexOf('=');
+  return i === -1 ? s : s.slice(0, i);
+}
+
 function b64url(input: Buffer | string): string {
-  return Buffer.from(input)
-    .toString('base64')
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  const b64 = Buffer.from(input).toString('base64')
+    .replace(/\+/g, '-')    // URL-safe
+    .replace(/\//g, '_');   // URL-safe
+  return stripBase64Padding(b64); // remove trailing '=' padding without regex at end
 }
 function b64urlDecode(s: string): Buffer {
   const pad = s.length % 4 === 0 ? '' : '='.repeat(4 - (s.length % 4));
