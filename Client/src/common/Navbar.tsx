@@ -62,6 +62,7 @@ export default function Navbar(): React.ReactElement {
         <SideNavLink to="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard} />
         <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
         <SideNavLink to="/admin/vendor-apps" label="Admin · Vendor Apps" Icon={ClipboardList} />
+        <SideNavLink to="/products" label="Catalog" Icon={Home} />
       </nav>
     </aside>
   );
