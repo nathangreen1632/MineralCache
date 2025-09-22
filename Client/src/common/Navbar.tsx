@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { Home, Store, ClipboardList } from 'lucide-react';
+import { Home, Store, ClipboardList, LayoutDashboard } from 'lucide-react';
 
 type LinkItem = {
   to: string;
@@ -59,6 +59,7 @@ export default function Navbar(): React.ReactElement {
       <nav className="mt-6 grid gap-1">
         <SideNavLink to="/" end label="Home" Icon={Home} />
         <SideNavLink to="/vendor/apply" label="Apply as Vendor" Icon={Store} />
+        <SideNavLink to="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard} />
         <SideNavLink to="/admin/vendor-apps" label="Admin · Vendor Apps" Icon={ClipboardList} />
       </nav>
 
