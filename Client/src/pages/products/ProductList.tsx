@@ -33,31 +33,44 @@ export default function ProductList(): React.ReactElement {
   const [params, setParams] = useSearchParams();
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
 
-  // read from URL
+  // Parse URL → typed query
   const query: ListQuery = useMemo(() => {
-    const page = Number(params.get('page') || 1);
-    const pageSize = Number(params.get('pageSize') || 24);
+    const pageRaw = Number(params.get('page') || 1);
+    const pageSizeRaw = Number(params.get('pageSize') || 24);
+    const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+    const pageSize = Number.isFinite(pageSizeRaw) && pageSizeRaw > 0 ? pageSizeRaw : 24;
+
     const vendorSlug = params.get('vendorSlug') || undefined;
     const species = params.get('species') || undefined;
-    const onSale = params.get('onSale');
-    const synthetic = params.get('synthetic');
-    const minCents = params.get('minCents');
-    const maxCents = params.get('maxCents');
+
+    const onSaleParam = params.get('onSale');
+    const syntheticParam = params.get('synthetic');
+    const onSale = onSaleParam == null ? undefined : onSaleParam === 'true';
+    const synthetic = syntheticParam == null ? undefined : syntheticParam === 'true';
+
+    const minCentsParam = params.get('minCents');
+    const maxCentsParam = params.get('maxCents');
+    const minCents =
+      minCentsParam != null && minCentsParam !== '' ? Math.max(0, Math.trunc(+minCentsParam)) : undefined;
+    const maxCents =
+      maxCentsParam != null && maxCentsParam !== '' ? Math.max(0, Math.trunc(+maxCentsParam)) : undefined;
+
     const sort = (params.get('sort') as ListQuery['sort']) || 'newest';
+
     return {
       page,
       pageSize,
       vendorSlug,
       species,
-      onSale: onSale === null ? undefined : onSale === 'true',
-      synthetic: synthetic === null ? undefined : synthetic === 'true',
-      minCents: minCents ? Number(minCents) : undefined,
-      maxCents: maxCents ? Number(maxCents) : undefined,
+      onSale,
+      synthetic,
+      minCents,
+      maxCents,
       sort,
     };
   }, [params]);
 
-  // local form state mirrors the query (typed with SortValue)
+  // Local form mirrors URL; keep in sync if URL changes externally
   const [form, setForm] = useState<FormState>(() => ({
     species: query.species ?? '',
     vendorSlug: query.vendorSlug ?? '',
@@ -70,9 +83,26 @@ export default function ProductList(): React.ReactElement {
   }));
 
   useEffect(() => {
-    setState({ kind: 'loading' });
-    listProducts(query)
-      .then(({ data, error, status }) => {
+    setForm({
+      species: query.species ?? '',
+      vendorSlug: query.vendorSlug ?? '',
+      onSale: Boolean(query.onSale),
+      synthetic: Boolean(query.synthetic),
+      minCents: query.minCents?.toString() ?? '',
+      maxCents: query.maxCents?.toString() ?? '',
+      sort: (query.sort ?? 'newest') as SortValue,
+      pageSize: String(query.pageSize ?? 24),
+    });
+  }, [query]);
+
+  // Fetch on query change
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setState({ kind: 'loading' });
+      try {
+        const { data, error, status } = await listProducts(query);
+        if (!alive) return;
         if (error || !data) {
           setState({ kind: 'error', message: error || `Failed (${status})` });
           return;
@@ -86,10 +116,14 @@ export default function ProductList(): React.ReactElement {
             totalPages: data.totalPages,
           },
         });
-      })
-      .catch((e: any) => {
+      } catch (e: any) {
+        if (!alive) return;
         setState({ kind: 'error', message: e?.message || 'Failed to load products' });
-      });
+      }
+    })();
+    return () => {
+      alive = false;
+    };
   }, [query]);
 
   function updateQuery(partial: Partial<ListQuery>) {
@@ -101,8 +135,10 @@ export default function ProductList(): React.ReactElement {
         next.set(k, String(v));
       }
     }
-    // whenever filters change, reset to page 1
-    next.set('page', '1');
+    // Whenever filters change, reset to page 1 (unless caller explicitly set a page)
+    if (!('page' in partial)) {
+      next.set('page', '1');
+    }
     setParams(next, { replace: true });
   }
 
@@ -122,11 +158,11 @@ export default function ProductList(): React.ReactElement {
 
   function goToPage(p: number) {
     const next = new URLSearchParams(params);
-    next.set('page', String(p));
+    next.set('page', String(Math.max(1, p)));
     setParams(next, { replace: true });
   }
 
-  // stable keys for skeletons to avoid using array indices
+  // Stable keys for skeletons
   const skeletonKeys = useMemo(
     () =>
       Array.from({ length: 9 }, () => {
@@ -139,11 +175,11 @@ export default function ProductList(): React.ReactElement {
   );
 
   // styles
-  const card = {
+  const card: React.CSSProperties = {
     background: 'var(--theme-card)',
     borderColor: 'var(--theme-border)',
     color: 'var(--theme-text)',
-  } as React.CSSProperties;
+  };
 
   return (
     <section className="mx-auto max-w-6xl px-4 py-8 space-y-6">
@@ -263,16 +299,16 @@ export default function ProductList(): React.ReactElement {
                 <div className="h-36 w-full rounded bg-[var(--theme-card-alt)] mb-3" />
                 <div className="truncate font-semibold">{p.title}</div>
                 <div className="text-sm">
-                  {p.onSale && p.compareAtCents
-                    ? (
-                      <>
-                        <span className="line-through opacity-60 mr-1">
-                          {centsToUsd(p.compareAtCents)}
-                        </span>
-                        <span>{centsToUsd(p.priceCents)}</span>
-                      </>
-                    )
-                    : centsToUsd(p.priceCents)}
+                  {p.onSale && p.compareAtCents ? (
+                    <>
+                      <span className="line-through opacity-60 mr-1">
+                        {centsToUsd(p.compareAtCents)}
+                      </span>
+                      <span>{centsToUsd(p.priceCents)}</span>
+                    </>
+                  ) : (
+                    centsToUsd(p.priceCents)
+                  )}
                 </div>
                 <div className="text-xs opacity-70">{p.species}</div>
               </Link>
