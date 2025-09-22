@@ -142,3 +142,12 @@ export function patch<R, B = unknown>(
 ) {
   return api<R>(path, { ...init, method: 'PATCH', body });
 }
+
+// PUT (accepts a typed body)
+export function put<R, B = unknown>(
+  path: string,
+  body?: B,
+  init?: Omit<ApiInit, 'method' | 'body'>
+) {
+  return api<R>(path, { ...init, method: 'PUT', body });
+}

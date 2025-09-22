@@ -1,6 +1,15 @@
+// Client/src/components/Navbar.tsx
 import React from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { Home, Store, ClipboardList } from 'lucide-react';
+import {
+  Home,
+  Store,
+  ClipboardList,
+  LayoutDashboard,
+  PlusCircle,
+  ShoppingCart,
+  CreditCard,
+} from 'lucide-react';
 
 type LinkItem = {
   to: string;
@@ -59,10 +68,14 @@ export default function Navbar(): React.ReactElement {
       <nav className="mt-6 grid gap-1">
         <SideNavLink to="/" end label="Home" Icon={Home} />
         <SideNavLink to="/vendor/apply" label="Apply as Vendor" Icon={Store} />
+        <SideNavLink to="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard} />
+        <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
         <SideNavLink to="/admin/vendor-apps" label="Admin · Vendor Apps" Icon={ClipboardList} />
+        <SideNavLink to="/products" label="Catalog" Icon={Home} />
+        {/* Cart & Checkout */}
+        <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
+        <SideNavLink to="/checkout" label="Checkout" Icon={CreditCard} />
       </nav>
-
-      {/* (Optional) footer actions or status can go here */}
     </aside>
   );
 }

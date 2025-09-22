@@ -1,12 +1,14 @@
 // Server/src/controllers/vendors.controller.ts
 import type { Request, Response } from 'express';
 import { z, type ZodError } from 'zod';
+import { Op, UniqueConstraintError } from 'sequelize';
 import { Vendor } from '../models/vendor.model.js';
 import {
   ensureVendorStripeAccount,
   createAccountLink,
   stripeEnabled,
 } from '../services/stripe.service.js';
+import { applyVendorSchema } from '../validation/vendor.schema.js';
 
 /** -------------------------------------------------------------
  * Zod helpers
@@ -24,22 +26,6 @@ function zDetails(err: ZodError) {
   }));
   return { issues };
 }
-
-/** -------------------------------------------------------------
- * Schemas
- * ------------------------------------------------------------*/
-const ApplySchema = z.object({
-  displayName: z.string().min(2).max(120),
-  bio: z.string().max(5000).optional().nullable(),
-  // Validate URL without deprecated APIs
-  logoUrl: z
-    .string()
-    .max(500)
-    .optional()
-    .nullable()
-    .refine((v) => v == null || z.url().safeParse(v).success, { message: 'Invalid URL' }),
-  country: z.string().length(2).optional().nullable(),
-});
 
 /** -------------------------------------------------------------
  * Helpers (auth + slug)
@@ -69,13 +55,22 @@ function slugify(input: string): string {
   return `vendor-${Date.now()}`;
 }
 
+function suggestSlugs(base: string, take = 2): string[] {
+  const suggestions: string[] = [];
+  for (let n = 1; suggestions.length < take && n < 100; n += 1) {
+    suggestions.push(`${base}-${n}`);
+  }
+  return suggestions;
+}
+
 /** -------------------------------------------------------------
  * User endpoints
  * ------------------------------------------------------------*/
 export async function applyVendor(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
 
-  const parsed = ApplySchema.safeParse(req.body);
+  // ✅ use shared schema
+  const parsed = applyVendorSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Invalid input', details: zDetails(parsed.error) });
     return;
@@ -88,6 +83,45 @@ export async function applyVendor(req: Request, res: Response): Promise<void> {
   try {
     // If user has an existing vendor record, update it and reset to pending
     const existing = await Vendor.findOne({ where: { userId: (req as any).user.id } });
+
+    // Friendly pre-checks for duplicates (exclude own record on update)
+    const excludeId = existing ? { [Op.ne]: existing.id } : undefined;
+
+    const [slugExists, nameExists] = await Promise.all([
+      Vendor.findOne({
+        where: {
+          slug: { [Op.iLike]: slug },
+          ...(excludeId ? { id: excludeId } : {}),
+        } as any,
+        attributes: ['id', 'slug'],
+      }),
+      Vendor.findOne({
+        where: {
+          displayName: { [Op.iLike]: displayName },
+          ...(excludeId ? { id: excludeId } : {}),
+        } as any,
+        attributes: ['id', 'displayName'],
+      }),
+    ]);
+
+    if (slugExists) {
+      res.status(409).json({
+        ok: false,
+        code: 'SLUG_TAKEN',
+        message: 'That shop URL is taken.',
+        suggestions: suggestSlugs(slug),
+      });
+      return;
+    }
+    if (nameExists) {
+      res.status(409).json({
+        ok: false,
+        code: 'DISPLAY_NAME_TAKEN',
+        message: 'That display name is taken.',
+      });
+      return;
+    }
+
     if (existing) {
       existing.displayName = displayName;
       existing.slug = slug;
@@ -95,6 +129,11 @@ export async function applyVendor(req: Request, res: Response): Promise<void> {
       existing.logoUrl = data.logoUrl ?? null;
       existing.country = data.country ?? null;
       existing.approvalStatus = 'pending';
+      // Reset audit fields on resubmission
+      (existing as any).approvedBy = null;
+      (existing as any).approvedAt = null;
+      (existing as any).rejectedReason = null;
+
       await existing.save();
 
       res.json({ ok: true, vendorId: Number(existing.id), status: existing.approvalStatus });
@@ -111,12 +150,37 @@ export async function applyVendor(req: Request, res: Response): Promise<void> {
       logoUrl: data.logoUrl ?? null,
       country: data.country ?? null,
       approvalStatus: 'pending',
+      // audit fields start empty
+      approvedBy: null,
+      approvedAt: null,
+      rejectedReason: null,
       createdAt: now,
       updatedAt: now,
     } as any);
 
     res.status(201).json({ ok: true, vendorId: Number(created.id), status: 'pending' });
   } catch (e: any) {
+    // DB-level unique collision fallback
+    if (e instanceof UniqueConstraintError) {
+      const msg = String(e.message || '').toLowerCase();
+      if (msg.includes('slug')) {
+        res.status(409).json({
+          ok: false,
+          code: 'SLUG_TAKEN',
+          message: 'That shop URL is taken.',
+          suggestions: suggestSlugs(slug),
+        });
+        return;
+      }
+      if (msg.includes('display') || msg.includes('name')) {
+        res.status(409).json({
+          ok: false,
+          code: 'DISPLAY_NAME_TAKEN',
+          message: 'That display name is taken.',
+        });
+        return;
+      }
+    }
     res.status(500).json({ error: 'Failed to submit vendor application', detail: e?.message });
   }
 }

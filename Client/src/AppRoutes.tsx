@@ -1,17 +1,64 @@
 // Client/src/AppRoutes.tsx
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Outlet } from 'react-router-dom';
 import HomePage from './pages/HomePage';
+
+// Public catalog
+import ProductList from './pages/products/ProductList';
+import ProductDetail from './pages/products/ProductDetail';
+
+// Vendor
 import VendorApply from './pages/VendorApply';
+import VendorDashboard from './pages/VendorDashboard';
+
+// Admin
 import AdminVendorApps from './pages/admin/AdminVendorApps';
+
+// Vendor product CRUD
+import ProductCreate from './pages/products/ProductCreate';
+import ProductEdit from './pages/products/ProductEdit';
+
+// Cart & Checkout
+import CartPage from './pages/cart/CartPage';
+import CheckoutPage from './pages/cart/CheckoutPage';
+
+// Age gate banner (mounted globally)
+import AgeGateNotice from './components/AgeGateNotice';
+
+function WithAgeGate(): React.ReactElement {
+  return (
+    <>
+      <AgeGateNotice />
+      <Outlet />
+    </>
+  );
+}
 
 export default function AppRoutes(): React.ReactElement {
   return (
     <Routes>
-      <Route index element={<HomePage />} />
-      <Route path="vendor/apply" element={<VendorApply />} />
-      <Route path="admin/vendor-apps" element={<AdminVendorApps />} />
-      <Route path="*" element={<div>Not found.</div>} />
+      <Route element={<WithAgeGate />}>
+        {/* Public */}
+        <Route index element={<HomePage />} />
+        <Route path="products" element={<ProductList />} />
+        <Route path="products/:id" element={<ProductDetail />} />
+        <Route path="cart" element={<CartPage />} />
+        <Route path="checkout" element={<CheckoutPage />} />
+
+        {/* Vendor */}
+        <Route path="vendor/apply" element={<VendorApply />} />
+        <Route path="vendor/dashboard" element={<VendorDashboard />} />
+
+        {/* Admin */}
+        <Route path="admin/vendor-apps" element={<AdminVendorApps />} />
+
+        {/* Vendor product CRUD */}
+        <Route path="products/new" element={<ProductCreate />} />
+        <Route path="products/:id/edit" element={<ProductEdit />} />
+
+        {/* Fallback */}
+        <Route path="*" element={<div>Not found.</div>} />
+      </Route>
     </Routes>
   );
 }

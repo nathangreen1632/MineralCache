@@ -7,12 +7,16 @@ import {
   directUpload,
   finalizeUploads,
 } from '../controllers/uploads.controller.js';
-import { uploadPhotos as photosMulter } from '../middleware/upload.middleware.js';
+import {
+  uploadPhotos as photosMulter,
+  enforceTotalBatchBytes, // ✅ total-batch limiter
+} from '../middleware/upload.middleware.js';
 
 const router: Router = Router();
 
 // Multipart (Multer) flow — field: "photos"
-router.post('/photos', requireAuth, photosMulter.array('photos', 4), handleUpload);
+// Order: auth → Multer → total-batch limit → handler
+router.post('/photos', requireAuth, photosMulter.array('photos', 4), enforceTotalBatchBytes, handleUpload);
 
 // Signed URL issuance
 router.post('/sign', requireAuth, signUploads);

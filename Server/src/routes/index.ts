@@ -10,6 +10,8 @@ import cartRouter from './cart.route.js';
 import ordersRouter from './orders.route.js';
 import healthRouter from './health.route.js';
 import uploadsRouter from './uploads.route.js';
+import checkoutRouter from './checkout.route.js';
+import searchRouter from './search.route.js';
 
 const router: Router = Router();
 
@@ -23,5 +25,7 @@ router.use('/cart', cartRouter);
 router.use('/orders', ordersRouter);
 router.use('/health', healthRouter);
 router.use('/uploads', uploadsRouter);
+router.use('/checkout', checkoutRouter);
+router.use('/search', searchRouter);
 
 export default router;
