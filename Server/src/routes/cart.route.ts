@@ -16,5 +16,4 @@ router.post('/checkout', json(), requireAuthed, requireAdult, checkout);
 
 // router.post('/bids', json(), requireAuthed, requireAdult, createBidHandler);
 
-
 export default router;
