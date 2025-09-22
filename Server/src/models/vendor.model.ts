@@ -20,6 +20,11 @@ export class Vendor extends Model<
   declare logoUrl: string | null;
   declare country: string | null;
   declare approvalStatus: 'pending' | 'approved' | 'rejected';
+  // --- audit fields ---
+  declare approvedBy: number | null;
+  declare approvedAt: Date | null;
+  declare rejectedReason: string | null;
+
   declare stripeAccountId: string | null;
   declare commissionOverridePct: string | null; // DECIMAL as string
   declare minFeeOverrideCents: number | null;
@@ -50,6 +55,11 @@ if (!sequelize) {
         allowNull: false,
         defaultValue: 'pending',
       },
+      // --- audit fields ---
+      approvedBy: { type: DataTypes.BIGINT, allowNull: true },
+      approvedAt: { type: DataTypes.DATE, allowNull: true },
+      rejectedReason: { type: DataTypes.TEXT, allowNull: true },
+
       stripeAccountId: { type: DataTypes.STRING(120), allowNull: true },
       commissionOverridePct: { type: DataTypes.DECIMAL(5, 4), allowNull: true },
       minFeeOverrideCents: { type: DataTypes.INTEGER, allowNull: true },
@@ -61,7 +71,11 @@ if (!sequelize) {
       sequelize,
       tableName: 'vendors',
       modelName: 'Vendor',
-      indexes: [{ unique: true, fields: ['slug'] }, { unique: true, fields: ['displayName'] }],
+      indexes: [
+        { unique: true, fields: ['slug'] },
+        { unique: true, fields: ['displayName'] },
+        { name: 'vendors_approval_status_idx', fields: ['approvalStatus'] },
+      ],
     }
   );
 }
