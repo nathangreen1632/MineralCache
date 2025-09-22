@@ -1,6 +1,15 @@
+// Client/src/components/Navbar.tsx
 import React from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { Home, Store, ClipboardList, LayoutDashboard, PlusCircle } from 'lucide-react';
+import {
+  Home,
+  Store,
+  ClipboardList,
+  LayoutDashboard,
+  PlusCircle,
+  ShoppingCart,
+  CreditCard,
+} from 'lucide-react';
 
 type LinkItem = {
   to: string;
@@ -63,6 +72,9 @@ export default function Navbar(): React.ReactElement {
         <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
         <SideNavLink to="/admin/vendor-apps" label="Admin · Vendor Apps" Icon={ClipboardList} />
         <SideNavLink to="/products" label="Catalog" Icon={Home} />
+        {/* Cart & Checkout */}
+        <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
+        <SideNavLink to="/checkout" label="Checkout" Icon={CreditCard} />
       </nav>
     </aside>
   );
