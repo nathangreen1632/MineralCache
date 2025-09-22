@@ -1,91 +1,68 @@
-// Client/src/common/Navbar.tsx
-import React, { useEffect, useRef, useState } from 'react';
+import React from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import { Home, Store, ClipboardList } from 'lucide-react';
 
-function navLinkClass({ isActive }: { isActive: boolean }): string {
+type LinkItem = {
+  to: string;
+  label: string;
+  end?: boolean;
+  Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+};
+
+function itemClasses(isActive: boolean): string {
   const base =
-    'px-3 py-2 rounded-md text-sm font-medium transition-colors underline decoration-dotted';
-  const active = 'text-[var(--theme-link-hover)]';
-  const idle = 'text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]';
-  return `${base} ${isActive ? active : idle}`;
+    'group inline-flex items-center gap-3 w-full rounded-xl px-3 py-2 font-semibold transition-colors ' +
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-focus)] ' +
+    'border border-transparent';
+  if (isActive) {
+    return [
+      base,
+      'bg-[var(--theme-card)] text-[var(--theme-text)] border-[var(--theme-border)] shadow-sm',
+    ].join(' ');
+  }
+  return [
+    base,
+    'text-[var(--theme-link)] hover:text-[var(--theme-link-hover)] hover:bg-[var(--theme-surface)]',
+  ].join(' ');
+}
+
+function SideNavLink({ to, label, end, Icon }: Readonly<LinkItem>) {
+  return (
+    <NavLink to={to} end={end} className={({ isActive }) => itemClasses(isActive)}>
+      <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+      <span className="truncate">{label}</span>
+    </NavLink>
+  );
 }
 
 export default function Navbar(): React.ReactElement {
-  const [open, setOpen] = useState(false);
-  const panelRef = useRef<HTMLDivElement | null>(null);
-
-  // Close on outside click (mobile menu)
-  useEffect(() => {
-    if (!open) return;
-    function onDoc(e: MouseEvent) {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [open]);
-
   return (
-    <header className="border-b border-[var(--theme-border)] bg-[var(--theme-surface)]">
-      <div className="mx-auto w-full px-4 py-3 flex items-center gap-3 min-[1440px]:px-6">
-        {/* Brand */}
-        <Link
-          to="/"
-          className="text-lg font-extrabold tracking-tight text-[var(--theme-text)]"
-          style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
-          onClick={() => setOpen(false)}
-        >
-          Mineral Cache
-        </Link>
+    <aside
+      className={[
+        'w-64 shrink-0',
+        'border-r border-[var(--theme-border)]',
+        'bg-[var(--theme-surface)]',
+        'sticky top-0 h-screen overflow-y-auto',
+        'px-4 py-4',
+      ].join(' ')}
+    >
+      {/* Brand */}
+      <Link
+        to="/"
+        className="block text-xl font-extrabold tracking-tight text-[var(--theme-text)]"
+        style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
+      >
+        Mineral Cache
+      </Link>
 
-        {/* Desktop nav (≥1440px) */}
-        <nav className="hidden min-[1440px]:flex ml-auto items-center gap-1">
-          <NavLink to="/" end className={navLinkClass}>
-            Home
-          </NavLink>
-          <NavLink to="/vendor/apply" className={navLinkClass}>
-            Apply as Vendor
-          </NavLink>
-          <NavLink to="/admin/vendor-apps" className={navLinkClass}>
-            Admin · Vendor Apps
-          </NavLink>
-        </nav>
+      {/* Nav */}
+      <nav className="mt-6 grid gap-1">
+        <SideNavLink to="/" end label="Home" Icon={Home} />
+        <SideNavLink to="/vendor/apply" label="Apply as Vendor" Icon={Store} />
+        <SideNavLink to="/admin/vendor-apps" label="Admin · Vendor Apps" Icon={ClipboardList} />
+      </nav>
 
-        {/* Mobile hamburger (<1440px) */}
-        <button
-          type="button"
-          className="min-[1440px]:hidden ml-auto inline-flex items-center justify-center rounded-xl border border-[var(--theme-border)] px-3 py-2 focus-visible:ring-2 focus-visible:ring-[var(--theme-focus)]"
-          aria-controls="mobile-nav"
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {open ? <X size={20} /> : <Menu size={20} />}
-          <span className="sr-only">Toggle navigation</span>
-        </button>
-      </div>
-
-      {/* Mobile panel */}
-      {open && (
-        <div
-          ref={panelRef}
-          id="mobile-nav"
-          className="min-[1440px]:hidden border-t border-[var(--theme-border)] bg-[var(--theme-surface)]"
-        >
-          <nav className="mx-auto w-full px-4 py-3 flex flex-col gap-1">
-            <NavLink to="/" end className={navLinkClass} onClick={() => setOpen(false)}>
-              Home
-            </NavLink>
-            <NavLink to="/vendor/apply" className={navLinkClass} onClick={() => setOpen(false)}>
-              Apply as Vendor
-            </NavLink>
-            <NavLink to="/admin/vendor-apps" className={navLinkClass} onClick={() => setOpen(false)}>
-              Admin · Vendor Apps
-            </NavLink>
-          </nav>
-        </div>
-      )}
-    </header>
+      {/* (Optional) footer actions or status can go here */}
+    </aside>
   );
 }
