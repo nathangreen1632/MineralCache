@@ -26,7 +26,7 @@ export type Product = ProductInput & {
   updatedAt?: string;
 };
 
-// ---------- NEW: list types (matches /products controller response) ----------
+// ---------- NEW: list types ----------
 export type ListQuery = {
   page?: number;
   pageSize?: number;
@@ -48,6 +48,10 @@ export type ListResponse = {
   totalPages: number;
 };
 
+// Back-compat aliases (don’t break older imports)
+export type ProductListParams = ListQuery;
+export type ProductListResponse = ListResponse;
+
 // ---------- Existing endpoints (kept) ----------
 export async function createProduct(body: ProductInput) {
   return post<{ ok: true; id: number }, ProductInput>('/products', body);
@@ -62,17 +66,22 @@ export async function getProduct(id: number) {
 }
 
 // ---------- NEW: listProducts helper ----------
-export async function listProducts(q: ListQuery) {
+export async function listProducts(q: ListQuery = {}) {
   const params = new URLSearchParams();
-  if (q.page) params.set('page', String(q.page));
-  if (q.pageSize) params.set('pageSize', String(q.pageSize));
-  if (q.vendorId) params.set('vendorId', String(q.vendorId));
+
+  if (typeof q.page === 'number' && q.page > 0) params.set('page', String(q.page));
+  if (typeof q.pageSize === 'number' && q.pageSize > 0) params.set('pageSize', String(q.pageSize));
+  if (typeof q.vendorId === 'number') params.set('vendorId', String(q.vendorId));
   if (q.vendorSlug) params.set('vendorSlug', q.vendorSlug);
   if (q.species) params.set('species', q.species);
   if (typeof q.synthetic === 'boolean') params.set('synthetic', String(q.synthetic));
   if (typeof q.onSale === 'boolean') params.set('onSale', String(q.onSale));
-  if (Number.isFinite(q.minCents!)) params.set('minCents', String(q.minCents));
-  if (Number.isFinite(q.maxCents!)) params.set('maxCents', String(q.maxCents));
+  if (typeof q.minCents === 'number' && Number.isFinite(q.minCents)) {
+    params.set('minCents', String(q.minCents));
+  }
+  if (typeof q.maxCents === 'number' && Number.isFinite(q.maxCents)) {
+    params.set('maxCents', String(q.maxCents));
+  }
   if (q.sort) params.set('sort', q.sort);
 
   const qs = params.toString();
