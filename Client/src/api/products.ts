@@ -26,6 +26,29 @@ export type Product = ProductInput & {
   updatedAt?: string;
 };
 
+// ---------- NEW: list types (matches /products controller response) ----------
+export type ListQuery = {
+  page?: number;
+  pageSize?: number;
+  vendorId?: number;
+  vendorSlug?: string;
+  species?: string;
+  synthetic?: boolean;
+  onSale?: boolean;
+  minCents?: number;
+  maxCents?: number;
+  sort?: 'newest' | 'price_asc' | 'price_desc';
+};
+
+export type ListResponse = {
+  items: Product[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+// ---------- Existing endpoints (kept) ----------
 export async function createProduct(body: ProductInput) {
   return post<{ ok: true; id: number }, ProductInput>('/products', body);
 }
@@ -36,6 +59,24 @@ export async function updateProduct(id: number, body: Partial<ProductInput>) {
 
 export async function getProduct(id: number) {
   return get<{ product: Product | null }>(`/products/${id}`);
+}
+
+// ---------- NEW: listProducts helper ----------
+export async function listProducts(q: ListQuery) {
+  const params = new URLSearchParams();
+  if (q.page) params.set('page', String(q.page));
+  if (q.pageSize) params.set('pageSize', String(q.pageSize));
+  if (q.vendorId) params.set('vendorId', String(q.vendorId));
+  if (q.vendorSlug) params.set('vendorSlug', q.vendorSlug);
+  if (q.species) params.set('species', q.species);
+  if (typeof q.synthetic === 'boolean') params.set('synthetic', String(q.synthetic));
+  if (typeof q.onSale === 'boolean') params.set('onSale', String(q.onSale));
+  if (Number.isFinite(q.minCents!)) params.set('minCents', String(q.minCents));
+  if (Number.isFinite(q.maxCents!)) params.set('maxCents', String(q.maxCents));
+  if (q.sort) params.set('sort', q.sort);
+
+  const qs = params.toString();
+  return get<ListResponse>(`/products${qs ? `?${qs}` : ''}`);
 }
 
 // NOTE: file upload needs FormData; we use fetch directly (not JSON helper)
