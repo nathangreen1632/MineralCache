@@ -2,15 +2,25 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
-import VendorApply from './pages/VendorApply';
-import VendorDashboard from './pages/VendorDashboard';
-import AdminVendorApps from './pages/admin/AdminVendorApps';
-import ProductCreate from './pages/products/ProductCreate';
-import ProductEdit from './pages/products/ProductEdit';
 
 // Public catalog
 import ProductList from './pages/products/ProductList';
 import ProductDetail from './pages/products/ProductDetail';
+
+// Vendor
+import VendorApply from './pages/VendorApply';
+import VendorDashboard from './pages/VendorDashboard';
+
+// Admin
+import AdminVendorApps from './pages/admin/AdminVendorApps';
+
+// Vendor product CRUD
+import ProductCreate from './pages/products/ProductCreate';
+import ProductEdit from './pages/products/ProductEdit';
+
+// Cart & Checkout
+import CartPage from './pages/cart/CartPage';
+import CheckoutPage from './pages/cart/CheckoutPage';
 
 export default function AppRoutes(): React.ReactElement {
   return (
@@ -19,6 +29,8 @@ export default function AppRoutes(): React.ReactElement {
       <Route index element={<HomePage />} />
       <Route path="products" element={<ProductList />} />
       <Route path="products/:id" element={<ProductDetail />} />
+      <Route path="cart" element={<CartPage />} />
+      <Route path="checkout" element={<CheckoutPage />} />
 
       {/* Vendor */}
       <Route path="vendor/apply" element={<VendorApply />} />
