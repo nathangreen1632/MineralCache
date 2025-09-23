@@ -1,4 +1,3 @@
-// Server/src/middleware/rateLimit.middleware.ts
 import type { NextFunction, Request, Response } from 'express';
 import { requestId } from '../utils/reqid.util.js';
 
@@ -51,9 +50,26 @@ export function chainLimiters(
 export function ipKey(req: Request): string {
   const xf = req.headers['x-forwarded-for'];
   if (typeof xf === 'string' && xf.length > 0) {
-    return xf.split(',')[0]?.trim() || req.ip || 'ip-unknown';
+    const first = xf.split(',')[0];
+    if (first) return first.trim();
+  }
+  if (Array.isArray(xf) && xf.length > 0) {
+    const first = String(xf[0]).split(',')[0];
+    if (first) return first.trim();
   }
   return req.ip || 'ip-unknown';
+}
+
+/**
+ * Prefer authenticated user id; fall back to IP.
+ * This keeps per-user fairness while still protecting anonymous traffic.
+ */
+export function userOrIpKey(req: Request): string {
+  const u = (req as any)?.user;
+  if (u && typeof u.id === 'number') {
+    return `uid:${u.id}`;
+  }
+  return ipKey(req);
 }
 
 /**
@@ -76,3 +92,20 @@ const UPLOAD_BURST_MAX = Number.parseInt(process.env.UPLOAD_RATE_BURST_MAX ?? '5
 const UPLOAD_BURST_WIN = Number.parseInt(process.env.UPLOAD_RATE_BURST_WINDOW_MS ?? '10000', 10);
 
 export const burstLimiter = fixedWindowLimiter(UPLOAD_BURST_WIN, UPLOAD_BURST_MAX, ipKey);
+
+/**
+ * NEW: Uploads window limiter (user-or-IP keyed).
+ * Defaults:
+ *   - UPLOADS_WINDOW_MS: 600000 (10 minutes)
+ *   - UPLOADS_MAX_REQUESTS: 30 requests per window
+ *
+ * Use alongside `burstLimiter` where appropriate.
+ */
+const UPLOADS_WINDOW_MS = Number.parseInt(process.env.UPLOADS_WINDOW_MS ?? '600000', 10);
+const UPLOADS_MAX_REQUESTS = Number.parseInt(process.env.UPLOADS_MAX_REQUESTS ?? '30', 10);
+
+export const uploadImagesLimiter = fixedWindowLimiter(
+  UPLOADS_WINDOW_MS,
+  UPLOADS_MAX_REQUESTS,
+  userOrIpKey
+);
