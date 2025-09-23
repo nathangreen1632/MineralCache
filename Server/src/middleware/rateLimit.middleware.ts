@@ -5,7 +5,7 @@ import { requestId } from '../utils/reqid.util.js';
 type Bucket = { count: number; resetAt: number };
 type KeyFn = (req: Request) => string;
 
-function fixedWindowLimiter(windowMs: number, max: number, keyFn: KeyFn) {
+export function fixedWindowLimiter(windowMs: number, max: number, keyFn: KeyFn) {
   const buckets = new Map<string, Bucket>();
 
   return function limiter(req: Request, res: Response, next: NextFunction) {
@@ -35,7 +35,9 @@ function fixedWindowLimiter(windowMs: number, max: number, keyFn: KeyFn) {
 }
 
 /** Compose multiple limiters (e.g., burst + sustained). First to block wins. */
-function chainLimiters(limiters: Array<(req: Request, res: Response, next: NextFunction) => void>) {
+export function chainLimiters(
+  limiters: Array<(req: Request, res: Response, next: NextFunction) => void>
+) {
   return function chained(req: Request, res: Response, next: NextFunction) {
     let idx = 0;
     function run(i: number): void {
@@ -46,9 +48,11 @@ function chainLimiters(limiters: Array<(req: Request, res: Response, next: NextF
   };
 }
 
-function ipKey(req: Request): string {
+export function ipKey(req: Request): string {
   const xf = req.headers['x-forwarded-for'];
-  if (typeof xf === 'string' && xf.length > 0) return xf.split(',')[0]?.trim() || req.ip || 'ip-unknown';
+  if (typeof xf === 'string' && xf.length > 0) {
+    return xf.split(',')[0]?.trim() || req.ip || 'ip-unknown';
+  }
   return req.ip || 'ip-unknown';
 }
 
@@ -56,9 +60,6 @@ function ipKey(req: Request): string {
  * Login-specific rate limit:
  * - Burst: 10 requests / 10s per IP
  * - Sustained: 100 requests / 15m per IP
- * Env overrides:
- *   LOGIN_RATE_BURST_MAX, LOGIN_RATE_BURST_WINDOW_MS
- *   LOGIN_RATE_SUSTAIN_MAX, LOGIN_RATE_SUSTAIN_WINDOW_MS
  */
 const BURST_MAX = Number.parseInt(process.env.LOGIN_RATE_BURST_MAX ?? '10', 10);
 const BURST_WIN = Number.parseInt(process.env.LOGIN_RATE_BURST_WINDOW_MS ?? '10000', 10);
@@ -69,3 +70,9 @@ export const loginRateLimit = chainLimiters([
   fixedWindowLimiter(BURST_WIN, BURST_MAX, ipKey),
   fixedWindowLimiter(SUSTAIN_WIN, SUSTAIN_MAX, ipKey),
 ]);
+
+/** Generic burst limiter for uploads (e.g., images). Defaults: 5 req / 10s (IP-keyed). */
+const UPLOAD_BURST_MAX = Number.parseInt(process.env.UPLOAD_RATE_BURST_MAX ?? '5', 10);
+const UPLOAD_BURST_WIN = Number.parseInt(process.env.UPLOAD_RATE_BURST_WINDOW_MS ?? '10000', 10);
+
+export const burstLimiter = fixedWindowLimiter(UPLOAD_BURST_WIN, UPLOAD_BURST_MAX, ipKey);
