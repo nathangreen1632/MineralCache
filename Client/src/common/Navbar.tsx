@@ -1,6 +1,6 @@
 // Client/src/components/Navbar.tsx
-import React from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import {
   Home,
   Store,
@@ -9,6 +9,8 @@ import {
   PlusCircle,
   ShoppingCart,
   CreditCard,
+  UserPlus,
+  ChevronDown,
 } from 'lucide-react';
 
 type LinkItem = {
@@ -44,6 +46,55 @@ function SideNavLink({ to, label, end, Icon }: Readonly<LinkItem>) {
   );
 }
 
+/** Collapsible group with a header that links to baseTo and expands when on that section */
+function NavGroup({
+                    baseTo,
+                    label,
+                    Icon,
+                    children,
+                  }: Readonly<{
+  baseTo: string;
+  label: string;
+  Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  children: React.ReactNode;
+}>) {
+  const location = useLocation();
+  const onSection = useMemo(() => {
+    if (!location?.pathname) return false;
+    if (location.pathname === baseTo) return true;
+    if (location.pathname.startsWith(baseTo + '/')) return true;
+    return false;
+  }, [location, baseTo]);
+
+  const [open, setOpen] = useState(onSection);
+  useEffect(() => {
+    if (onSection) setOpen(true);
+  }, [onSection]);
+
+  let chevronCls = 'ml-auto h-4 w-4 transition-transform opacity-80';
+  if (open) chevronCls += ' rotate-180';
+
+  return (
+    <div>
+      <div className="flex items-center">
+        <NavLink to={baseTo} end className={({ isActive }) => itemClasses(isActive)}>
+          <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+          <span className="truncate">{label}</span>
+        </NavLink>
+        <button
+          type="button"
+          aria-label={open ? 'Collapse' : 'Expand'}
+          onClick={() => setOpen((v) => !v)}
+          className="ml-2 inline-flex items-center rounded-lg px-2 py-2 hover:bg-[var(--theme-surface)]"
+        >
+          <ChevronDown className={chevronCls} />
+        </button>
+      </div>
+      {open && <div className="mt-1 ml-8 grid gap-1">{children}</div>}
+    </div>
+  );
+}
+
 export default function Navbar(): React.ReactElement {
   return (
     <aside
@@ -67,11 +118,16 @@ export default function Navbar(): React.ReactElement {
       {/* Nav */}
       <nav className="mt-6 grid gap-1">
         <SideNavLink to="/" end label="Home" Icon={Home} />
-        <SideNavLink to="/vendor/apply" label="Apply as Vendor" Icon={Store} />
+
+        {/* Catalog group with nested New Product */}
+        <NavGroup baseTo="/products" label="Catalog" Icon={Store}>
+          <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
+        </NavGroup>
+
         <SideNavLink to="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard} />
-        <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
+        <SideNavLink to="/vendor/apply" label="Apply as Vendor" Icon={UserPlus} />
         <SideNavLink to="/admin/vendor-apps" label="Admin · Vendor Apps" Icon={ClipboardList} />
-        <SideNavLink to="/products" label="Catalog" Icon={Home} />
+
         {/* Cart & Checkout */}
         <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
         <SideNavLink to="/checkout" label="Checkout" Icon={CreditCard} />
