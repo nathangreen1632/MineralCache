@@ -4,8 +4,44 @@ import { useParams, Link } from 'react-router-dom';
 import { getProduct, type Product } from '../../api/products';
 
 function centsToUsd(cents: number | null | undefined): string {
-  const v = Number.isFinite(cents) ? Number(cents) : 0;
-  return `$${(v / 100).toFixed(2)}`;
+  const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
+  return `$${(n / 100).toFixed(2)}`;
+}
+
+function isSaleActive(p: Product, now = new Date()): boolean {
+  if (p.salePriceCents == null) return false;
+  const startOk = !p.saleStartAt || new Date(p.saleStartAt) <= now;
+  const endOk = !p.saleEndAt || now <= new Date(p.saleEndAt);
+  return startOk && endOk;
+}
+
+function effectivePriceCents(p: Product): number {
+  if (isSaleActive(p)) return p.salePriceCents as number;
+  return p.priceCents;
+}
+
+function sizeLabel(p: Product): string {
+  const parts: string[] = [];
+  if (p.lengthCm != null) parts.push(String(p.lengthCm));
+  if (p.widthCm != null) parts.push(String(p.widthCm));
+  if (p.heightCm != null) parts.push(String(p.heightCm));
+
+  if (parts.length > 0) return `${parts.join(' × ')} cm`;
+  if (p.sizeNote) return p.sizeNote;
+  return '—';
+}
+
+function weightLabel(p: Product): string {
+  if (p.weightG != null) return `${p.weightG} g`;
+  if (p.weightCt != null) return `${p.weightCt} ct`;
+  return '—';
+}
+
+function fluorescenceLabel(p: Product): string {
+  if (!p.fluorescenceMode || p.fluorescenceMode === 'none') return '—';
+  let out = p.fluorescenceMode;
+  if (p.fluorescenceColorNote) out += ` (${p.fluorescenceColorNote})`;
+  return out;
 }
 
 type LoadState =
@@ -75,15 +111,19 @@ export default function ProductDetail(): React.ReactElement {
 
   const p = state.product;
 
-  const priceEl =
-    p.onSale && p.compareAtCents != null && p.compareAtCents > p.priceCents ? (
+  // Price block (no nested ternaries)
+  const onSaleNow = isSaleActive(p);
+  const effCents = effectivePriceCents(p);
+
+  let priceEl: React.ReactNode = <span>{centsToUsd(effCents)}</span>;
+  if (onSaleNow) {
+    priceEl = (
       <>
-        <span className="line-through opacity-60 mr-2">{centsToUsd(p.compareAtCents)}</span>
-        <span>{centsToUsd(p.priceCents)}</span>
+        <span className="line-through opacity-60 mr-2">{centsToUsd(p.priceCents)}</span>
+        <span>{centsToUsd(effCents)}</span>
       </>
-    ) : (
-      <span>{centsToUsd(p.priceCents)}</span>
     );
+  }
 
   return (
     <section className="mx-auto max-w-5xl px-4 py-8 grid gap-6 md:grid-cols-2">
@@ -109,15 +149,15 @@ export default function ProductDetail(): React.ReactElement {
 
         <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
           <dt className="opacity-80">Size</dt>
-          <dd>{p.size ?? '—'}</dd>
+          <dd>{sizeLabel(p)}</dd>
           <dt className="opacity-80">Weight</dt>
-          <dd>{p.weight ?? '—'}</dd>
+          <dd>{weightLabel(p)}</dd>
           <dt className="opacity-80">Fluorescence</dt>
-          <dd>{p.fluorescence ?? '—'}</dd>
+          <dd>{fluorescenceLabel(p)}</dd>
           <dt className="opacity-80">Condition</dt>
           <dd>{p.condition ?? '—'}</dd>
           <dt className="opacity-80">Provenance</dt>
-          <dd>{p.provenance ?? '—'}</dd>
+          <dd>{p.provenanceNote ?? '—'}</dd>
           <dt className="opacity-80">Synthetic</dt>
           <dd>{p.synthetic ? 'Yes' : 'No'}</dd>
         </dl>
