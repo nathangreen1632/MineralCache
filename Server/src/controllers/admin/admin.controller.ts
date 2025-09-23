@@ -29,9 +29,18 @@ export async function listVendorApps(req: Request, res: Response): Promise<void>
 export async function approveVendor(req: Request, res: Response): Promise<void> {
   try {
     const id = Number(req.params.id || 0);
-    const out = await approveVendorSvc(id);
-    if (!out.ok && out.http) {
-      res.status(out.http).json({ error: out.error });
+
+    // Pull current admin user id from the request (populated by your auth middleware).
+    // Keep typing light to match repo style.
+    const adminUserId = Number((req as any)?.user?.id ?? 0);
+    if (!Number.isFinite(adminUserId) || adminUserId <= 0) {
+      res.status(401).json({ error: 'Auth required' });
+      return;
+    }
+
+    const out = await approveVendorSvc(id, adminUserId);
+    if (!out.ok && (out as any).http) {
+      res.status((out as any).http).json({ error: (out as any).error });
       return;
     }
     res.json(out);

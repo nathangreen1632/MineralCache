@@ -3,8 +3,21 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { listProducts, type ListQuery, type Product } from '../../api/products';
 
-function centsToUsd(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+function centsToUsd(cents?: number | null): string {
+  const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
+  return `$${(n / 100).toFixed(2)}`;
+}
+
+function isSaleActive(p: Product, now = new Date()): boolean {
+  if (p.salePriceCents == null) return false;
+  const startOk = !p.saleStartAt || new Date(p.saleStartAt) <= now;
+  const endOk = !p.saleEndAt || now <= new Date(p.saleEndAt);
+  return startOk && endOk;
+}
+
+function effectivePriceCents(p: Product): number {
+  if (isSaleActive(p)) return p.salePriceCents as number;
+  return p.priceCents;
 }
 
 type LoadState =
@@ -23,8 +36,8 @@ type FormState = {
   vendorSlug: string;
   onSale: boolean;
   synthetic: boolean;
-  minCents: string;
-  maxCents: string;
+  priceMinCents: string;
+  priceMaxCents: string;
   sort: SortValue;
   pageSize: string;
 };
@@ -33,7 +46,7 @@ export default function ProductList(): React.ReactElement {
   const [params, setParams] = useSearchParams();
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
 
-  // Parse URL → typed query
+  // Parse URL → typed query (NEW keys: priceMinCents/priceMaxCents)
   const query: ListQuery = useMemo(() => {
     const pageRaw = Number(params.get('page') || 1);
     const pageSizeRaw = Number(params.get('pageSize') || 24);
@@ -48,12 +61,12 @@ export default function ProductList(): React.ReactElement {
     const onSale = onSaleParam == null ? undefined : onSaleParam === 'true';
     const synthetic = syntheticParam == null ? undefined : syntheticParam === 'true';
 
-    const minCentsParam = params.get('minCents');
-    const maxCentsParam = params.get('maxCents');
-    const minCents =
-      minCentsParam != null && minCentsParam !== '' ? Math.max(0, Math.trunc(+minCentsParam)) : undefined;
-    const maxCents =
-      maxCentsParam != null && maxCentsParam !== '' ? Math.max(0, Math.trunc(+maxCentsParam)) : undefined;
+    const minParam = params.get('priceMinCents');
+    const maxParam = params.get('priceMaxCents');
+    const priceMinCents =
+      minParam != null && minParam !== '' ? Math.max(0, Math.trunc(+minParam)) : undefined;
+    const priceMaxCents =
+      maxParam != null && maxParam !== '' ? Math.max(0, Math.trunc(+maxParam)) : undefined;
 
     const sort = (params.get('sort') as ListQuery['sort']) || 'newest';
 
@@ -64,8 +77,8 @@ export default function ProductList(): React.ReactElement {
       species,
       onSale,
       synthetic,
-      minCents,
-      maxCents,
+      priceMinCents,
+      priceMaxCents,
       sort,
     };
   }, [params]);
@@ -76,8 +89,8 @@ export default function ProductList(): React.ReactElement {
     vendorSlug: query.vendorSlug ?? '',
     onSale: Boolean(query.onSale),
     synthetic: Boolean(query.synthetic),
-    minCents: query.minCents?.toString() ?? '',
-    maxCents: query.maxCents?.toString() ?? '',
+    priceMinCents: query.priceMinCents?.toString() ?? '',
+    priceMaxCents: query.priceMaxCents?.toString() ?? '',
     sort: (query.sort ?? 'newest') as SortValue,
     pageSize: String(query.pageSize ?? 24),
   }));
@@ -88,8 +101,8 @@ export default function ProductList(): React.ReactElement {
       vendorSlug: query.vendorSlug ?? '',
       onSale: Boolean(query.onSale),
       synthetic: Boolean(query.synthetic),
-      minCents: query.minCents?.toString() ?? '',
-      maxCents: query.maxCents?.toString() ?? '',
+      priceMinCents: query.priceMinCents?.toString() ?? '',
+      priceMaxCents: query.priceMaxCents?.toString() ?? '',
       sort: (query.sort ?? 'newest') as SortValue,
       pageSize: String(query.pageSize ?? 24),
     });
@@ -149,8 +162,8 @@ export default function ProductList(): React.ReactElement {
       vendorSlug: form.vendorSlug.trim() || undefined,
       onSale: form.onSale ? true : undefined,
       synthetic: form.synthetic ? true : undefined,
-      minCents: form.minCents ? Math.max(0, Math.trunc(+form.minCents)) : undefined,
-      maxCents: form.maxCents ? Math.max(0, Math.trunc(+form.maxCents)) : undefined,
+      priceMinCents: form.priceMinCents ? Math.max(0, Math.trunc(+form.priceMinCents)) : undefined,
+      priceMaxCents: form.priceMaxCents ? Math.max(0, Math.trunc(+form.priceMaxCents)) : undefined,
       sort: form.sort as ListQuery['sort'],
       pageSize: Math.max(1, Math.trunc(+form.pageSize)) || 24,
     });
@@ -162,12 +175,8 @@ export default function ProductList(): React.ReactElement {
     setParams(next, { replace: true });
   }
 
-  // Stable keys for skeletons (no PRNG → satisfies Sonar)
-  const skeletonKeys = useMemo(
-    () => Array.from({ length: 9 }, (_, i) => `sk-${i}`),
-    []
-  );
-
+  // Stable keys for skeletons
+  const skeletonKeys = useMemo(() => Array.from({ length: 9 }, (_, i) => `sk-${i}`), []);
 
   // styles
   const card: React.CSSProperties = {
@@ -202,15 +211,15 @@ export default function ProductList(): React.ReactElement {
           className="md:col-span-2 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
           placeholder="Min ¢"
           inputMode="numeric"
-          value={form.minCents}
-          onChange={(e) => setForm((s) => ({ ...s, minCents: e.target.value }))}
+          value={form.priceMinCents}
+          onChange={(e) => setForm((s) => ({ ...s, priceMinCents: e.target.value }))}
         />
         <input
           className="md:col-span-2 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
           placeholder="Max ¢"
           inputMode="numeric"
-          value={form.maxCents}
-          onChange={(e) => setForm((s) => ({ ...s, maxCents: e.target.value }))}
+          value={form.priceMaxCents}
+          onChange={(e) => setForm((s) => ({ ...s, priceMaxCents: e.target.value }))}
         />
         <select
           className="md:col-span-2 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
@@ -229,7 +238,7 @@ export default function ProductList(): React.ReactElement {
               checked={form.onSale}
               onChange={(e) => setForm((s) => ({ ...s, onSale: e.target.checked }))}
             />
-            <span>On sale</span>
+            <span>On sale (now)</span>
           </label>
           <label className="inline-flex items-center gap-2 text-sm">
             <input
@@ -284,30 +293,36 @@ export default function ProductList(): React.ReactElement {
       {state.kind === 'loaded' && (
         <>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-            {state.data.items.map((p) => (
-              <Link
-                key={p.id}
-                to={`/products/${p.id}`}
-                className="rounded-xl border p-3 hover:shadow"
-                style={card}
-              >
-                <div className="h-36 w-full rounded bg-[var(--theme-card-alt)] mb-3" />
-                <div className="truncate font-semibold">{p.title}</div>
-                <div className="text-sm">
-                  {p.onSale && p.compareAtCents ? (
-                    <>
-                      <span className="line-through opacity-60 mr-1">
-                        {centsToUsd(p.compareAtCents)}
-                      </span>
-                      <span>{centsToUsd(p.priceCents)}</span>
-                    </>
-                  ) : (
-                    centsToUsd(p.priceCents)
-                  )}
-                </div>
-                <div className="text-xs opacity-70">{p.species}</div>
-              </Link>
-            ))}
+            {state.data.items.map((p) => {
+              const onSaleNow = isSaleActive(p);
+              const eff = effectivePriceCents(p);
+
+              let priceEl: React.ReactNode = <div className="text-sm">{centsToUsd(eff)}</div>;
+              if (onSaleNow) {
+                priceEl = (
+                  <div className="text-sm">
+                    <span className="line-through opacity-60 mr-1">
+                      {centsToUsd(p.priceCents)}
+                    </span>
+                    <span>{centsToUsd(eff)}</span>
+                  </div>
+                );
+              }
+
+              return (
+                <Link
+                  key={p.id}
+                  to={`/products/${p.id}`}
+                  className="rounded-xl border p-3 hover:shadow"
+                  style={card}
+                >
+                  <div className="h-36 w-full rounded bg-[var(--theme-card-alt)] mb-3" />
+                  <div className="truncate font-semibold">{p.title}</div>
+                  {priceEl}
+                  <div className="text-xs opacity-70">{p.species}</div>
+                </Link>
+              );
+            })}
           </div>
 
           {/* Pagination */}

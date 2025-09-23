@@ -1,32 +1,103 @@
 // Client/src/api/products.ts
 import { get, post, patch } from '../lib/api';
 
-// ---- Types aligned with server product.schema.ts ----
+/* ============================
+   Types aligned to new schema
+   ============================ */
+
+export type FluorescenceMode = 'none' | 'SW' | 'LW' | 'both';
+
+export type FluorescenceInput = {
+  mode: FluorescenceMode;
+  colorNote?: string | null;
+  wavelengthNm?: number[] | null;
+};
+
+export type ProvenanceEntry = {
+  owner: string;
+  yearStart?: number;
+  yearEnd?: number;
+  note?: string;
+};
+
 export type ProductInput = {
   title: string;
   description?: string | null;
+
   species: string;
   locality?: string | null;
-  size?: string | null;
-  weight?: string | null;
-  fluorescence?: string | null;
-  condition?: string | null;
-  provenance?: string | null;
   synthetic?: boolean;
-  onSale?: boolean;
+
+  // Dimensions + weight (structured)
+  lengthCm?: number | null;
+  widthCm?: number | null;
+  heightCm?: number | null;
+  sizeNote?: string | null;
+  weightG?: number | null;
+  weightCt?: number | null;
+
+  // Structured fluorescence
+  fluorescence: FluorescenceInput;
+
+  // Condition + provenance
+  condition?: string | null; // enum/string server-side
+  conditionNote?: string | null;
+  provenanceNote?: string | null;
+  provenanceTrail?: ProvenanceEntry[] | null;
+
+  // Pricing (scheduled sale model)
   priceCents: number;
-  compareAtCents?: number | null;
+  salePriceCents?: number | null;
+  saleStartAt?: string | null; // ISO8601
+  saleEndAt?: string | null;
+
+  // Uploader plumbing placeholder (ignored by API for now)
+  images?: string[];
 };
 
-export type Product = ProductInput & {
+// Server response shape (mirrors DB column names)
+export type Product = {
   id: number;
   vendorId: number;
-  archivedAt?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
+
+  title: string;
+  description: string | null;
+
+  species: string;
+  locality: string | null;
+  synthetic: boolean;
+
+  lengthCm: number | null;
+  widthCm: number | null;
+  heightCm: number | null;
+  sizeNote: string | null;
+
+  weightG: number | null;
+  weightCt: number | null;
+
+  fluorescenceMode: FluorescenceMode;
+  fluorescenceColorNote: string | null;
+  fluorescenceWavelengthNm: number[] | null;
+
+  condition: string | null;
+  conditionNote: string | null;
+  provenanceNote: string | null;
+  provenanceTrail: ProvenanceEntry[] | null;
+
+  priceCents: number;
+  salePriceCents: number | null;
+  saleStartAt: string | null;
+  saleEndAt: string | null;
+
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
-// ---------- NEW: list types ----------
+/* ============================
+   List (new query params)
+   ============================ */
+
 export type ListQuery = {
   page?: number;
   pageSize?: number;
@@ -35,8 +106,15 @@ export type ListQuery = {
   species?: string;
   synthetic?: boolean;
   onSale?: boolean;
-  minCents?: number;
-  maxCents?: number;
+
+  // New unified filters
+  priceMinCents?: number;
+  priceMaxCents?: number;
+  sizeMinCm?: number;
+  sizeMaxCm?: number;
+  fluorescence?: string; // comma list of modes: "SW,LW"
+  condition?: string;    // comma list of statuses
+
   sort?: 'newest' | 'price_asc' | 'price_desc';
 };
 
@@ -48,24 +126,27 @@ export type ListResponse = {
   totalPages: number;
 };
 
-// Back-compat aliases (don’t break older imports)
+// Back-compat aliases (if other files import these names)
 export type ProductListParams = ListQuery;
 export type ProductListResponse = ListResponse;
 
-// ---------- Existing endpoints (kept) ----------
+/* ============================
+   API calls
+   ============================ */
+
 export async function createProduct(body: ProductInput) {
   return post<{ ok: true; id: number }, ProductInput>('/products', body);
 }
 
-export async function updateProduct(id: number, body: Partial<ProductInput>) {
-  return patch<{ ok: true }, Partial<ProductInput>>(`/products/${id}`, body);
+// We send the full structured payload on edit (server accepts partials too)
+export async function updateProduct(id: number, body: ProductInput) {
+  return patch<{ ok: true }, ProductInput>(`/products/${id}`, body);
 }
 
 export async function getProduct(id: number) {
-  return get<{ product: Product | null }>(`/products/${id}`);
+  return get<{ product: Product }>(`/products/${id}`);
 }
 
-// ---------- NEW: listProducts helper ----------
 export async function listProducts(q: ListQuery = {}) {
   const params = new URLSearchParams();
 
@@ -76,19 +157,26 @@ export async function listProducts(q: ListQuery = {}) {
   if (q.species) params.set('species', q.species);
   if (typeof q.synthetic === 'boolean') params.set('synthetic', String(q.synthetic));
   if (typeof q.onSale === 'boolean') params.set('onSale', String(q.onSale));
-  if (typeof q.minCents === 'number' && Number.isFinite(q.minCents)) {
-    params.set('minCents', String(q.minCents));
-  }
-  if (typeof q.maxCents === 'number' && Number.isFinite(q.maxCents)) {
-    params.set('maxCents', String(q.maxCents));
-  }
+
+  if (typeof q.priceMinCents === 'number') params.set('priceMinCents', String(q.priceMinCents));
+  if (typeof q.priceMaxCents === 'number') params.set('priceMaxCents', String(q.priceMaxCents));
+
+  if (typeof q.sizeMinCm === 'number') params.set('sizeMinCm', String(q.sizeMinCm));
+  if (typeof q.sizeMaxCm === 'number') params.set('sizeMaxCm', String(q.sizeMaxCm));
+
+  if (q.fluorescence) params.set('fluorescence', q.fluorescence);
+  if (q.condition) params.set('condition', q.condition);
+
   if (q.sort) params.set('sort', q.sort);
 
   const qs = params.toString();
   return get<ListResponse>(`/products${qs ? `?${qs}` : ''}`);
 }
 
-// NOTE: file upload needs FormData; we use fetch directly (not JSON helper)
+/* ============================
+   Uploads (kept here)
+   ============================ */
+
 export async function uploadProductImages(id: number, files: File[]) {
   const fd = new FormData();
   files.slice(0, 4).forEach((f) => fd.append('photos', f));

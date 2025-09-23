@@ -1,20 +1,38 @@
-// Augment Express Request with a `user` bag and cookie-session typing.
-import 'express-serve-static-core';
+// Server/src/types/express.d.ts
 
-declare module 'express-serve-static-core' {
-  interface Request {
-    user?: {
+// Make this file a module (prevents global re-declarations)
+export {};
+
+/**
+ * Global Express typings you can reuse elsewhere (e.g., cookie-session)
+ */
+declare global {
+  namespace Express {
+    type UserRole = 'buyer' | 'vendor' | 'admin';
+
+    interface UserClaims {
       id: number;
-      role: 'buyer' | 'vendor' | 'admin';
+      role: UserRole;
       dobVerified18: boolean;
       email?: string;
-    } | null;
+    }
   }
 }
 
-// If you want stricter cookie-session typing, you can also add:
+/**
+ * Augment Express Request with a `user` bag
+ */
+declare module 'express-serve-static-core' {
+  interface Request {
+    user?: Express.UserClaims | null;
+  }
+}
+
+/**
+ * Optional: stricter cookie-session typing to match the same shape
+ */
 declare module 'cookie-session' {
   interface CookieSessionObject {
-    user?: { id: number; role: 'buyer'|'vendor'|'admin'; dobVerified18: boolean; email?: string } | null;
+    user?: Express.UserClaims | null;
   }
 }
