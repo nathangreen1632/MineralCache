@@ -62,8 +62,8 @@ function NavGroup({
   const onSection = useMemo(() => {
     if (!location?.pathname) return false;
     if (location.pathname === baseTo) return true;
-    if (location.pathname.startsWith(baseTo + '/')) return true;
-    return false;
+    return location.pathname.startsWith(baseTo + '/');
+
   }, [location, baseTo]);
 
   const [open, setOpen] = useState(onSection);
