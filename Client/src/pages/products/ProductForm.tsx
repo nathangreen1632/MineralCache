@@ -3,29 +3,68 @@ import React, { useEffect, useMemo, useState, useId } from 'react';
 import { z } from 'zod';
 import type { ProductInput } from '../../api/products';
 
+/** -------- Zod Schema matching new structured ProductInput -------- */
+const FluorSchema = z.object({
+  mode: z.enum(['none', 'SW', 'LW', 'both']),
+  colorNote: z.string().max(240).optional().nullable(),
+  // Optional; if you later expose this, parse as comma-separated numbers
+  wavelengthNm: z.array(z.number().int().positive()).max(4).optional().nullable(),
+});
+
 const Schema = z
   .object({
     title: z.string().min(2, 'Required').max(160, 'Max 160 chars'),
     description: z.string().max(8000, 'Max 8000 chars').optional().nullable(),
+
     species: z.string().min(1, 'Required').max(120, 'Max 120 chars'),
     locality: z.string().max(240).optional().nullable(),
-    size: z.string().max(120).optional().nullable(),
-    weight: z.string().max(120).optional().nullable(),
-    fluorescence: z.string().max(240).optional().nullable(),
-    condition: z.string().max(240).optional().nullable(),
-    provenance: z.string().max(240).optional().nullable(),
     synthetic: z.boolean().optional(),
-    onSale: z.boolean().optional(),
+
+    // Dimensions + weight (structured)
+    lengthCm: z.number().nonnegative().optional().nullable(),
+    widthCm: z.number().nonnegative().optional().nullable(),
+    heightCm: z.number().nonnegative().optional().nullable(),
+    sizeNote: z.string().max(120).optional().nullable(),
+
+    weightG: z.number().nonnegative().optional().nullable(),
+    weightCt: z.number().nonnegative().optional().nullable(),
+
+    // Structured fluorescence
+    fluorescence: FluorSchema,
+
+    // Condition + provenance (flat notes for now)
+    condition: z.string().max(240).optional().nullable(),
+    conditionNote: z.string().max(240).optional().nullable(),
+    provenanceNote: z.string().max(240).optional().nullable(),
+    // provenanceTrail omitted from form (will send null/initial value)
+
+    // Pricing (scheduled sale model)
     priceCents: z.number().int().min(1, 'Must be ≥ 1'),
-    compareAtCents: z.number().int().nullable().optional(),
+    salePriceCents: z.number().int().min(0).nullable().optional(),
+    // Use string ISO at the API boundary
+    saleStartAt: z.string().optional().nullable(),
+    saleEndAt: z.string().optional().nullable(),
   })
   .superRefine((val, ctx) => {
-    if (val.onSale && val.compareAtCents != null && val.compareAtCents < val.priceCents) {
+    // Sale price must be less than priceCents (if provided)
+    if (val.salePriceCents != null && val.salePriceCents >= val.priceCents) {
       ctx.addIssue({
-        code: 'custom', // ✅ use raw string literal (no deprecated ZodIssueCode)
-        path: ['compareAtCents'],
-        message: 'compareAtCents must be ≥ priceCents when onSale is enabled.',
+        code: 'custom',
+        path: ['salePriceCents'],
+        message: 'Sale price must be less than regular price.',
       });
+    }
+    // If both dates present, enforce start ≤ end
+    if (val.saleStartAt && val.saleEndAt) {
+      const start = new Date(val.saleStartAt).getTime();
+      const end = new Date(val.saleEndAt).getTime();
+      if (Number.isFinite(start) && Number.isFinite(end) && start > end) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['saleStartAt'],
+          message: 'Sale start must be ≤ sale end.',
+        });
+      }
     }
   });
 
@@ -38,6 +77,8 @@ type Props = {
   busy?: boolean;
   serverMessage?: string | null;
 };
+
+const DEFAULT_FLUOR = { mode: 'none', colorNote: null, wavelengthNm: null } as const;
 
 export default function ProductForm({
                                       mode,
@@ -52,60 +93,92 @@ export default function ProductForm({
     description: useId(),
     species: useId(),
     locality: useId(),
-    size: useId(),
-    weight: useId(),
-    fluorescence: useId(),
+    lengthCm: useId(),
+    widthCm: useId(),
+    heightCm: useId(),
+    sizeNote: useId(),
+    weightG: useId(),
+    weightCt: useId(),
+    fluorMode: useId(),
+    fluorColor: useId(),
     condition: useId(),
-    provenance: useId(),
-    synthetic: useId(),
-    onSale: useId(),
+    conditionNote: useId(),
+    provenanceNote: useId(),
     priceCents: useId(),
-    compareAtCents: useId(),
+    salePriceCents: useId(),
+    saleStartAt: useId(),
+    saleEndAt: useId(),
     photos: useId(),
   };
 
-  // keep cents as strings in inputs to avoid jumping
-  const [values, setValues] = useState<ProductFormValues>({
+  // keep cents as numbers; keep text fields nullable
+  const [values, setValues] = useState<ProductFormValues>(() => ({
     title: initial?.title ?? '',
-    description: initial?.description ?? '',
+    description: initial?.description ?? null,
+
     species: initial?.species ?? '',
-    locality: initial?.locality ?? '',
-    size: initial?.size ?? '',
-    weight: initial?.weight ?? '',
-    fluorescence: initial?.fluorescence ?? '',
-    condition: initial?.condition ?? '',
-    provenance: initial?.provenance ?? '',
-    synthetic: Boolean(initial?.synthetic ?? false),
-    onSale: Boolean(initial?.onSale ?? false),
+    locality: initial?.locality ?? null,
+    synthetic: Boolean(initial?.synthetic),
+
+    lengthCm: initial?.lengthCm ?? null,
+    widthCm: initial?.widthCm ?? null,
+    heightCm: initial?.heightCm ?? null,
+    sizeNote: initial?.sizeNote ?? null,
+
+    weightG: initial?.weightG ?? null,
+    weightCt: initial?.weightCt ?? null,
+
+    fluorescence: initial?.fluorescence ?? DEFAULT_FLUOR,
+
+    condition: initial?.condition ?? null,
+    conditionNote: initial?.conditionNote ?? null,
+    provenanceNote: initial?.provenanceNote ?? null,
+
     priceCents: Number.isFinite(initial?.priceCents) ? Number(initial?.priceCents) : 0,
-    compareAtCents:
-      initial?.compareAtCents == null ? null : Number.parseInt(String(initial.compareAtCents), 10),
-  });
+    salePriceCents:
+      initial?.salePriceCents == null ? null : Math.trunc(Number(initial.salePriceCents)),
+    saleStartAt: initial?.saleStartAt ?? null,
+    saleEndAt: initial?.saleEndAt ?? null,
+  }));
 
   useEffect(() => {
     // when initial changes (edit page load), hydrate
     if (initial) {
-      setValues((v) => ({
-        ...v,
-        title: initial.title ?? v.title,
-        description: initial.description ?? v.description,
-        species: initial.species ?? v.species,
-        locality: initial.locality ?? v.locality,
-        size: initial.size ?? v.size,
-        weight: initial.weight ?? v.weight,
-        fluorescence: initial.fluorescence ?? v.fluorescence,
-        condition: initial.condition ?? v.condition,
-        provenance: initial.provenance ?? v.provenance,
-        synthetic: Boolean(initial.synthetic ?? v.synthetic),
-        onSale: Boolean(initial.onSale ?? v.onSale),
+      const next: ProductFormValues = {
+        ...values,
+        title: initial.title ?? values.title,
+        description: initial.description ?? values.description,
+
+        species: initial.species ?? values.species,
+        locality: initial.locality ?? values.locality,
+        synthetic: Boolean(initial.synthetic ?? values.synthetic),
+
+        lengthCm: initial.lengthCm ?? values.lengthCm,
+        widthCm: initial.widthCm ?? values.widthCm,
+        heightCm: initial.heightCm ?? values.heightCm,
+        sizeNote: initial.sizeNote ?? values.sizeNote,
+
+        weightG: initial.weightG ?? values.weightG,
+        weightCt: initial.weightCt ?? values.weightCt,
+
+        fluorescence: initial.fluorescence ?? values.fluorescence ?? DEFAULT_FLUOR,
+
+        condition: initial.condition ?? values.condition,
+        conditionNote: initial.conditionNote ?? values.conditionNote,
+        provenanceNote: initial.provenanceNote ?? values.provenanceNote,
+
         priceCents:
-          Number.isFinite(initial.priceCents) && initial.priceCents! > 0
+          Number.isFinite(initial.priceCents) && Number(initial.priceCents) > 0
             ? Number(initial.priceCents)
-            : v.priceCents,
-        compareAtCents:
-          initial.compareAtCents == null ? null : Number.parseInt(String(initial.compareAtCents), 10),
-      }));
+            : values.priceCents,
+        salePriceCents:
+          initial.salePriceCents == null ? null : Math.trunc(Number(initial.salePriceCents)),
+        saleStartAt: initial.saleStartAt ?? values.saleStartAt,
+        saleEndAt: initial.saleEndAt ?? values.saleEndAt,
+      };
+      setValues(next);
     }
+
   }, [initial]);
 
   const [errs, setErrs] = useState<Record<string, string>>({});
@@ -113,7 +186,9 @@ export default function ProductForm({
 
   const canSubmit = useMemo(() => {
     const parsed = Schema.safeParse(values);
-    return parsed.success && images.length <= 4;
+    if (!parsed.success) return false;
+    return images.length <= 4;
+
   }, [values, images.length]);
 
   function setField<K extends keyof ProductFormValues>(key: K, value: ProductFormValues[K]) {
@@ -130,6 +205,14 @@ export default function ProductForm({
       }
       setErrs(fe);
     }
+  }
+
+  function setFluorField<K extends keyof ProductFormValues['fluorescence']>(
+    key: K,
+    value: ProductFormValues['fluorescence'][K]
+  ) {
+    const current = values.fluorescence || DEFAULT_FLUOR;
+    setField('fluorescence', { ...current, [key]: value });
   }
 
   function onPickFiles(e: React.ChangeEvent<HTMLInputElement>) {
@@ -150,56 +233,76 @@ export default function ProductForm({
       setErrs(fe);
       return;
     }
+
     // Normalize optional strings to null for server parity
-    const normalize = (s?: string | null) => (s != null && s.trim() === '' ? null : s ?? null);
+    function normalize(s?: string | null) {
+      if (s == null) return null;
+      const t = s.trim();
+      if (t === '') return null;
+      return t;
+    }
+
     const payload: ProductInput = {
       title: parsed.data.title.trim(),
       description: normalize(parsed.data.description ?? null),
       species: parsed.data.species.trim(),
       locality: normalize(parsed.data.locality ?? null),
-      size: normalize(parsed.data.size ?? null),
-      weight: normalize(parsed.data.weight ?? null),
-      fluorescence: normalize(parsed.data.fluorescence ?? null),
-      condition: normalize(parsed.data.condition ?? null),
-      provenance: normalize(parsed.data.provenance ?? null),
       synthetic: Boolean(parsed.data.synthetic ?? false),
-      onSale: Boolean(parsed.data.onSale ?? false),
+
+      lengthCm: parsed.data.lengthCm ?? null,
+      widthCm: parsed.data.widthCm ?? null,
+      heightCm: parsed.data.heightCm ?? null,
+      sizeNote: normalize(parsed.data.sizeNote ?? null),
+
+      weightG: parsed.data.weightG ?? null,
+      weightCt: parsed.data.weightCt ?? null,
+
+      fluorescence: {
+        mode: parsed.data.fluorescence.mode,
+        colorNote: normalize(parsed.data.fluorescence.colorNote ?? null),
+        wavelengthNm: parsed.data.fluorescence.wavelengthNm ?? null,
+      },
+
+      condition: normalize(parsed.data.condition ?? null),
+      conditionNote: normalize(parsed.data.conditionNote ?? null),
+      provenanceNote: normalize(parsed.data.provenanceNote ?? null),
+      provenanceTrail: null, // future: structured entries
+
       priceCents: Math.trunc(parsed.data.priceCents),
-      compareAtCents:
-        parsed.data.compareAtCents == null ? null : Math.trunc(parsed.data.compareAtCents),
+
+      salePriceCents:
+        parsed.data.salePriceCents == null ? null : Math.trunc(parsed.data.salePriceCents),
+      saleStartAt: normalize(parsed.data.saleStartAt ?? null),
+      saleEndAt: normalize(parsed.data.saleEndAt ?? null),
+
+      images: [], // not used by API submit; uploads handled separately
     };
+
     await onSubmit(payload, images);
   }
 
   function fieldCls(invalid?: boolean) {
     const base =
       'w-full rounded-lg border px-3 py-2 text-sm outline-none ring-0 bg-[var(--theme-textbox)]';
-    return invalid
-      ? `${base} border-[var(--theme-error)]`
-      : `${base} border-[var(--theme-border)] focus:border-[var(--theme-focus)]`;
+    if (invalid) return `${base} border-[var(--theme-error)]`;
+    return `${base} border-[var(--theme-border)] focus:border-[var(--theme-focus)]`;
   }
 
-  // submit label without any ternaries
-  let submitLabel: string;
-
-  if (busy) {
-    if (mode === 'create') {
-      submitLabel = 'Creating…';
-    } else {
-      submitLabel = 'Saving…';
-    }
-  } else if (mode === 'create') {
-    submitLabel = 'Create';
-  } else {
-    submitLabel = 'Save';
-  }
+  // submit label without nested ternaries
+  let submitLabel = 'Create';
+  if (mode === 'edit') submitLabel = 'Save';
+  if (busy) submitLabel = mode === 'edit' ? 'Saving…' : 'Creating…';
 
   return (
     <form onSubmit={submit} className="space-y-5">
-      {serverMessage && (
+      {Boolean(serverMessage) && (
         <div
           className="rounded-md border px-3 py-2 text-sm"
-          style={{ background: 'var(--theme-card-alt)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+          style={{
+            background: 'var(--theme-card-alt)',
+            borderColor: 'var(--theme-border)',
+            color: 'var(--theme-text)',
+          }}
         >
           {serverMessage}
         </div>
@@ -207,7 +310,12 @@ export default function ProductForm({
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="md:col-span-2">
-          <label htmlFor={ids.title} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Title</label>
+          <label
+            htmlFor={ids.title}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Title
+          </label>
           <input
             id={ids.title}
             className={fieldCls(Boolean(errs.title))}
@@ -215,11 +323,20 @@ export default function ProductForm({
             onChange={(e) => setField('title', e.target.value)}
             maxLength={160}
           />
-          {errs.title && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.title}</p>}
+          {errs.title && (
+            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
+              {errs.title}
+            </p>
+          )}
         </div>
 
         <div className="md:col-span-2">
-          <label htmlFor={ids.description} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Description</label>
+          <label
+            htmlFor={ids.description}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Description
+          </label>
           <textarea
             id={ids.description}
             className={fieldCls(Boolean(errs.description))}
@@ -228,11 +345,20 @@ export default function ProductForm({
             rows={5}
             maxLength={8000}
           />
-          {errs.description && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.description}</p>}
+          {errs.description && (
+            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
+              {errs.description}
+            </p>
+          )}
         </div>
 
         <div>
-          <label htmlFor={ids.species} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Species</label>
+          <label
+            htmlFor={ids.species}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Species
+          </label>
           <input
             id={ids.species}
             className={fieldCls(Boolean(errs.species))}
@@ -240,11 +366,20 @@ export default function ProductForm({
             onChange={(e) => setField('species', e.target.value)}
             maxLength={120}
           />
-          {errs.species && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.species}</p>}
+          {errs.species && (
+            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
+              {errs.species}
+            </p>
+          )}
         </div>
 
         <div>
-          <label htmlFor={ids.locality} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Locality</label>
+          <label
+            htmlFor={ids.locality}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Locality
+          </label>
           <input
             id={ids.locality}
             className={fieldCls(Boolean(errs.locality))}
@@ -252,118 +387,250 @@ export default function ProductForm({
             onChange={(e) => setField('locality', e.target.value)}
             maxLength={240}
           />
-          {errs.locality && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.locality}</p>}
+          {errs.locality && (
+            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
+              {errs.locality}
+            </p>
+          )}
         </div>
 
+        {/* Dimensions */}
         <div>
-          <label htmlFor={ids.size} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Size</label>
+          <label
+            htmlFor={ids.lengthCm}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Length (cm)
+          </label>
           <input
-            id={ids.size}
-            className={fieldCls(Boolean(errs.size))}
-            value={values.size ?? ''}
-            onChange={(e) => setField('size', e.target.value)}
-            maxLength={120}
+            id={ids.lengthCm}
+            className={fieldCls(Boolean(errs.lengthCm))}
+            type="number"
+            step="0.01"
+            value={values.lengthCm ?? ''}
+            onChange={(e) =>
+              setField('lengthCm', e.target.value === '' ? null : Number(e.target.value))
+            }
           />
         </div>
-
         <div>
-          <label htmlFor={ids.weight} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Weight</label>
+          <label
+            htmlFor={ids.widthCm}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Width (cm)
+          </label>
           <input
-            id={ids.weight}
-            className={fieldCls(Boolean(errs.weight))}
-            value={values.weight ?? ''}
-            onChange={(e) => setField('weight', e.target.value)}
-            maxLength={120}
+            id={ids.widthCm}
+            className={fieldCls(Boolean(errs.widthCm))}
+            type="number"
+            step="0.01"
+            value={values.widthCm ?? ''}
+            onChange={(e) =>
+              setField('widthCm', e.target.value === '' ? null : Number(e.target.value))
+            }
           />
         </div>
-
         <div>
-          <label htmlFor={ids.fluorescence} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Fluorescence</label>
+          <label
+            htmlFor={ids.heightCm}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Height (cm)
+          </label>
           <input
-            id={ids.fluorescence}
-            className={fieldCls(Boolean(errs.fluorescence))}
-            value={values.fluorescence ?? ''}
-            onChange={(e) => setField('fluorescence', e.target.value)}
-            maxLength={240}
-          />
-        </div>
-
-        <div>
-          <label htmlFor={ids.condition} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Condition</label>
-          <input
-            id={ids.condition}
-            className={fieldCls(Boolean(errs.condition))}
-            value={values.condition ?? ''}
-            onChange={(e) => setField('condition', e.target.value)}
-            maxLength={240}
+            id={ids.heightCm}
+            className={fieldCls(Boolean(errs.heightCm))}
+            type="number"
+            step="0.01"
+            value={values.heightCm ?? ''}
+            onChange={(e) =>
+              setField('heightCm', e.target.value === '' ? null : Number(e.target.value))
+            }
           />
         </div>
 
         <div className="md:col-span-2">
-          <label htmlFor={ids.provenance} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Provenance</label>
+          <label
+            htmlFor={ids.sizeNote}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Size note
+          </label>
           <input
-            id={ids.provenance}
-            className={fieldCls(Boolean(errs.provenance))}
-            value={values.provenance ?? ''}
-            onChange={(e) => setField('provenance', e.target.value)}
-            maxLength={240}
+            id={ids.sizeNote}
+            className={fieldCls(Boolean(errs.sizeNote))}
+            value={values.sizeNote ?? ''}
+            onChange={(e) => setField('sizeNote', e.target.value)}
+            maxLength={120}
           />
         </div>
 
-        <div className="flex items-center gap-6 md:col-span-2">
-          <label htmlFor={ids.synthetic} className="inline-flex items-center gap-2 text-sm">
-            <input
-              id={ids.synthetic}
-              type="checkbox"
-              checked={Boolean(values.synthetic)}
-              onChange={(e) => setField('synthetic', e.target.checked)}
-            />
-            <span>Synthetic</span>
+        {/* Weights */}
+        <div>
+          <label
+            htmlFor={ids.weightG}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Weight (g)
           </label>
-          <label htmlFor={ids.onSale} className="inline-flex items-center gap-2 text-sm">
-            <input
-              id={ids.onSale}
-              type="checkbox"
-              checked={Boolean(values.onSale)}
-              onChange={(e) => setField('onSale', e.target.checked)}
-            />
-            <span>On sale</span>
+          <input
+            id={ids.weightG}
+            className={fieldCls(Boolean(errs.weightG))}
+            type="number"
+            step="0.01"
+            value={values.weightG ?? ''}
+            onChange={(e) =>
+              setField('weightG', e.target.value === '' ? null : Number(e.target.value))
+            }
+          />
+        </div>
+        <div>
+          <label
+            htmlFor={ids.weightCt}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Weight (ct)
           </label>
+          <input
+            id={ids.weightCt}
+            className={fieldCls(Boolean(errs.weightCt))}
+            type="number"
+            step="0.01"
+            value={values.weightCt ?? ''}
+            onChange={(e) =>
+              setField('weightCt', e.target.value === '' ? null : Number(e.target.value))
+            }
+          />
         </div>
 
+        {/* Fluorescence */}
         <div>
-          <label htmlFor={ids.priceCents} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Price (¢)</label>
+          <label
+            htmlFor={ids.fluorMode}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Fluorescence mode
+          </label>
+          <select
+            id={ids.fluorMode}
+            className={fieldCls(Boolean((errs as any)['fluorescence.mode']))}
+            value={values.fluorescence?.mode ?? 'none'}
+            onChange={(e) => setFluorField('mode', e.target.value as any)}
+          >
+            <option value="none">None</option>
+            <option value="SW">SW</option>
+            <option value="LW">LW</option>
+            <option value="both">Both</option>
+          </select>
+        </div>
+        <div className="md:col-span-2">
+          <label
+            htmlFor={ids.fluorColor}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Fluorescence color note
+          </label>
+          <input
+            id={ids.fluorColor}
+            className={fieldCls(Boolean((errs as any)['fluorescence.colorNote']))}
+            value={values.fluorescence?.colorNote ?? ''}
+            onChange={(e) => setFluorField('colorNote', e.target.value || null)}
+          />
+        </div>
+
+        {/* Pricing */}
+        <div>
+          <label
+            htmlFor={ids.priceCents}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Price (¢)
+          </label>
           <input
             id={ids.priceCents}
             inputMode="numeric"
             className={fieldCls(Boolean(errs.priceCents))}
             value={String(values.priceCents ?? '')}
-            onChange={(e) =>
-              setField('priceCents', Number.isFinite(+e.target.value) ? Math.trunc(+e.target.value) : 0)
-            }
+            onChange={(e) => {
+              const raw = e.target.value;
+              const n = Math.trunc(Number(raw) || 0);
+              setField('priceCents', n < 0 ? 0 : n);
+            }}
           />
           {errs.priceCents && (
-            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.priceCents}</p>
+            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
+              {errs.priceCents}
+            </p>
           )}
         </div>
 
         <div>
-          <label htmlFor={ids.compareAtCents} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-            Compare At (¢) {!values.onSale && <span className="opacity-60">(optional)</span>}
+          <label
+            htmlFor={ids.salePriceCents}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Sale price (¢) <span className="opacity-60">(optional)</span>
           </label>
           <input
-            id={ids.compareAtCents}
+            id={ids.salePriceCents}
             inputMode="numeric"
-            className={fieldCls(Boolean(errs.compareAtCents))}
-            value={values.compareAtCents == null ? '' : String(values.compareAtCents)}
+            className={fieldCls(Boolean(errs.salePriceCents))}
+            value={values.salePriceCents == null ? '' : String(values.salePriceCents)}
             onChange={(e) => {
               const raw = e.target.value.trim();
-              setField('compareAtCents', raw === '' ? null : Math.trunc(+raw));
+              if (raw === '') setField('salePriceCents', null);
+              else {
+                const n = Math.trunc(Number(raw) || 0);
+                setField('salePriceCents', n < 0 ? 0 : n);
+              }
             }}
           />
-          {errs.compareAtCents && (
+          {errs.salePriceCents && (
             <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
-              {errs.compareAtCents}
+              {errs.salePriceCents}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label
+            htmlFor={ids.saleStartAt}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Sale start (ISO) <span className="opacity-60">(optional)</span>
+          </label>
+          <input
+            id={ids.saleStartAt}
+            className={fieldCls(Boolean(errs.saleStartAt))}
+            placeholder="YYYY-MM-DDTHH:mm:ssZ"
+            value={values.saleStartAt ?? ''}
+            onChange={(e) => setField('saleStartAt', e.target.value || null)}
+          />
+          {errs.saleStartAt && (
+            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
+              {errs.saleStartAt}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label
+            htmlFor={ids.saleEndAt}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Sale end (ISO) <span className="opacity-60">(optional)</span>
+          </label>
+          <input
+            id={ids.saleEndAt}
+            className={fieldCls(Boolean(errs.saleEndAt))}
+            placeholder="YYYY-MM-DDTHH:mm:ssZ"
+            value={values.saleEndAt ?? ''}
+            onChange={(e) => setField('saleEndAt', e.target.value || null)}
+          />
+          {errs.saleEndAt && (
+            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
+              {errs.saleEndAt}
             </p>
           )}
         </div>
@@ -371,7 +638,10 @@ export default function ProductForm({
 
       {/* Photos (≤4) */}
       <div>
-        <label htmlFor={ids.photos} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
+        <label
+          htmlFor={ids.photos}
+          className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+        >
           Photos (up to 4)
         </label>
         <input id={ids.photos} type="file" accept="image/*" multiple onChange={onPickFiles} />
@@ -381,7 +651,11 @@ export default function ProductForm({
         {images.length > 0 && (
           <ul className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
             {images.map((f) => (
-              <li key={f.name} className="rounded-lg border p-2" style={{ borderColor: 'var(--theme-border)' }}>
+              <li
+                key={f.name}
+                className="rounded-lg border p-2"
+                style={{ borderColor: 'var(--theme-border)' }}
+              >
                 <img
                   src={URL.createObjectURL(f)}
                   alt=""
@@ -403,7 +677,7 @@ export default function ProductForm({
       <div className="flex items-center gap-2">
         <button
           type="submit"
-          disabled={busy || !canSubmit}
+          disabled={Boolean(busy) || !canSubmit}
           className="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-60"
           style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
         >
