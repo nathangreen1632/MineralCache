@@ -10,8 +10,10 @@
     "migrate": "cd Server && NODE_ENV=production npx sequelize-cli db:migrate --config src/config/sequelize.cjs --migrations-path src/migrations --models-path src/models --seeders-path src/seeders",
     "migrate:undo": "cd Server && NODE_ENV=production npx sequelize-cli db:migrate:undo --config src/config/sequelize.cjs",
     "migrate:reset": "cd Server && NODE_ENV=production npx sequelize-cli db:migrate:undo:all --config src/config/sequelize.cjs && NODE_ENV=production npx sequelize-cli db:migrate --config src/config/sequelize.cjs",
-    "seed": "cd Server && NODE_ENV=production npx sequelize-cli db:seed:all --config src/config/sequelize.cjs --seeders-path src/seeders",
-    "seed:undo": "cd Server && NODE_ENV=production npx sequelize-cli db:seed:undo:all --config src/config/sequelize.cjs --seeders-path src/seeders"
+    "seed:dev": "cd Server && NODE_ENV=development npx sequelize-cli db:seed:all --env development --config src/config/sequelize.cjs --seeders-path src/seeders",
+    "seed:dev:undo": "cd Server && NODE_ENV=development npx sequelize-cli db:seed:undo:all --env development --config src/config/sequelize.cjs --seeders-path src/seeders",
+    "seed:prod": "cd Server && NODE_ENV=production npx sequelize-cli db:seed:all --env production --config src/config/sequelize.cjs --seeders-path src/seeders",
+    "seed:prod:undo": "cd Server && NODE_ENV=production npx sequelize-cli db:seed:undo:all --env production --config src/config/sequelize.cjs --seeders-path src/seeders"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
