@@ -20,15 +20,44 @@ export const io = initSockets(server, { path: '/socket.io' });
 (async () => {
   const result = await db.ping();
   if (result.ok) {
-    // eslint-disable-next-line no-console
     console.log('[db] connected');
   } else {
-    // eslint-disable-next-line no-console
     console.warn(`[db] unavailable: ${result.error ?? 'unknown error'}`);
   }
 
   server.listen(PORT, () => {
-    // eslint-disable-next-line no-console
     console.log(`Server listening on → ${URL}`);
   });
 })();
+
+/**
+ * Graceful shutdown with proper awaits (no nested callbacks).
+ * Sonar-friendly: promises are awaited inside the try block.
+ */
+async function shutdown(signal: NodeJS.Signals) {
+  console.log(`[svc] ${signal} received — shutting down…`);
+  try {
+    // Close Socket.IO
+    await new Promise<void>((resolve) => {
+      io.close(() => resolve());
+    });
+
+    // Close HTTP server
+    await new Promise<void>((resolve, reject) => {
+      server.close((err?: Error) => (err ? reject(err) : resolve()));
+    });
+
+    console.log('[svc] closed');
+    process.exit(0);
+  } catch (err) {
+    console.error('[svc] shutdown error', err);
+    process.exit(1);
+  }
+}
+
+process.on('SIGTERM', () => {
+  void shutdown('SIGTERM');
+});
+process.on('SIGINT', () => {
+  void shutdown('SIGINT');
+});
