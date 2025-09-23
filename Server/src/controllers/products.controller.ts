@@ -1,6 +1,6 @@
 // Server/src/controllers/products.controller.ts
 import type { Request, Response } from 'express';
-import { Op, type Order } from 'sequelize';
+import { Op, col, fn, literal, where, type Order } from 'sequelize';
 import { z, type ZodError } from 'zod';
 import { Product } from '../models/product.model.js';
 import { Vendor } from '../models/vendor.model.js';
@@ -77,20 +77,41 @@ export async function createProduct(req: Request, res: Response): Promise<void> 
     const created = await Product.create(
       {
         vendorId: Number(vendor.id),
+
         title: p.title,
         description: p.description ?? null,
+
         species: p.species,
         locality: p.locality ?? null,
-        size: p.size ?? null,
-        weight: p.weight ?? null,
-        fluorescence: p.fluorescence ?? null,
-        condition: p.condition ?? null,
-        provenance: p.provenance ?? null,
         synthetic: Boolean(p.synthetic ?? false),
-        onSale: Boolean(p.onSale ?? false),
+
+        // dimensions + weight
+        lengthCm: p.lengthCm ?? null,
+        widthCm: p.widthCm ?? null,
+        heightCm: p.heightCm ?? null,
+        sizeNote: p.sizeNote ?? null,
+        weightG: p.weightG ?? null,
+        weightCt: p.weightCt ?? null,
+
+        // fluorescence (structured)
+        fluorescenceMode: p.fluorescence.mode,
+        fluorescenceColorNote: p.fluorescence.colorNote ?? null,
+        fluorescenceWavelengthNm: p.fluorescence.wavelengthNm ?? null,
+
+        // condition + provenance
+        condition: p.condition ?? null,
+        conditionNote: p.conditionNote ?? null,
+        provenanceNote: p.provenanceNote ?? null,
+        provenanceTrail: p.provenanceTrail ?? null,
+
+        // pricing (scheduled sale model)
         priceCents: p.priceCents,
-        compareAtCents: p.compareAtCents ?? null,
-        // TODO(images): attach images after upload pipeline returns references
+        salePriceCents: p.salePriceCents ?? null,
+        saleStartAt: p.saleStartAt ?? null,
+        saleEndAt: p.saleEndAt ?? null,
+
+        // images TODO: attach when uploader saves records
+
         createdAt: now,
         updatedAt: now,
         archivedAt: null,
@@ -130,33 +151,75 @@ export async function updateProduct(req: Request, res: Response): Promise<void> 
   }
 
   try {
-    const p = bodyParsed.data;
-    Object.assign(prod, {
-      ...(p.title !== undefined ? { title: p.title } : {}),
-      ...(p.description !== undefined ? { description: p.description ?? null } : {}),
-      ...(p.species !== undefined ? { species: p.species } : {}),
-      ...(p.locality !== undefined ? { locality: p.locality ?? null } : {}),
-      ...(p.size !== undefined ? { size: p.size ?? null } : {}),
-      ...(p.weight !== undefined ? { weight: p.weight ?? null } : {}),
-      ...(p.fluorescence !== undefined ? { fluorescence: p.fluorescence ?? null } : {}),
-      ...(p.condition !== undefined ? { condition: p.condition ?? null } : {}),
-      ...(p.provenance !== undefined ? { provenance: p.provenance ?? null } : {}),
-      ...(p.synthetic !== undefined ? { synthetic: Boolean(p.synthetic) } : {}),
-      ...(p.onSale !== undefined ? { onSale: Boolean(p.onSale) } : {}),
-      ...(p.priceCents !== undefined ? { priceCents: p.priceCents } : {}),
-      ...(p.compareAtCents !== undefined ? { compareAtCents: p.compareAtCents ?? null } : {}),
-      updatedAt: new Date(),
-    });
+    const p: any = bodyParsed.data;
+    const patch: any = {};
 
-    // Sanity: compareAtCents should be >= priceCents if onSale
-    if ((prod as any).onSale && (prod as any).compareAtCents != null) {
-      if ((prod as any).compareAtCents < (prod as any).priceCents) {
-        res.status(400).json({
-          error: 'compareAtCents must be >= priceCents when onSale=true',
-        });
-        return;
+    if (p.title !== undefined) patch.title = p.title;
+    if (p.description !== undefined) patch.description = p.description ?? null;
+
+    if (p.species !== undefined) patch.species = p.species;
+    if (p.locality !== undefined) patch.locality = p.locality ?? null;
+    if (p.synthetic !== undefined) patch.synthetic = Boolean(p.synthetic);
+
+    // dimensions + weight
+    if (p.lengthCm !== undefined) patch.lengthCm = p.lengthCm ?? null;
+    if (p.widthCm !== undefined) patch.widthCm = p.widthCm ?? null;
+    if (p.heightCm !== undefined) patch.heightCm = p.heightCm ?? null;
+    if (p.sizeNote !== undefined) patch.sizeNote = p.sizeNote ?? null;
+
+    if (p.weightG !== undefined) patch.weightG = p.weightG ?? null;
+    if (p.weightCt !== undefined) patch.weightCt = p.weightCt ?? null;
+
+    // fluorescence (structured) — update granularly if provided
+    if (p.fluorescence !== undefined) {
+      if (Object.hasOwn(p.fluorescence, 'mode')) {
+        patch.fluorescenceMode = p.fluorescence.mode;
+      }
+      if (Object.hasOwn(p.fluorescence, 'colorNote')) {
+        patch.fluorescenceColorNote = p.fluorescence.colorNote ?? null;
+      }
+      if (Object.hasOwn(p.fluorescence, 'wavelengthNm')) {
+        patch.fluorescenceWavelengthNm = p.fluorescence.wavelengthNm ?? null;
       }
     }
+
+    // condition + provenance
+    if (p.condition !== undefined) patch.condition = p.condition ?? null;
+    if (p.conditionNote !== undefined) patch.conditionNote = p.conditionNote ?? null;
+
+    if (p.provenanceNote !== undefined) patch.provenanceNote = p.provenanceNote ?? null;
+    if (p.provenanceTrail !== undefined) patch.provenanceTrail = p.provenanceTrail ?? null;
+
+    // pricing
+    if (p.priceCents !== undefined) patch.priceCents = p.priceCents;
+    if (p.salePriceCents !== undefined) patch.salePriceCents = p.salePriceCents ?? null;
+    if (p.saleStartAt !== undefined) patch.saleStartAt = p.saleStartAt ?? null;
+    if (p.saleEndAt !== undefined) patch.saleEndAt = p.saleEndAt ?? null;
+
+    // compute invariants for pricing (apply to next values)
+    const nextPrice =
+      patch.priceCents !== undefined ? Number(patch.priceCents) : Number((prod as any).priceCents);
+    const nextSale =
+      patch.salePriceCents !== undefined
+        ? (patch.salePriceCents as number | null)
+        : ((prod as any).salePriceCents as number | null);
+
+    if (nextSale != null && nextSale >= nextPrice) {
+      res.status(400).json({ error: 'salePriceCents must be less than priceCents' });
+      return;
+    }
+
+    const nextStart =
+      patch.saleStartAt !== undefined ? patch.saleStartAt : (prod as any).saleStartAt;
+    const nextEnd =
+      patch.saleEndAt !== undefined ? patch.saleEndAt : (prod as any).saleEndAt;
+
+    if (nextStart && nextEnd && new Date(nextStart).getTime() > new Date(nextEnd).getTime()) {
+      res.status(400).json({ error: 'saleStartAt must be ≤ saleEndAt' });
+      return;
+    }
+
+    Object.assign(prod, patch, { updatedAt: new Date() });
 
     await (prod as any).save();
     res.json({ ok: true });
@@ -187,8 +250,6 @@ export async function deleteProduct(req: Request, res: Response): Promise<void> 
   }
 
   try {
-    // Prefer archivedAt; if your model uses a boolean, switch this accordingly.
-    // TODO(if needed): migrate to isArchived boolean flag instead of archivedAt.
     (prod as any).archivedAt = new Date();
     await (prod as any).save();
     res.status(204).end();
@@ -221,71 +282,133 @@ export async function getProduct(req: Request, res: Response): Promise<void> {
   }
 }
 
+/** ---------------------------------------------
+ * Catalog list — filters & sorting (effective price, size range, etc.)
+ * --------------------------------------------*/
+function saleActiveExpr(nowIso: string) {
+  // TRUE when salePriceCents is set and now within [start,end] (nulls open-ended)
+  return literal(`("salePriceCents" IS NOT NULL AND
+    (("saleStartAt" IS NULL OR "saleStartAt" <= TIMESTAMP '${nowIso}')
+     AND ("saleEndAt" IS NULL OR TIMESTAMP '${nowIso}' <= "saleEndAt')))`);
+}
+
+function effectivePriceExpr(nowIso: string) {
+  return literal(`CASE WHEN "salePriceCents" IS NOT NULL AND
+    (("saleStartAt" IS NULL OR "saleStartAt" <= TIMESTAMP '${nowIso}')
+     AND ("saleEndAt" IS NULL OR TIMESTAMP '${nowIso}' <= "saleEndAt"))
+    THEN "salePriceCents" ELSE "priceCents" END`);
+}
+
 export async function listProducts(req: Request, res: Response): Promise<void> {
   const parsed = listProductsQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ error: 'Invalid query', details: zDetails(parsed.error) });
     return;
   }
-  const {
-    page,
-    pageSize,
-    vendorId,
-    vendorSlug,
-    species,
-    synthetic,
-    onSale,
-    sort,
-    minCents,
-    maxCents,
-  } = parsed.data;
-
-  const where: any = { archivedAt: { [Op.is]: null } };
-
-  if (species) where.species = { [Op.iLike]: species };
-  if (typeof synthetic === 'boolean') where.synthetic = synthetic;
-  if (typeof onSale === 'boolean') where.onSale = onSale;
-  if (minCents != null || maxCents != null) {
-    where.priceCents = {
-      ...(minCents != null ? { [Op.gte]: minCents } : {}),
-      ...(maxCents != null ? { [Op.lte]: maxCents } : {}),
-    };
-  }
-
-  // Optional vendor scoping
-  if (vendorId || vendorSlug) {
-    const v = vendorId
-      ? await Vendor.findByPk(vendorId, { attributes: ['id'] })
-      : await Vendor.findOne({ where: { slug: vendorSlug }, attributes: ['id'] });
-
-    if (!v) {
-      res.json({
-        items: [],
-        page,
-        pageSize,
-        total: 0,
-        totalPages: 0,
-      });
-      return;
-    }
-    where.vendorId = v.id;
-  }
-
-  const offset = (page - 1) * pageSize;
-
-  // Build a typed Sequelize Order instead of nested ternaries
-  let order: Order;
-  if (sort === 'price_asc') {
-    order = [['priceCents', 'ASC']];
-  } else if (sort === 'price_desc') {
-    order = [['priceCents', 'DESC']];
-  } else {
-    order = [['createdAt', 'DESC']]; // newest
-  }
 
   try {
+    const {
+      page,
+      pageSize,
+      vendorId,
+      vendorSlug,
+      species,
+      synthetic,
+      onSale,
+      // NEW unified names
+      priceMinCents,
+      priceMaxCents,
+      sizeMinCm,
+      sizeMaxCm,
+      fluorescence,
+      condition,
+      sort,
+      // Back-compat (deprecated)
+      minCents,
+      maxCents,
+    } = parsed.data as any;
+
+    const nowIso = new Date().toISOString();
+    const andClauses: any[] = [{ archivedAt: { [Op.is]: null } }];
+
+    // vendor
+    if (vendorId) {
+      andClauses.push({ vendorId: Number(vendorId) });
+    } else if (vendorSlug) {
+      const v = await Vendor.findOne({ where: { slug: vendorSlug }, attributes: ['id'] });
+      if (!v) {
+        res.json({ items: [], page, pageSize, total: 0, totalPages: 0 });
+        return;
+      }
+      andClauses.push({ vendorId: v.id });
+    }
+
+    // species / synthetic
+    if (species) andClauses.push({ species: { [Op.iLike]: String(species) } });
+    if (typeof synthetic === 'boolean') andClauses.push({ synthetic });
+
+    // structured filters
+    if (fluorescence) {
+      const modes = String(fluorescence).split(',').map((s) => s.trim()).filter(Boolean);
+      if (modes.length) andClauses.push({ fluorescenceMode: { [Op.in]: modes } });
+    }
+    if (condition) {
+      const conds = String(condition).split(',').map((s) => s.trim()).filter(Boolean);
+      if (conds.length) andClauses.push({ condition: { [Op.in]: conds } });
+    }
+
+    // onSale (effective right now via schedule)
+    if (typeof onSale !== 'undefined') {
+      const expr = saleActiveExpr(nowIso);
+      andClauses.push(
+        String(onSale).toLowerCase() === 'true'
+          ? where(expr, '=', true)
+          : where(expr, '=', false),
+      );
+    }
+
+    // effective price range
+    const minP = priceMinCents ?? minCents ?? null;
+    const maxP = priceMaxCents ?? maxCents ?? null;
+    if (minP != null || maxP != null) {
+      const eff = effectivePriceExpr(nowIso);
+      if (minP != null && maxP != null) {
+        andClauses.push(where(eff, { [Op.between]: [Number(minP), Number(maxP)] }));
+      } else if (minP != null) {
+        andClauses.push(where(eff, { [Op.gte]: Number(minP) }));
+      } else if (maxP != null) {
+        andClauses.push(where(eff, { [Op.lte]: Number(maxP) }));
+      }
+    }
+
+    // size range on longest edge (GREATEST of L/W/H)
+    const minS = sizeMinCm ?? null;
+    const maxS = sizeMaxCm ?? null;
+    if (minS != null || maxS != null) {
+      const longest = fn('GREATEST', col('lengthCm'), col('widthCm'), col('heightCm'));
+      if (minS != null && maxS != null) {
+        andClauses.push(where(longest, { [Op.between]: [Number(minS), Number(maxS)] }));
+      } else if (minS != null) {
+        andClauses.push(where(longest, { [Op.gte]: Number(minS) }));
+      } else if (maxS != null) {
+        andClauses.push(where(longest, { [Op.lte]: Number(maxS) }));
+      }
+    }
+
+    // order
+    let order: Order;
+    if (sort === 'price_asc') {
+      order = [[effectivePriceExpr(nowIso), 'ASC'], ['id', 'ASC']] as unknown as Order;
+    } else if (sort === 'price_desc') {
+      order = [[effectivePriceExpr(nowIso), 'DESC'], ['id', 'DESC']] as unknown as Order;
+    } else {
+      order = [['createdAt', 'DESC'], ['id', 'DESC']] as unknown as Order;
+    }
+
+    const offset = (page - 1) * pageSize;
+
     const { rows, count } = await Product.findAndCountAll({
-      where,
+      where: { [Op.and]: andClauses },
       order,
       offset,
       limit: pageSize,
@@ -352,11 +475,23 @@ export async function attachImages(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // TODO(images): persist originals; generate 320/800/1600 with sharp; save records
-  // For Week-2, echo basic info so frontend can continue.
+  // TODO(images): persist originals; generate 320/800/1600 with sharp; save records.
+  // For Week-2, return derived variant metadata so the UI can render immediately.
+  const responseFiles = files.map((f) => ({
+    name: f.originalname,
+    type: f.mimetype,
+    size: f.size,
+    variants: [
+      { key: 'orig' as const, bytes: f.size },
+      { key: '320' as const, width: 320, height: undefined, bytes: undefined },
+      { key: '800' as const, width: 800, height: undefined, bytes: undefined },
+      { key: '1600' as const, width: 1600, height: undefined, bytes: undefined },
+    ],
+  }));
+
   res.json({
     ok: true,
     received: files.length,
-    files: files.map((f) => ({ name: f.originalname, size: f.size, type: f.mimetype })),
+    files: responseFiles,
   });
 }
