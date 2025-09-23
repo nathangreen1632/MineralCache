@@ -86,6 +86,8 @@ export default function App(): React.ReactElement {
 
           <Toaster
             toastOptions={{
+              position: 'top-center',
+              duration: 3000,
               style: {
                 background: 'var(--theme-surface)',
                 color: 'var(--theme-text)',
