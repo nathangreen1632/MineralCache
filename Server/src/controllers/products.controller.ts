@@ -4,6 +4,7 @@ import { Op, col, fn, literal, where, type Order } from 'sequelize';
 import { z, type ZodError } from 'zod';
 import { Product } from '../models/product.model.js';
 import { Vendor } from '../models/vendor.model.js';
+import { ProductImage } from '../models/productImage.model.js'; // ✅ NEW: for per-listing quota
 import {
   createProductSchema,
   updateProductSchema,
@@ -360,11 +361,12 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
     // onSale (effective right now via schedule)
     if (typeof onSale !== 'undefined') {
       const expr = saleActiveExpr(nowIso);
-      andClauses.push(
-        String(onSale).toLowerCase() === 'true'
-          ? where(expr, '=', true)
-          : where(expr, '=', false),
-      );
+      const isTrue = String(onSale).toLowerCase() === 'true';
+      if (isTrue) {
+        andClauses.push(where(expr, '=', true));
+      } else {
+        andClauses.push(where(expr, '=', false));
+      }
     }
 
     // effective price range
@@ -460,13 +462,32 @@ export async function attachImages(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // TODO(images): query ProductImage table to get actual existing count for this product.
-  // For now assume 0 so we can enforce the rule on the incoming batch.
-  const existingCount = 0;
+  // ✅ Real per-listing quota: count existing images for this product
+  let existingCount = 0;
+  try {
+    existingCount = await ProductImage.count({
+      where: { productId: Number(idParsed.data.id) },
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: 'Failed to check image quota', detail: e?.message });
+    return;
+  }
 
-  if (existingCount + files.length > MAX_IMAGES_PER_LISTING) {
+  if (existingCount >= MAX_IMAGES_PER_LISTING) {
     res.status(400).json({
-      error: 'Too many images for this listing',
+      error: 'Image limit reached for this listing',
+      code: 'LISTING_IMAGE_LIMIT',
+      limit: MAX_IMAGES_PER_LISTING,
+      existingCount,
+      attempted: files.length,
+    });
+    return;
+  }
+
+  const remaining = MAX_IMAGES_PER_LISTING - existingCount;
+  if (files.length > remaining) {
+    res.status(400).json({
+      error: `Too many images for this listing (you can add ${remaining} more)`,
       code: 'LISTING_IMAGE_LIMIT',
       limit: MAX_IMAGES_PER_LISTING,
       existingCount,
@@ -492,6 +513,7 @@ export async function attachImages(req: Request, res: Response): Promise<void> {
   res.json({
     ok: true,
     received: files.length,
+    existingCount,
     files: responseFiles,
   });
 }
