@@ -3,6 +3,9 @@ import React from 'react';
 import { Routes, Route, Outlet } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 
+// Auth
+import LoginPage from './pages/LoginPage';
+
 // Public catalog
 import ProductList from './pages/products/ProductList';
 import ProductDetail from './pages/products/ProductDetail';
@@ -40,6 +43,7 @@ export default function AppRoutes(): React.ReactElement {
       <Route element={<WithAgeGate />}>
         {/* Public */}
         <Route index element={<HomePage />} />
+        <Route path="login" element={<LoginPage />} />
         <Route path="products" element={<ProductList />} />
         <Route path="products/:id" element={<ProductDetail />} />
         <Route path="cart" element={<CartPage />} />
