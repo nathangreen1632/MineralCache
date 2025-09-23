@@ -6,6 +6,8 @@ import { validateBody, validateQuery } from '../middleware/validate.middleware.j
 import { createProductSchema, updateProductSchema, listProductsQuerySchema } from '../validation/product.schema.js';
 import { listProducts, getProduct, createProduct, updateProduct, deleteProduct, attachImages } from '../controllers/products.controller.js';
 import { uploadPhotos, enforceTotalBatchBytes } from '../middleware/upload.middleware.js';
+import { uploadImagesLimiter } from '../middleware/uploadRateLimit.middleware.js';
+import { burstLimiter } from '../middleware/rateLimit.middleware.js';
 
 const router: Router = Router();
 
@@ -19,7 +21,8 @@ router.post('/', requireAuth, validateBody(createProductSchema), recaptchaMiddle
 router.patch('/:id', requireAuth, validateBody(updateProductSchema), recaptchaMiddleware, updateProduct);
 router.delete('/:id', requireAuth, recaptchaMiddleware, deleteProduct);
 
-// Attach images (≤4) — Multer then total-batch limit then controller
-router.post('/:id/images', requireAuth, uploadPhotos.array('photos', 4), enforceTotalBatchBytes, attachImages);
+// Attach images (≤4)
+// Order: auth → rate-limit → multer → total-batch limit → controller
+router.post('/:id/images', requireAuth, burstLimiter, uploadImagesLimiter, uploadPhotos.array('photos', 4), enforceTotalBatchBytes, attachImages);
 
 export default router;
