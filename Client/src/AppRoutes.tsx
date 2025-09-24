@@ -25,6 +25,9 @@ import ProductEdit from './pages/products/ProductEdit';
 import CartPage from './pages/cart/CartPage';
 import CheckoutPage from './pages/cart/CheckoutPage';
 
+// Orders
+import OrderConfirmationPage from './pages/orders/OrderConfirmationPage';
+
 // Age gate banner (mounted globally)
 import AgeGateNotice from './components/AgeGateNotice';
 
@@ -48,6 +51,9 @@ export default function AppRoutes(): React.ReactElement {
         <Route path="products/:id" element={<ProductDetail />} />
         <Route path="cart" element={<CartPage />} />
         <Route path="checkout" element={<CheckoutPage />} />
+
+        {/* Orders */}
+        <Route path="orders/confirmation" element={<OrderConfirmationPage />} />
 
         {/* Vendor */}
         <Route path="vendor/apply" element={<VendorApply />} />
