@@ -1,0 +1,63 @@
+// Server/src/models/orderItem.model.ts
+import {
+  DataTypes,
+  Model,
+  type InferAttributes,
+  type InferCreationAttributes,
+  type CreationOptional,
+} from 'sequelize';
+import { db } from './sequelize.js';
+
+export class OrderItem extends Model<
+  InferAttributes<OrderItem>,
+  InferCreationAttributes<OrderItem>
+> {
+  declare id: CreationOptional<number>;
+  declare orderId: number;
+  declare productId: number;
+  declare vendorId: number;
+
+  declare title: string;
+  declare unitPriceCents: number;
+  declare quantity: number;
+  declare lineTotalCents: number;
+
+  declare createdAt: CreationOptional<Date>;
+  declare updatedAt: CreationOptional<Date>;
+}
+
+const sequelize = db.instance();
+
+if (!sequelize) {
+  if (process.env.NODE_ENV !== 'production') {
+    // eslint-disable-next-line no-console
+    console.warn('[db] DATABASE_URL not set — OrderItem model not initialized');
+  }
+} else {
+  OrderItem.init(
+    {
+      id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true },
+      orderId: { type: DataTypes.BIGINT, allowNull: false },
+      productId: { type: DataTypes.BIGINT, allowNull: false },
+      vendorId: { type: DataTypes.BIGINT, allowNull: false },
+
+      title: { type: DataTypes.TEXT, allowNull: false },
+      unitPriceCents: { type: DataTypes.INTEGER, allowNull: false, validate: { min: 0 } },
+      quantity: { type: DataTypes.INTEGER, allowNull: false, validate: { min: 1 } },
+      lineTotalCents: { type: DataTypes.INTEGER, allowNull: false, validate: { min: 0 } },
+
+      createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+      updatedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+    },
+    {
+      sequelize,
+      tableName: 'order_items',
+      modelName: 'OrderItem',
+      indexes: [
+        { fields: ['orderId'] },
+        { fields: ['vendorId'] },
+        { fields: ['productId'] },
+      ],
+    }
+  );
+}
