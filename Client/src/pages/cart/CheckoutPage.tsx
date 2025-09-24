@@ -3,14 +3,16 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, CardElement, useElements, useStripe } from '@stripe/react-stripe-js';
-import { getCart } from '../../api/cart';
 import { getHealth } from '../../api/health';
 import { createCheckoutIntent } from '../../api/checkout';
+import { useCartTotals } from '../../hooks/useCartTotals';
+import { emit } from '../../lib/eventBus';
+import { EV_CART_CHANGED } from '../../lib/events';
 
-type Load =
+type LoadHealth =
   | { kind: 'idle' }
   | { kind: 'loading' }
-  | { kind: 'loaded'; totalCents: number }
+  | { kind: 'loaded'; enabled: boolean; ready: boolean }
   | { kind: 'error'; message: string };
 
 function centsToUsd(cents: number) {
@@ -24,34 +26,26 @@ function useStripePk(): { pk: string | null; error: string | null } {
 }
 
 export default function CheckoutPage(): React.ReactElement {
-  const [state, setState] = useState<Load>({ kind: 'idle' });
-  const [stripeReady, setStripeReady] = useState<{ enabled: boolean; ready: boolean } | null>(null);
+  // Server-sourced totals with auto-refresh on cart/shipping changes
+  const { state: totalsState } = useCartTotals();
+
+  // Stripe readiness from server /health
+  const [health, setHealth] = useState<LoadHealth>({ kind: 'idle' });
   const [healthErr, setHealthErr] = useState<string | null>(null);
 
-  // 1) Load cart totals + stripe health
   useEffect(() => {
     let alive = true;
     (async () => {
-      setState({ kind: 'loading' });
-      const [cartRes, healthRes] = await Promise.all([getCart(), getHealth()]);
+      setHealth({ kind: 'loading' });
+      const { data, error } = await getHealth();
       if (!alive) return;
-
-      if (cartRes.error || !cartRes.data) {
-        setState({ kind: 'error', message: cartRes.error || 'Failed to load cart' });
+      if (error || !data) {
+        setHealth({ kind: 'error', message: error || 'Unable to read server payment status.' });
+        setHealthErr(error || 'Unable to read server payment status.');
         return;
       }
-      setState({ kind: 'loaded', totalCents: cartRes.data.totals?.total ?? 0 });
-
-      if (healthRes.error || !healthRes.data) {
-        setStripeReady({ enabled: false, ready: false });
-        setHealthErr(healthRes.error || 'Unable to read server payment status.');
-      } else {
-        setStripeReady({
-          enabled: !!healthRes.data.stripe.enabled,
-          ready: !!healthRes.data.stripe.ready,
-        });
-        setHealthErr(null);
-      }
+      setHealth({ kind: 'loaded', enabled: data.stripe.enabled, ready: data.stripe.ready });
+      setHealthErr(null);
     })();
     return () => { alive = false; };
   }, []);
@@ -61,7 +55,11 @@ export default function CheckoutPage(): React.ReactElement {
 
   const card = { background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' } as const;
 
-  if (state.kind === 'loading' || state.kind === 'idle') {
+  // Loading skeleton until BOTH totals and health are available
+  const totalsLoading = totalsState.kind === 'idle' || totalsState.kind === 'loading';
+  const healthLoading = health.kind === 'idle' || health.kind === 'loading';
+
+  if (totalsLoading || healthLoading) {
     return (
       <section className="mx-auto max-w-3xl px-6 py-14">
         <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Checkout</h1>
@@ -70,24 +68,35 @@ export default function CheckoutPage(): React.ReactElement {
     );
   }
 
-  if (state.kind === 'error') {
+  if (totalsState.kind === 'error') {
     return (
       <section className="mx-auto max-w-3xl px-6 py-14 space-y-4">
         <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Checkout</h1>
         <div className="rounded-2xl border p-4" style={card}>
-          <p style={{ color: 'var(--theme-error)' }}>{state.message}</p>
+          <p style={{ color: 'var(--theme-error)' }}>{totalsState.message}</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (health.kind === 'error') {
+    return (
+      <section className="mx-auto max-w-3xl px-6 py-14 space-y-4">
+        <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Checkout</h1>
+        <div className="rounded-2xl border p-4" style={card}>
+          <p style={{ color: 'var(--theme-error)' }}>{health.message}</p>
         </div>
       </section>
     );
   }
 
   // Loaded:
-  const total = state.totalCents;
+  const total = totalsState.kind === 'loaded' ? totalsState.totalCents : 0;
 
   let disabledMsg: string | null = null;
-  if (!stripeReady?.enabled) {
+  if (health.kind === 'loaded' && !health.enabled) {
     disabledMsg = 'Payments are currently disabled.';
-  } else if (!stripeReady?.ready) {
+  } else if (health.kind === 'loaded' && !health.ready) {
     disabledMsg = 'Payments are not ready yet (missing server keys).';
   } else if (pkErr) {
     disabledMsg = pkErr;
@@ -112,7 +121,7 @@ export default function CheckoutPage(): React.ReactElement {
           </div>
         ) : (
           <Elements
-            stripe={stripePromise}
+            stripe={stripePromise!}
             options={{
               appearance: {
                 variables: {
@@ -179,6 +188,10 @@ function CardForm({ totalCents }: Readonly<{ totalCents: number }>) {
     if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
       // Success! Webhook will flip order -> paid and mark inventory.
       setBusy(false);
+
+      // Notify the rest of the app to refresh cart views (server likely cleared cart).
+      emit(EV_CART_CHANGED);
+
       navigate('/orders/confirmation', { state: { amountCents: totalCents } });
       return;
     }
