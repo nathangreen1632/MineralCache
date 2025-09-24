@@ -1,6 +1,9 @@
 // Client/src/pages/cart/CartPage.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { getCart, saveCart, type CartItem } from '../../api/cart';
+import { on } from '../../lib/eventBus';
+import { EV_CART_CHANGED, EV_SHIPPING_CHANGED } from '../../lib/events';
+import { useCartTotals } from '../../hooks/useCartTotals';
 
 type LoadState =
   | { kind: 'idle' }
@@ -13,9 +16,13 @@ export default function CartPage(): React.ReactElement {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // ✅ Use shared totals hook so totals auto-refresh when cart/shipping change elsewhere
+  const { state: totalsState } = useCartTotals();
+
   useEffect(() => {
     let alive = true;
-    (async () => {
+
+    async function fetchCart() {
       setState({ kind: 'loading' });
       const { data, error, status } = await getCart();
       if (!alive) return;
@@ -30,21 +37,37 @@ export default function CartPage(): React.ReactElement {
         shipping: data.totals?.shipping ?? 0,
         total: data.totals?.total ?? 0,
       });
-    })();
+    }
+
+    // initial load
+    fetchCart();
+
+    // auto-refresh items when cart or shipping changes anywhere in the app
+    const offCart = on(EV_CART_CHANGED, fetchCart);
+    const offShip = on(EV_SHIPPING_CHANGED, fetchCart);
+
     return () => {
       alive = false;
+      offCart();
+      offShip();
     };
   }, []);
 
   const items = state.kind === 'loaded' ? state.items : [];
 
-  const totals = useMemo(
-    () =>
-      state.kind === 'loaded'
-        ? { subtotal: state.subtotal, shipping: state.shipping, total: state.total }
-        : { subtotal: 0, shipping: 0, total: 0 },
-    [state]
-  );
+  // Prefer totals from the shared hook (server-sourced + auto-refresh).
+  // Fall back to the page's local fetch if hook is not yet loaded.
+  const totals = useMemo(() => {
+    const subtotal = state.kind === 'loaded' ? state.subtotal : 0;
+    const shipping = state.kind === 'loaded' ? state.shipping : 0;
+
+    let total = state.kind === 'loaded' ? state.total : 0;
+    if (totalsState.kind === 'loaded') {
+      total = totalsState.totalCents;
+    }
+
+    return { subtotal, shipping, total };
+  }, [state, totalsState]);
 
   function setQty(productId: number, qty: number) {
     if (state.kind !== 'loaded') return;
@@ -59,7 +82,8 @@ export default function CartPage(): React.ReactElement {
     const body = { items: state.items.map((i) => ({ productId: i.productId, qty: Math.max(0, Math.trunc(i.qty)) })) };
     const { error } = await saveCart(body);
     setBusy(false);
-    setMsg(error ? error : 'Saved.');
+    setMsg(error || 'Saved.');
+    // No manual refetch here—saveCart emits EV_CART_CHANGED which triggers our listener to refresh totals/items.
   }
 
   function centsToUsd(cents: number) {
