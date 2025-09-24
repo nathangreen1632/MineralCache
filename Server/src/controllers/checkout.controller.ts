@@ -9,6 +9,7 @@ import { createPaymentIntent } from '../services/stripe.service.js';
 import { Commission } from '../config/fees.config.js';
 import { db } from '../models/sequelize.js';
 import { computeVendorShipping } from '../services/shipping.service.js';
+import { obs } from '../services/observability.service.js'; // ✅ NEW
 
 /** Server-side cart → totals + per-vendor shipping (rule-based) */
 async function computeCartTotals(userId: number) {
@@ -216,6 +217,9 @@ export async function createCheckoutIntent(
     return;
   }
 
+  // ✅ Observability: record that we created a PI for this checkout (cart scoped by user)
+  obs.checkoutIntentCreated(req, Number(u.id), totals.totalCents);
+
   const sequelize = db.instance();
   if (!sequelize) {
     res.status(500).json({ error: 'DB not initialized' });
@@ -249,6 +253,9 @@ export async function createCheckoutIntent(
       },
       { transaction: t }
     );
+
+    // ✅ Observability: order persisted
+    obs.orderCreated(req, Number(order.id), { totalCents: totals.totalCents });
 
     for (const l of totals.lines) {
       await OrderItem.create(
