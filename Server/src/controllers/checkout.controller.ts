@@ -8,8 +8,9 @@ import { OrderItem } from '../models/orderItem.model.js';
 import { createPaymentIntent } from '../services/stripe.service.js';
 import { Commission } from '../config/fees.config.js';
 import { db } from '../models/sequelize.js';
+import { computeVendorShipping } from '../services/shipping.service.js';
 
-/** Server-side cart → totals + line expansion */
+/** Server-side cart → totals + per-vendor shipping (rule-based) */
 async function computeCartTotals(userId: number) {
   const cart = await Cart.findOne({ where: { userId } });
   if (!cart) {
@@ -20,6 +21,7 @@ async function computeCartTotals(userId: number) {
       totalCents: 0,
       itemCount: 0,
       lines: [] as any[],
+      vendorShippingSnapshot: {} as Record<string, any>,
     };
   }
 
@@ -37,6 +39,7 @@ async function computeCartTotals(userId: number) {
       totalCents: 0,
       itemCount: 0,
       lines: [] as any[],
+      vendorShippingSnapshot: {} as Record<string, any>,
     };
   }
 
@@ -51,6 +54,7 @@ async function computeCartTotals(userId: number) {
       totalCents: 0,
       itemCount: 0,
       lines: [] as any[],
+      vendorShippingSnapshot: {} as Record<string, any>,
     };
   }
 
@@ -71,6 +75,9 @@ async function computeCartTotals(userId: number) {
 
   let subtotalCents = 0;
   let itemCount = 0;
+
+  const vendorSubtotals = new Map<number, number>();
+  const vendorItemCounts = new Map<number, number>();
 
   for (const it of items) {
     const qty = Number(it.quantity);
@@ -94,9 +101,13 @@ async function computeCartTotals(userId: number) {
     subtotalCents += lineTotal;
     itemCount += qty;
 
+    const vendorId = Number((p as any).vendorId);
+    vendorSubtotals.set(vendorId, (vendorSubtotals.get(vendorId) || 0) + lineTotal);
+    vendorItemCounts.set(vendorId, (vendorItemCounts.get(vendorId) || 0) + qty);
+
     lines.push({
       productId: Number(p.id),
-      vendorId: Number((p as any).vendorId),
+      vendorId,
       title: String((p as any).title ?? ''),
       unitPriceCents: unitPrice,
       quantity: qty,
@@ -104,15 +115,31 @@ async function computeCartTotals(userId: number) {
     });
   }
 
-  // Per-vendor shipping snapshot (Week-3 shipping rules to be added later)
-  const vendorShipping: Record<string, number> = {};
-  for (const l of lines) {
-    const key = String(l.vendorId);
-    if (!Object.prototype.hasOwnProperty.call(vendorShipping, key)) {
-      vendorShipping[key] = 0;
-    }
+  // ---- Apply shipping rules per vendor and build snapshot
+  const vendorShippingSnapshot: Record<
+    string,
+    { cents: number; ruleId: number | null; label: string; params: any }
+  > = {};
+
+  for (const [vendorId, sub] of vendorSubtotals.entries()) {
+    const count = vendorItemCounts.get(vendorId) || 0;
+    const applied = await computeVendorShipping({
+      vendorId,
+      subtotalCents: sub,
+      itemCount: count,
+    });
+    vendorShippingSnapshot[String(vendorId)] = {
+      cents: applied.computedCents,
+      ruleId: applied.ruleId,
+      label: applied.label,
+      params: applied.params,
+    };
   }
-  const shippingCents = Object.values(vendorShipping).reduce((a, b) => a + b, 0);
+
+  const shippingCents = Object.values(vendorShippingSnapshot).reduce(
+    (sum, v) => sum + Number((v as any).cents || 0),
+    0
+  );
 
   const totalCents = subtotalCents + shippingCents;
 
@@ -123,7 +150,7 @@ async function computeCartTotals(userId: number) {
     totalCents,
     itemCount,
     lines,
-    vendorShipping,
+    vendorShippingSnapshot,
   };
 }
 
@@ -166,6 +193,7 @@ export async function createCheckoutIntent(
     subtotalCents: String(totals.subtotalCents),
     shippingCents: String(totals.shippingCents),
     platformFeeCents: String(platformFeeCents),
+    shippingVendors: Object.keys(totals.vendorShippingSnapshot).join(','), // quick debug
   };
 
   const result = await createPaymentIntent({
@@ -175,6 +203,7 @@ export async function createCheckoutIntent(
     idempotencyKey,
   });
 
+  // union narrowing before touching error
   if (!result.ok) {
     res
       .status(503)
@@ -182,7 +211,6 @@ export async function createCheckoutIntent(
     return;
   }
   const { clientSecret, intentId } = result;
-
   if (!clientSecret) {
     res.status(503).json({ error: 'Failed to create PaymentIntent' });
     return;
@@ -216,7 +244,8 @@ export async function createCheckoutIntent(
         totalCents: totals.totalCents,
         commissionPct: pct,
         commissionCents: platformFeeCents,
-        vendorShippingJson: totals.vendorShipping,
+        // ✅ snapshot of per-vendor rule + params + computed cents
+        vendorShippingJson: totals.vendorShippingSnapshot,
       },
       { transaction: t }
     );
