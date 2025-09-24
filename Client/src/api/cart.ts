@@ -1,5 +1,7 @@
 // Client/src/api/cart.ts
 import { get, post, put } from '../lib/api';
+import { emit } from '../lib/eventBus';
+import { EV_CART_CHANGED, EV_SHIPPING_CHANGED } from '../lib/events';
 
 export type CartItem = {
   productId: number;
@@ -28,14 +30,32 @@ export type CheckoutResponse =
   | { clientSecret: string }
   | { error: string };
 
+// Optional: body for shipping rule selection
+export type SetShippingRuleBody = {
+  ruleId: number | string;
+};
+
 // GET /api/cart
 export function getCart() {
   return get<CartResponse>('/cart');
 }
 
 // PUT /api/cart
-export function saveCart(body: PutCartBody) {
-  return put<{ ok: true }, PutCartBody>('/cart', body);
+export async function saveCart(body: PutCartBody) {
+  const res = await put<{ ok: true }, PutCartBody>('/cart', body);
+  if (!res.error) {
+    emit(EV_CART_CHANGED);
+  }
+  return res;
+}
+
+// PATCH/PUT /api/cart/shipping-rule (using PUT to match existing helpers)
+export async function setCartShippingRule(ruleId: number | string) {
+  const res = await put<{ ok: true }, SetShippingRuleBody>('/cart/shipping-rule', { ruleId });
+  if (!res.error) {
+    emit(EV_SHIPPING_CHANGED, { ruleId });
+  }
+  return res;
 }
 
 // POST /api/cart/checkout
