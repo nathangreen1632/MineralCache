@@ -12,6 +12,10 @@ import { attachUser } from './middleware/authz.middleware.js';
 import { requestId } from './middleware/requestId.middleware.js';
 import { jsonErrorHandler } from './middleware/error.middleware.js';
 import { getVersionInfo } from './utils/version.util.js'; // ✅ NEW
+import { assertStripeAtBoot } from './services/stripe.service.js'; // ✅ NEW
+
+// ✅ Fail fast if Stripe is enabled but not correctly configured
+assertStripeAtBoot();
 
 const app = express();
 
