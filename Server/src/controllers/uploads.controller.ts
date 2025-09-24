@@ -15,6 +15,14 @@ import {
   readStagingFile,
   removeStagingFile,
 } from '../services/uploadToken.service.js';
+import { logWarn } from '../services/log.service.js'; // ✅ NEW
+
+// ✅ Small helper to include request/user context in safeguard logs
+function ctx(req: Request) {
+  const c = (req as any).context || {};
+  const u = (req as any).user ?? (req.session as any)?.user ?? null;
+  return { requestId: c.requestId, userId: c.userId ?? (u?.id ?? null) };
+}
 
 /**
  * Existing multipart upload (Multer) -> sharp pipeline
@@ -23,6 +31,8 @@ export async function uploadPhotos(req: Request, res: Response): Promise<void> {
   try {
     const files = (req.files as Express.Multer.File[]) ?? [];
     if (files.length === 0) {
+      // ✅ Safeguard signal
+      logWarn('upload.multipart.empty', { ...ctx(req) });
       res.status(400).json({ error: 'No files provided (expected field "photos")' });
       return;
     }
@@ -36,7 +46,15 @@ export async function uploadPhotos(req: Request, res: Response): Promise<void> {
     res.status(201).json({ items: saved });
   } catch (e: any) {
     const msg = e?.message || 'Upload failed';
-    const code = /unsupported image type/i.test(msg) ? 415 : 400;
+    const unsupported = /unsupported image type/i.test(msg);
+    if (unsupported) {
+      // ✅ Safeguard signal for MIME/type rejections
+      logWarn('upload.mime.invalid', { ...ctx(req), error: msg });
+    } else {
+      // Soft warn for other multipart failures (keeps error logs clean)
+      logWarn('upload.multipart.failed', { ...ctx(req), error: msg });
+    }
+    const code = unsupported ? 415 : 400;
     res.status(code).json({ error: msg });
   }
 }
@@ -49,6 +67,8 @@ export async function uploadPhotos(req: Request, res: Response): Promise<void> {
 export async function signUploads(req: Request, res: Response): Promise<void> {
   const u = (req.session as any)?.user;
   if (!u?.id) {
+    // ✅ Unauthorized attempts can be noisy, but useful to see
+    logWarn('upload.sign.unauthorized', { ...ctx(req) });
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
@@ -82,6 +102,7 @@ export async function directUpload(req: Request, res: Response): Promise<void> {
     const token = String(req.params?.token || '');
     const v = verifyUploadToken(token);
     if (!v.ok) {
+      logWarn('upload.direct.bad_token', { ...ctx(req), token });
       res.status(400).json({ error: v.error });
       return;
     }
@@ -89,6 +110,13 @@ export async function directUpload(req: Request, res: Response): Promise<void> {
 
     const ct = String(req.headers['content-type'] || '');
     if (ct.toLowerCase() !== String(payload.mime).toLowerCase()) {
+      // ✅ Safeguard signal for mismatched content-type
+      logWarn('upload.direct.content_type_mismatch', {
+        ...ctx(req),
+        token,
+        received: ct,
+        expected: payload.mime,
+      });
       res.status(415).json({ error: 'Content-Type mismatch' });
       return;
     }
@@ -96,10 +124,17 @@ export async function directUpload(req: Request, res: Response): Promise<void> {
     // req.body is Buffer because the route uses express.raw()
     const buf = (req as any).body as Buffer;
     if (!Buffer.isBuffer(buf) || buf.length === 0) {
+      logWarn('upload.direct.empty_body', { ...ctx(req), token });
       res.status(400).json({ error: 'Empty body' });
       return;
     }
     if (buf.length > payload.max) {
+      logWarn('upload.direct.too_large', {
+        ...ctx(req),
+        token,
+        size: buf.length,
+        max: payload.max,
+      });
       res.status(413).json({ error: `File too large (max ${payload.max} bytes)` });
       return;
     }
@@ -107,6 +142,7 @@ export async function directUpload(req: Request, res: Response): Promise<void> {
     await writeStagingFile(absPath, buf);
     res.status(201).json({ ok: true, bytes: buf.length });
   } catch (e: any) {
+    // Keep as 500; verification failures above already produce 400/415 with warn logs
     res.status(500).json({ error: 'Upload failed', detail: e?.message });
   }
 }
@@ -120,12 +156,14 @@ export async function finalizeUploads(req: Request, res: Response): Promise<void
   try {
     const u = (req.session as any)?.user;
     if (!u?.id) {
+      logWarn('upload.finalize.unauthorized', { ...ctx(req) });
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
     const tokens: string[] = Array.isArray(req.body?.tokens) ? req.body.tokens : [];
     if (tokens.length === 0) {
+      logWarn('upload.finalize.no_tokens', { ...ctx(req) });
       res.status(400).json({ error: 'No tokens provided' });
       return;
     }
@@ -135,6 +173,7 @@ export async function finalizeUploads(req: Request, res: Response): Promise<void
     for (const token of tokens) {
       const v = verifyUploadToken(String(token || ''));
       if (!v.ok) {
+        logWarn('upload.finalize.bad_token', { ...ctx(req), token });
         out.push({ token, error: v.error });
         continue;
       }
@@ -144,6 +183,7 @@ export async function finalizeUploads(req: Request, res: Response): Promise<void
         await removeStagingFile(v.absPath);
         out.push({ token, saved });
       } catch (err: any) {
+        logWarn('upload.finalize.error', { ...ctx(req), token, error: err?.message });
         out.push({ token, error: err?.message || 'Finalize failed' });
       }
     }
