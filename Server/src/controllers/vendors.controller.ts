@@ -3,12 +3,10 @@ import type { Request, Response } from 'express';
 import { z, type ZodError } from 'zod';
 import { Op, UniqueConstraintError } from 'sequelize';
 import { Vendor } from '../models/vendor.model.js';
-import {
-  ensureVendorStripeAccount,
-  createAccountLink,
-  stripeEnabled,
-} from '../services/stripe.service.js';
+import { ensureVendorStripeAccount, createAccountLink, stripeEnabled } from '../services/stripe.service.js';
 import { applyVendorSchema } from '../validation/vendor.schema.js';
+import { Order } from '../models/order.model.js';
+import { OrderItem } from '../models/orderItem.model.js';
 
 /** -------------------------------------------------------------
  * Zod helpers
@@ -255,7 +253,94 @@ export async function getVendorBySlug(_req: Request, res: Response): Promise<voi
   res.json({ vendor: null });
 }
 
-export async function getVendorOrders(_req: Request, res: Response): Promise<void> {
-  // TODO: list vendor’s orders (scoped to vendorId of the authed vendor)
-  res.json({ orders: [] });
+export async function getVendorOrders(req: Request, res: Response): Promise<void> {
+  const u = (req as any).user ?? (req.session as any)?.user ?? null;
+  if (!u?.id) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const vendor = await Vendor.findOne({ where: { userId: Number(u.id) } });
+  if (!vendor) {
+    res.status(404).json({ error: 'Vendor not found' });
+    return;
+  }
+
+  const q = req.query as any;
+  const page = Number(q?.page) > 0 ? Math.floor(Number(q.page)) : 1;
+  const pageSize =
+    Number(q?.pageSize) > 0 && Number(q.pageSize) <= 100
+      ? Math.floor(Number(q.pageSize))
+      : 20;
+
+  // Optional date range (UTC ISO or YYYY-MM-DD)
+  const from = q?.from ? new Date(String(q.from)) : null;
+  const to = q?.to ? new Date(String(q.to)) : null;
+
+  const whereRange: any = {};
+  if (from && !Number.isNaN(from.getTime())) {
+    whereRange.createdAt = { ...(whereRange.createdAt || {}), [Op.gte]: from };
+  }
+  if (to && !Number.isNaN(to.getTime())) {
+    whereRange.createdAt = { ...(whereRange.createdAt || {}), [Op.lte]: to };
+  }
+
+  // Collect order items for this vendor, then join orders
+  const { rows: items, count } = await OrderItem.findAndCountAll({
+    where: { vendorId: Number(vendor.id) },
+    order: [['createdAt', 'DESC']],
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+  });
+
+  const orderIds = [...new Set(items.map((i) => Number(i.orderId)))];
+  const orders =
+    orderIds.length > 0
+      ? await Order.findAll({ where: { id: { [Op.in]: orderIds }, ...whereRange } })
+      : [];
+
+  const byId = new Map(orders.map((o) => [Number(o.id), o]));
+  const grouped = new Map<number, typeof items>();
+  for (const it of items) {
+    const oid = Number(it.orderId);
+    if (!byId.has(oid)) continue; // outside date range
+    const arr = grouped.get(oid) ?? [];
+    arr.push(it);
+    grouped.set(oid, arr);
+  }
+
+  const list = Array.from(grouped.entries())
+    .sort((a, b) => {
+      const oa = byId.get(a[0]);
+      const ob = byId.get(b[0]);
+      const ta = oa?.createdAt ? new Date(String(oa.createdAt)).getTime() : 0;
+      const tb = ob?.createdAt ? new Date(String(ob.createdAt)).getTime() : 0;
+      return tb - ta;
+    })
+    .map(([orderId, its]) => {
+      const o = byId.get(orderId)!;
+      return {
+        orderId,
+        status: o.status,
+        createdAt: o.createdAt,
+        subtotalCents: o.subtotalCents,
+        shippingCents: o.shippingCents,
+        totalCents: o.totalCents,
+        items: its.map((i) => ({
+          productId: Number(i.productId),
+          title: String(i.title),
+          unitPriceCents: Number(i.unitPriceCents),
+          quantity: Number(i.quantity),
+          lineTotalCents: Number(i.lineTotalCents),
+        })),
+      };
+    });
+
+  res.json({
+    page,
+    pageSize,
+    total: count,
+    orders: list,
+  });
 }
+
