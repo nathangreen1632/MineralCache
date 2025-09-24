@@ -1,76 +1,58 @@
 // Server/src/controllers/payments.controller.ts
 import type { Request, Response } from 'express';
-import { createPaymentIntent as createPI, verifyStripeWebhook } from '../services/stripe.service.js';
+import { verifyStripeWebhook } from '../services/stripe.service.js';
 
-/**
- * POST /api/payments/intent
- * Body: { amountCents: number, currency?: string }
- */
-export async function createPaymentIntent(req: Request, res: Response): Promise<void> {
-  try {
-    const amountCentsRaw = (req.body)?.amountCents;
-    const currencyRaw = (req.body)?.currency;
-
-    const amountCents = Number(amountCentsRaw);
-    if (!Number.isFinite(amountCents) || amountCents <= 0) {
-      res.status(400).json({ error: 'Bad amount' });
-      return;
-    }
-
-    const currency =
-      typeof currencyRaw === 'string' && currencyRaw.trim().length > 0
-        ? currencyRaw.trim().toLowerCase()
-        : undefined;
-
-    const result = await createPI({ amountCents, currency });
-
-    if (result.ok) {
-      res.json({ ok: true, clientSecret: result.clientSecret });
-      return;
-    }
-
-    // Map common error text from the service to appropriate HTTP codes
-    const msg = (result.error ?? '').toLowerCase();
-    if (msg.includes('not configured')) {
-      res.status(503).json({ error: 'Payments disabled' });
-      return;
-    }
-    if (msg.includes('invalid amount')) {
-      res.status(400).json({ error: 'Bad amount' });
-      return;
-    }
-
-    // Fallback
-    res.status(502).json({ error: result.error || 'Failed to create intent' });
-  } catch {
-    res.status(500).json({ error: 'Failed to create intent' });
-  }
+export async function createPaymentIntent(_req: Request, res: Response): Promise<void> {
+  // Kept only if you still want /api/payments/intent; /checkout/intent is the recommended path now.
+  res.status(410).json({ error: 'Use /api/checkout/intent' });
 }
 
-/**
- * POST /api/payments/webhook
- * NOTE: Route must use `raw({ type: 'application/json' })` body parser.
- */
+/** POST /api/webhooks/stripe (raw body) */
 export async function stripeWebhook(req: Request, res: Response): Promise<void> {
   try {
-    const sig = (req.headers['stripe-signature'] as string | undefined) || null;
+    const sig = (req.headers['stripe-signature'] as string) ?? null;
+    // raw body is required; webhooks.route.ts uses raw({ type: 'application/json' })
     const event = verifyStripeWebhook(req.body as unknown as Buffer, sig);
 
-    // Minimal Week-1 handling — log a few important events
     switch (event.type) {
-      case 'account.updated':
-      case 'account.application.authorized':
-      case 'payment_intent.succeeded':
-      case 'charge.succeeded':
+      case 'payment_intent.succeeded': {
+        const pi = event.data.object as any;
+        // TODO (Orders E2E): locate order by pi.id and mark paid, lock inventory, etc.
         // eslint-disable-next-line no-console
-        console.log('[stripe]', event.type);
+        console.log('[stripe] payment_intent.succeeded', {
+          id: pi?.id,
+          amount: pi?.amount,
+          metadata: pi?.metadata,
+        });
         break;
+      }
+      case 'payment_intent.payment_failed': {
+        const pi = event.data.object as any;
+        // TODO: mark order failed if applicable
+        // eslint-disable-next-line no-console
+        console.log('[stripe] payment_intent.payment_failed', {
+          id: pi?.id,
+          last_payment_error: pi?.last_payment_error,
+        });
+        break;
+      }
+      case 'charge.refunded': {
+        const charge = event.data.object as any;
+        // TODO: mark order refunded if applicable
+        // eslint-disable-next-line no-console
+        console.log('[stripe] charge.refunded', {
+          id: charge?.id,
+          amount_refunded: charge?.amount_refunded,
+        });
+        break;
+      }
       default:
-        // ignore others for now
+        // eslint-disable-next-line no-console
+        console.log('[stripe] event', event.type);
         break;
     }
 
-    res.status(200).json({ received: true });
+    res.json({ received: true });
   } catch (e: any) {
     res.status(400).json({ error: e?.message || 'Webhook error' });
   }
