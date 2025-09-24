@@ -12,6 +12,7 @@ import {
   UserPlus,
   ChevronDown,
   LogIn, // ✅ added
+  Package, // ✅ My Orders icon
 } from 'lucide-react';
 import { useAuthStore } from '../stores/useAuthStore'; // ✅ added
 
@@ -134,6 +135,9 @@ export default function Navbar(): React.ReactElement {
         {/* Cart & Checkout */}
         <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
         <SideNavLink to="/checkout" label="Checkout" Icon={CreditCard} />
+
+        {/* Account */}
+         <SideNavLink to="/account/orders" label="My Orders" Icon={Package} />
 
         {/* ✅ Auth: show Sign in when no user is present */}
         {!user && <SideNavLink to="/login" label="Sign in" Icon={LogIn} />}
