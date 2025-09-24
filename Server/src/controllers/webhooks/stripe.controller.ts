@@ -1,10 +1,11 @@
-// Server/src/controllers/payments.controller.ts
+// Server/src/controllers/webhooks/stripe.controller.ts
 import type { Request, Response } from 'express';
-import { verifyStripeWebhook } from '../services/stripe.service.js';
-import { db } from '../models/sequelize.js';
-import { Order } from '../models/order.model.js';
-import { OrderItem } from '../models/orderItem.model.js';
-import { Product } from '../models/product.model.js';
+import { verifyStripeWebhook } from '../../services/stripe.service.js';
+import { db } from '../../models/sequelize.js';
+import { Order } from '../../models/order.model.js';
+import { OrderItem } from '../../models/orderItem.model.js';
+import { Product } from '../../models/product.model.js';
+import { obs } from '../../services/observability.service.js';
 
 export async function createPaymentIntent(_req: Request, res: Response): Promise<void> {
   // Use the new checkout flow
@@ -17,6 +18,9 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
     const sig = (req.headers['stripe-signature'] as string) ?? null;
     // raw body is required; webhooks.route.ts uses raw({ type: 'application/json' })
     const event = verifyStripeWebhook(req.body as unknown as Buffer, sig);
+
+    // ✅ Observability: note receipt of webhook
+    obs.stripeWebhook(req, event.type, String((event as any)?.id || ''));
 
     const sequelize = db.instance();
     if (!sequelize) {
@@ -36,8 +40,8 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
             transaction: t,
             lock: t.LOCK.UPDATE,
           });
-          if (!order) return;
-          if (order.status === 'paid') return;
+          if (!order) return;           // no matching order, ignore gracefully
+          if (order.status === 'paid') return; // idempotent: already processed
 
           order.status = 'paid';
           order.paidAt = new Date();
@@ -55,10 +59,11 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
               { where: { id: productIds }, transaction: t }
             );
           }
+
+          // ✅ Observability: order paid
+          obs.orderPaid(req, Number(order.id), intentId);
         });
 
-        // eslint-disable-next-line no-console
-        console.log('[stripe] payment_intent.succeeded', { id: intentId });
         break;
       }
 
@@ -67,13 +72,23 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
         const intentId = String(pi?.id || '');
         if (!intentId) break;
 
+        // Resolve order id for richer logging (if present)
+        const order = await Order.findOne({
+          where: { paymentIntentId: intentId, status: 'pending_payment' },
+          attributes: ['id'],
+        });
+
         await Order.update(
           { status: 'failed', failedAt: new Date() },
           { where: { paymentIntentId: intentId, status: 'pending_payment' } }
         );
 
-        // eslint-disable-next-line no-console
-        console.log('[stripe] payment_intent.payment_failed', { id: intentId });
+        // ✅ Observability: soft failure (decline, etc.)
+        obs.orderFailed(
+          req,
+          order ? Number(order.id) : NaN,
+          String(pi?.last_payment_error?.message || 'payment_failed')
+        );
         break;
       }
 
@@ -87,19 +102,18 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
           { where: { paymentIntentId: intentId } }
         );
 
-        // eslint-disable-next-line no-console
-        console.log('[stripe] charge.refunded', { id: charge?.id, payment_intent: intentId });
+        // Already noted via obs.stripeWebhook above; no extra event here.
         break;
       }
 
       default:
-        // eslint-disable-next-line no-console
-        console.log('[stripe] event', event.type);
+        // Already noted via obs.stripeWebhook above
         break;
     }
 
     res.json({ received: true });
   } catch (e: any) {
+    // Keep graceful JSON error (Stripe expects 2xx for handled events, but this is a verify error)
     res.status(400).json({ error: e?.message || 'Webhook error' });
   }
 }
