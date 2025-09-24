@@ -57,7 +57,10 @@ export async function createPaymentIntent(args: {
   metadata?: Record<string, string>;
   /** optional idempotency key for retried submits */
   idempotencyKey?: string;
-}): Promise<{ ok: true; clientSecret: string } | { ok: false; clientSecret: null; error: string }> {
+}): Promise<
+  | { ok: true; clientSecret: string; intentId: string }
+  | { ok: false; clientSecret: null; error: string }
+> {
   const status = getStripeStatus();
   if (!status.enabled) return { ok: false, clientSecret: null, error: 'Payments disabled' };
   if (!status.ready || !stripe) return { ok: false, clientSecret: null, error: 'Payments not ready' };
@@ -83,7 +86,7 @@ export async function createPaymentIntent(args: {
     if (!pi.client_secret) {
       return { ok: false, clientSecret: null, error: 'No client secret returned' };
     }
-    return { ok: true, clientSecret: pi.client_secret };
+    return { ok: true, clientSecret: pi.client_secret, intentId: pi.id };
   } catch (e: any) {
     return { ok: false, clientSecret: null, error: e?.message || 'Failed to create PaymentIntent' };
   }
