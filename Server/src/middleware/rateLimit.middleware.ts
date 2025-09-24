@@ -1,4 +1,6 @@
+// Server/src/middleware/rateLimit.middleware.ts
 import type { NextFunction, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit'; // ✅ NEW
 import { requestId } from '../utils/reqid.util.js';
 
 type Bucket = { count: number; resetAt: number };
@@ -109,3 +111,20 @@ export const uploadImagesLimiter = fixedWindowLimiter(
   UPLOADS_MAX_REQUESTS,
   userOrIpKey
 );
+
+/** ✅ NEW: Dedicated limiter for registration endpoint (per IP) */
+export const registerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 20, // allow up to 20 registrations per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => ipKey(req),
+  handler: (req: Request, res: Response) => {
+    res.status(429).json({
+      ok: false,
+      code: 'RATE_LIMITED',
+      message: 'Too many registration attempts, please try again later.',
+      rid: requestId(req),
+    });
+  },
+});
