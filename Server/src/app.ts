@@ -10,6 +10,7 @@ import 'dotenv/config';
 import { buildSessionMiddleware } from './middleware/session.middleware.js';
 import { attachUser } from './middleware/authz.middleware.js';
 import { requestId } from './middleware/requestId.middleware.js';
+import { requestContext } from './middleware/requestContext.middleware.js'; // ✅ NEW
 import { jsonErrorHandler } from './middleware/error.middleware.js';
 import { getVersionInfo } from './utils/version.util.js'; // ✅ NEW
 import { assertStripeAtBoot } from './services/stripe.service.js'; // ✅ NEW
@@ -39,6 +40,9 @@ app.use(buildSessionMiddleware());
 
 // ✅ Make the user available on req.user for all downstream handlers
 app.use(attachUser);
+
+// ✅ Per-request context for observability (adds requestId + userId to req.context and X-Request-Id header)
+app.use(requestContext);
 
 // ----------------------
 // Health endpoints
