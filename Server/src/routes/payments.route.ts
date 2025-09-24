@@ -1,6 +1,6 @@
 // Server/src/routes/payments.route.ts
 import { Router, json } from 'express';
-import { createPaymentIntent } from '../controllers/payments.controller.js';
+import { createPaymentIntent } from '../controllers/webhooks/stripe.controller.js';
 
 const router: Router = Router();
 
