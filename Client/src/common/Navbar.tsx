@@ -11,7 +11,9 @@ import {
   CreditCard,
   UserPlus,
   ChevronDown,
+  LogIn, // ✅ added
 } from 'lucide-react';
+import { useAuthStore } from '../stores/useAuthStore'; // ✅ added
 
 type LinkItem = {
   to: string;
@@ -63,7 +65,6 @@ function NavGroup({
     if (!location?.pathname) return false;
     if (location.pathname === baseTo) return true;
     return location.pathname.startsWith(baseTo + '/');
-
   }, [location, baseTo]);
 
   const [open, setOpen] = useState(onSection);
@@ -96,6 +97,8 @@ function NavGroup({
 }
 
 export default function Navbar(): React.ReactElement {
+  const user = useAuthStore((s) => s.user); // ✅ read auth state
+
   return (
     <aside
       className={[
@@ -131,6 +134,9 @@ export default function Navbar(): React.ReactElement {
         {/* Cart & Checkout */}
         <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
         <SideNavLink to="/checkout" label="Checkout" Icon={CreditCard} />
+
+        {/* ✅ Auth: show Sign in when no user is present */}
+        {!user && <SideNavLink to="/login" label="Sign in" Icon={LogIn} />}
       </nav>
     </aside>
   );

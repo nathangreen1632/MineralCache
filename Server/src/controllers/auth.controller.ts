@@ -2,79 +2,61 @@
 import type { Request, Response } from 'express';
 import { z, type ZodError } from 'zod';
 import bcrypt from 'bcryptjs';
-import { Op } from 'sequelize';
+import { Op, fn, col, where as sqlWhere } from 'sequelize'; // fn/col/where kept
 import { User } from '../models/user.model.js';
+import { loginSchema, registerSchema, verify18Schema, normalizeDob } from '../validation/auth.schema.js';
 
 /** ------------------------------------------------------------------------
- * Email schema (no deprecated chain methods)
- * - Prefer Zod v4 top-level z.email(); fallback to string+refine on older Zod.
- * -----------------------------------------------------------------------*/
-const EmailSchema =
-  typeof (z as any).email === 'function'
-    ? (z as any).email().max(320)
-    : z
-      .string()
-      .max(320)
-      .refine((v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), { message: 'Invalid email' });
-
-const RegisterSchema = z.object({
-  email: EmailSchema,
-  password: z.string().min(8).max(200),
-  dobVerified18: z.boolean().optional(),
-});
-
-const LoginSchema = z.object({
-  email: EmailSchema,
-  password: z.string().min(8).max(200),
-});
-
-/** ------------------------------------------------------------------------
- * Error details serializer (no deprecated .flatten() / .format())
- * - Zod v4: use z.treeifyError(err)
- * - Older Zod: fall back to minimal stable shape
+ * Error details serializer
  * -----------------------------------------------------------------------*/
 function zDetails(err: ZodError) {
   const anyZ = z as any;
-  if (typeof anyZ.treeifyError === 'function') {
-    return anyZ.treeifyError(err);
-  }
+  if (typeof anyZ.treeifyError === 'function') return anyZ.treeifyError(err);
   return { formErrors: [err.message], fieldErrors: {} as Record<string, string[]> };
 }
 
 /** ------------------------------ Session helpers --------------------------- */
 function rotateSession(req: Request): void {
-  // With cookie-session, setting to null clears existing cookie/session.
   (req.session as any) = null;
 }
 
-/** Always assigns a fresh session object to avoid mutating a possibly-null value. */
 function setSessionUser(
   req: Request,
   user: { id: number; role: 'buyer' | 'vendor' | 'admin'; dobVerified18: boolean; email?: string }
 ) {
-  const sessionUser = {
-    id: user.id,
-    role: user.role,
-    dobVerified18: user.dobVerified18,
-    email: user.email,
-  };
+  const sessionUser = { id: user.id, role: user.role, dobVerified18: user.dobVerified18, email: user.email };
   (req.session as any) = { user: sessionUser };
   req.user = sessionUser as any;
 }
 
+/** ------------------------------ Helpers --------------------------- */
+function isAdult(ymd: string): boolean {
+  const [y, m, d] = ymd.split('-').map((s) => Number(s));
+  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return false;
+  const dob = new Date(Date.UTC(y, m - 1, d));
+  if (dob.getUTCFullYear() !== y || dob.getUTCMonth() + 1 !== m || dob.getUTCDate() !== d) return false;
+
+  const now = new Date();
+  const nowY = now.getUTCFullYear();
+  const nowM = now.getUTCMonth() + 1;
+  const nowD = now.getUTCDate();
+
+  let age = nowY - y;
+  if (nowM < m || (nowM === m && nowD < d)) age -= 1;
+  return age >= 18;
+}
+
 // ---------- Handlers
 export async function register(req: Request, res: Response): Promise<void> {
-  const parsed = RegisterSchema.safeParse(req.body);
+  const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Invalid input', details: zDetails(parsed.error) });
     return;
   }
-  const { email, password, dobVerified18 } = parsed.data;
+  const { email, password, name } = parsed.data;
 
-  // Normalize email
   const normEmail = email.trim().toLowerCase();
 
-  // Uniqueness check (case-insensitive)
   const existing = await User.findOne({ where: { email: { [Op.iLike]: normEmail } } });
   if (existing) {
     res.status(409).json({ error: 'Email in use' });
@@ -82,19 +64,17 @@ export async function register(req: Request, res: Response): Promise<void> {
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-
-  // createdAt/updatedAt included if your model doesn't mark CreationOptional
   const now = new Date();
   const user = await User.create({
     email: normEmail,
     passwordHash,
     role: 'buyer',
-    dobVerified18: Boolean(dobVerified18),
+    dobVerified18: false,
+    name,
     createdAt: now,
     updatedAt: now,
   } as any);
 
-  // Anti-fixation: rotate then issue fresh session
   rotateSession(req);
   setSessionUser(req, {
     id: Number(user.id),
@@ -107,7 +87,7 @@ export async function register(req: Request, res: Response): Promise<void> {
 }
 
 export async function login(req: Request, res: Response): Promise<void> {
-  const parsed = LoginSchema.safeParse(req.body);
+  const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Invalid input', details: zDetails(parsed.error) });
     return;
@@ -115,20 +95,41 @@ export async function login(req: Request, res: Response): Promise<void> {
   const { email, password } = parsed.data;
   const normEmail = email.trim().toLowerCase();
 
-  const user = await User.findOne({ where: { email: { [Op.iLike]: normEmail } } });
+  // Case-insensitive equality via LOWER(email) = normEmail; no null-hash filter (we check below)
+  const whereEmailEq = sqlWhere(fn('lower', col('email')), normEmail);
+  const user = await User.findOne({
+
+    where: whereEmailEq as any,
+    attributes: ['id', 'email', 'role', 'dobVerified18', 'passwordHash', 'updatedAt', 'createdAt'],
+    order: [
+      ['updatedAt', 'DESC'],
+      ['id', 'DESC'],
+    ],
+  });
+
   if (!user) {
-    // Generic to avoid credential oracle; aligns with backoff guard
     res.status(401).json({ error: 'Invalid credentials' });
     return;
   }
 
-  const ok = await bcrypt.compare(password, (user as any).passwordHash);
-  if (!ok) {
+  const hash = (user as any).passwordHash as string | null;
+  let pass = !!hash && (await bcrypt.compare(password, hash));
+
+  // Dev-only escape hatch (ignored in production)
+  if (!pass && process.env.NODE_ENV !== 'production') {
+    const allowDev = String(process.env.ALLOW_DEV_ADMIN_LOGIN ?? '').toLowerCase() === 'true';
+    const devEmail = String(process.env.ADMIN_DEV_EMAIL ?? 'admin@mineralcache.local').toLowerCase();
+    const devPass = String(process.env.ADMIN_DEV_PASSWORD ?? 'Admin123!');
+    if (allowDev && normEmail === devEmail && password === devPass) {
+      pass = true;
+    }
+  }
+
+  if (!pass) {
     res.status(401).json({ error: 'Invalid credentials' });
     return;
   }
 
-  // Anti-fixation: destroy any pre-login cookie and issue a fresh one
   rotateSession(req);
   setSessionUser(req, {
     id: Number(user.id),
@@ -151,13 +152,11 @@ export async function me(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // Fetch fresh from DB to include vendorId + createdAt (ensure session isn't stale)
   const user = await User.findByPk(sess.id, {
     attributes: ['id', 'email', 'role', 'vendorId', 'dobVerified18', 'createdAt'],
   });
 
   if (!user) {
-    // Stale session: clear and force re-login
     (req.session as any) = null;
     req.user = null as any;
     res.status(401).json({ error: 'Unauthorized' });
@@ -175,7 +174,6 @@ export async function me(req: Request, res: Response): Promise<void> {
         : new Date(String((user as any).createdAt)).toISOString(),
   };
 
-  // Include vendorId only if present (optional field)
   const payload =
     (user as any).vendorId != null
       ? { ...base, vendorId: Number((user as any).vendorId) }
@@ -184,10 +182,29 @@ export async function me(req: Request, res: Response): Promise<void> {
   res.json(payload);
 }
 
+/**
+ * /auth/verify-18 — uses your verify18Schema and DOB normalizer
+ */
 export async function verify18(req: Request, res: Response): Promise<void> {
   const u = (req.session as any)?.user;
   if (!u?.id) {
     res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const parsed = verify18Schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid input', details: zDetails(parsed.error) });
+    return;
+  }
+
+  const ymd = normalizeDob(parsed.data);
+  if (!ymd) {
+    res.status(400).json({ error: 'INVALID_DOB' });
+    return;
+  }
+  if (!isAdult(ymd)) {
+    res.status(400).json({ error: 'AGE_RESTRICTION' });
     return;
   }
 
@@ -201,7 +218,6 @@ export async function verify18(req: Request, res: Response): Promise<void> {
 }
 
 export async function logout(req: Request, res: Response): Promise<void> {
-  // Clear cookie-session state and return 204 No Content
   (req.session as any) = null;
   req.user = null as any;
   res.status(204).end();
