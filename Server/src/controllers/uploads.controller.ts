@@ -1,5 +1,7 @@
 // Server/src/controllers/uploads.controller.ts
 import type { Request, Response } from 'express';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { validateAllImages } from '../services/mime.service.js';
 import {
   processManyImages,
@@ -149,5 +151,87 @@ export async function finalizeUploads(req: Request, res: Response): Promise<void
     res.json({ items: out });
   } catch (e: any) {
     res.status(500).json({ error: 'Finalize error', detail: e?.message });
+  }
+}
+
+/**
+ * 4) Maintenance: purge staged uploads older than N hours (with safety margin)
+ * POST /api/uploads/staging/purge?hours=24&safetyHours=1
+ * (Route should be admin-protected.)
+ */
+export async function purgeStagingUploads(req: Request, res: Response): Promise<void> {
+  try {
+    const hours = Number(req.query.hours ?? 24);
+    const safetyHours = Number(req.query.safetyHours ?? 1);
+
+    if (!Number.isFinite(hours) || hours <= 0) {
+      res.status(400).json({ error: 'Invalid hours' });
+      return;
+    }
+    if (!Number.isFinite(safetyHours) || safetyHours < 0) {
+      res.status(400).json({ error: 'Invalid safetyHours' });
+      return;
+    }
+
+    const UPLOADS_DIR = (process.env.UPLOADS_DIR || '/var/data/uploads').trim();
+    const STAGING_DIR = path.resolve(UPLOADS_DIR, 'staging');
+
+    // Walk recursively
+    async function* walk(dir: string): AsyncGenerator<string> {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const e of entries) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) {
+          yield* walk(full);
+        } else if (e.isFile()) {
+          yield full;
+        }
+      }
+    }
+
+    const now = Date.now();
+    const olderThanMs = hours * 3_600_000;
+    const safetyMs = safetyHours * 3_600_000;
+
+    let filesChecked = 0;
+    let filesDeleted = 0;
+    let bytesFreed = 0;
+
+    try {
+      await fs.access(STAGING_DIR);
+    } catch {
+      res.json({ ok: true, stagingExists: false, filesChecked, filesDeleted, bytesFreed });
+      return;
+    }
+
+    for await (const file of walk(STAGING_DIR)) {
+      filesChecked += 1;
+      const st = await fs.stat(file);
+      const ageMs = now - st.mtimeMs;
+
+      // Must be older than threshold + safety margin
+      if (ageMs > olderThanMs + safetyMs) {
+        filesDeleted += 1;
+        bytesFreed += st.size;
+        try {
+          await fs.rm(file, { force: true });
+        } catch {
+          // ignore individual file errors; continue
+        }
+      }
+    }
+
+    res.json({
+      ok: true,
+      stagingExists: true,
+      hours,
+      safetyHours,
+      filesChecked,
+      filesDeleted,
+      bytesFreed,
+    });
+  } catch (e: any) {
+    const msg = e?.message || 'Failed to purge staging uploads';
+    res.status(500).json({ error: msg });
   }
 }
