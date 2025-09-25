@@ -13,6 +13,7 @@ import {
   ChevronDown,
   LogIn, // ✅ added
   Package, // ✅ My Orders + Vendor Orders icon
+  Settings, // ✅ Admin Settings icon
 } from 'lucide-react';
 import { useAuthStore } from '../stores/useAuthStore'; // ✅ added
 
@@ -136,6 +137,8 @@ export default function Navbar(): React.ReactElement {
 
         {/* Admin */}
         <SideNavLink to="/admin/vendor-apps" label="Admin · Vendor Apps" Icon={ClipboardList} />
+        <SideNavLink to="/admin/orders" label="Admin · Orders" Icon={Package} />
+        <SideNavLink to="/admin/settings" label="Admin · Settings" Icon={Settings} />
 
         {/* Cart & Checkout */}
         <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
