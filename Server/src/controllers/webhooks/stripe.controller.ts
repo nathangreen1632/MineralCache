@@ -1,6 +1,6 @@
 // Server/src/controllers/webhooks/stripe.controller.ts
 import type { Request, Response } from 'express';
-import { verifyStripeWebhook } from '../../services/stripe.service.js';
+import { verifyStripeWebhook, retrieveChargeWithBalanceTx } from '../../services/stripe.service.js';
 import { db } from '../../models/sequelize.js';
 import { Order } from '../../models/order.model.js';
 import { OrderItem } from '../../models/orderItem.model.js';
@@ -40,7 +40,7 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
             transaction: t,
             lock: t.LOCK.UPDATE,
           });
-          if (!order) return;           // no matching order, ignore gracefully
+          if (!order) return;              // no matching order, ignore gracefully
           if (order.status === 'paid') return; // idempotent: already processed
 
           order.status = 'paid';
@@ -91,6 +91,38 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
         );
         break;
       }
+
+      case 'charge.succeeded': {
+        // Fetch fees/net from Balance Transaction for reconciliation
+        const ch = event.data.object as any;
+        const chargeId = String(ch?.id || '');
+        const piId = String(ch?.payment_intent || '');
+        if (!chargeId || !piId) break;
+
+        try {
+          const full = await retrieveChargeWithBalanceTx(chargeId);
+          const bt = (full as any)?.balance_transaction;
+          const feeCents = Number(bt?.fee ?? 0); // Stripe fees (smallest unit)
+          const netCents = Number(bt?.net ?? 0); // Gross - fee - tax etc.
+
+          const order = await Order.findOne({ where: { paymentIntentId: piId }, attributes: ['id'] });
+          if (!order) {
+            // No matching order; nothing to reconcile
+            break;
+          }
+
+          // If you add columns later (stripeFeeCents/netCents), persist here.
+          // await order.update({ stripeFeeCents: feeCents, stripeNetCents: netCents });
+        } catch (err: any) {
+          // Use the existing obs.error(req, event, err) signature
+          obs.error(req, 'stripe.charge.fetch_failed', {
+            chargeId,
+            message: String(err?.message || err),
+          });
+        }
+        break;
+      }
+
 
       case 'charge.refunded': {
         const charge = event.data.object as any;
