@@ -12,10 +12,13 @@ import ProductDetail from './pages/products/ProductDetail';
 
 // Vendor
 import VendorApply from './pages/VendorApply';
-import VendorDashboard from './pages/vendor/VendorDashboard.tsx';
+import VendorDashboard from './pages/vendor/VendorDashboard';
 
 // Admin
 import AdminVendorApps from './pages/admin/AdminVendorApps';
+import AdminOrders from './pages/admin/AdminOrders';
+import AdminOrderDetail from './pages/admin/AdminOrderDetail';
+import AdminSettings from './pages/admin/AdminSettings';
 
 // Vendor product CRUD
 import ProductCreate from './pages/products/ProductCreate';
@@ -65,6 +68,9 @@ export default function AppRoutes(): React.ReactElement {
 
         {/* Admin */}
         <Route path="admin/vendor-apps" element={<AdminVendorApps />} />
+        <Route path="admin/orders" element={<AdminOrders />} />
+        <Route path="admin/orders/:id" element={<AdminOrderDetail />} />
+        <Route path="admin/settings" element={<AdminSettings />} />
 
         {/* Vendor product CRUD */}
         <Route path="products/new" element={<ProductCreate />} />
