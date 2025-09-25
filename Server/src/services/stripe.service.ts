@@ -150,3 +150,19 @@ export async function createAccountLink(args: {
     return { url: null, error: e?.message || 'Failed to create onboarding link' };
   }
 }
+
+// ---------- Charges / fees helpers
+
+/**
+ * Retrieve a Charge with its Balance Transaction expanded so you can read
+ * Stripe fees (`fee`) and `net` right inside the payload.
+ * Use from your webhook on `charge.succeeded`.
+ */
+export async function retrieveChargeWithBalanceTx(chargeId: string) {
+  const status = getStripeStatus();
+  if (!status.enabled || !status.ready || !stripe) {
+    throw new Error('Stripe disabled');
+  }
+  // `expand` lets us include the balance_transaction inline
+  return stripe.charges.retrieve(chargeId, { expand: ['balance_transaction'] });
+}
