@@ -7,6 +7,7 @@ import { uploadProductImages } from '../../api/productImages';
 import ImageDerivativesList from '../../components/products/ImageDerivativesList';
 import type { UploadImagesResponse } from '../../types/productImages.types';
 import { useParams } from 'react-router-dom';
+import ProductPhotosTab from '../../components/products/ProductPhotosTab';
 
 export default function ProductEdit(): React.ReactElement {
   const params = useParams<{ id: string }>();
@@ -152,6 +153,14 @@ export default function ProductEdit(): React.ReactElement {
           serverMessage={msg}
         />
       </div>
+
+      {/* Photos management (drag-reorder, set primary, delete/restore) */}
+      <section className="mt-10">
+        <h2 className="text-xl font-semibold text-[var(--theme-text)]">Photos</h2>
+        <div className="mt-3">
+          <ProductPhotosTab productId={id} />
+        </div>
+      </section>
 
       {uploadMeta?.files?.length ? (
         <div className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-6 shadow-[0_10px_30px_var(--theme-shadow)]">
