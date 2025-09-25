@@ -1,4 +1,4 @@
-// Client/src/pages/AdminVendorApps.tsx
+// Client/src/pages/admin/AdminVendorApps.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   listVendorApps,
@@ -42,28 +42,28 @@ export default function AdminVendorApps(): React.ReactElement {
     totalPages: number;
   }>({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 0 });
 
-  async function load() {
+  async function load(p = page) {
     setMsg(null);
     setBusy(true);
-    try {
-      const res = await listVendorApps({
-        page,
-        q: q.trim() || undefined,
-        status,
-      });
-      setData(res);
-    } catch (e: any) {
-      // eslint-disable-next-line no-console
-      console.warn('[admin] failed to load vendor apps', e);
-      setMsg(e?.message ?? 'Failed to load applications.');
-    } finally {
-      setBusy(false);
+    const { data: payload, error, status: http } = await listVendorApps({
+      page: p,
+      q: q.trim() || undefined,
+      status,
+    });
+    setBusy(false);
+
+    if (error || !payload) {
+      setMsg(error ?? `Failed (${http})`);
+      return;
     }
+    // ✅ Use the API result's .data, not the whole ApiResult
+    setData(payload);
   }
 
   useEffect(() => {
-    void load();
-  }, [page, status]);
+    void load(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, q]);
 
   const canPrev = useMemo(() => page > 1, [page]);
   const canNext = useMemo(() => page < (data?.totalPages || 1), [page, data?.totalPages]);
@@ -113,7 +113,7 @@ export default function AdminVendorApps(): React.ReactElement {
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               setPage(1);
-              void load();
+              void load(1);
             }
           }}
           placeholder="Search by display name…"
@@ -130,7 +130,7 @@ export default function AdminVendorApps(): React.ReactElement {
           style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
           onClick={() => {
             setPage(1);
-            void load();
+            void load(1);
           }}
         >
           Search
@@ -147,7 +147,10 @@ export default function AdminVendorApps(): React.ReactElement {
               <button
                 key={s}
                 type="button"
-                onClick={() => setStatus(s)}
+                onClick={() => {
+                  setStatus(s);
+                  setPage(1);
+                }}
                 className="rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset"
                 style={{
                   background: bg,
@@ -243,8 +246,12 @@ export default function AdminVendorApps(): React.ReactElement {
               color: 'var(--theme-text)',
               borderColor: 'var(--theme-border)',
             }}
-            disabled={!canPrev}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={!canPrev || busy}
+            onClick={() => {
+              const next = Math.max(1, page - 1);
+              setPage(next);
+              void load(next);
+            }}
           >
             Prev
           </button>
@@ -256,8 +263,12 @@ export default function AdminVendorApps(): React.ReactElement {
               color: 'var(--theme-text)',
               borderColor: 'var(--theme-border)',
             }}
-            disabled={!canNext}
-            onClick={() => setPage((p) => p + 1)}
+            disabled={!canNext || busy}
+            onClick={() => {
+              const next = page + 1;
+              setPage(next);
+              void load(next);
+            }}
           >
             Next
           </button>
