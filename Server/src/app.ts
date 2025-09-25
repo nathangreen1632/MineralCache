@@ -14,6 +14,7 @@ import { requestContext } from './middleware/requestContext.middleware.js'; // �
 import { jsonErrorHandler } from './middleware/error.middleware.js';
 import { getVersionInfo } from './utils/version.util.js'; // ✅ NEW
 import { assertStripeAtBoot } from './services/stripe.service.js'; // ✅ NEW
+import webhooksRouter from "./routes/webhooks.route.js";
 
 // ✅ Fail fast if Stripe is enabled but not correctly configured
 assertStripeAtBoot();
@@ -22,6 +23,9 @@ const app = express();
 
 // Trust proxy (Render)
 app.set('trust proxy', true);
+
+// 👇 Mount Stripe webhooks BEFORE any body parser so req.body is a Buffer
+app.use('/api/webhooks', webhooksRouter);
 
 // Security & perf
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'same-site' } }));
