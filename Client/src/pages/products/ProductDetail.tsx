@@ -1,7 +1,7 @@
-// Client/src/pages/products/ProductDetail.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getProduct, type Product } from '../../api/products';
+import ImageCarousel from '../../components/products/ImageCarousel';
 
 function centsToUsd(cents: number | null | undefined): string {
   const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
@@ -25,7 +25,6 @@ function sizeLabel(p: Product): string {
   if (p.lengthCm != null) parts.push(String(p.lengthCm));
   if (p.widthCm != null) parts.push(String(p.widthCm));
   if (p.heightCm != null) parts.push(String(p.heightCm));
-
   if (parts.length > 0) return `${parts.join(' × ')} cm`;
   if (p.sizeNote) return p.sizeNote;
   return '—';
@@ -81,6 +80,26 @@ export default function ProductDetail(): React.ReactElement {
     };
   }, [pid]);
 
+  // Best-effort image extraction from various shapes
+  const images: string[] = useMemo(() => {
+    if (state.kind !== 'loaded') return [];
+    const p: any = state.product;
+
+    const fromArray =
+      (Array.isArray(p.images) &&
+        p.images
+          .map((x: any) => x?.url1600 || x?.url800 || x?.url320 || x?.url)
+          .filter(Boolean)) ||
+      (Array.isArray(p.photos) &&
+        p.photos
+          .map((x: any) => x?.url1600 || x?.url800 || x?.url320 || x?.url)
+          .filter(Boolean)) ||
+      [];
+
+    const singletons = [p.primaryImageUrl, p.imageUrl, p.mainImageUrl].filter(Boolean) as string[];
+    return Array.from(new Set<string>([...singletons, ...fromArray]));
+  }, [state]);
+
   const card: React.CSSProperties = {
     background: 'var(--theme-card)',
     borderColor: 'var(--theme-border)',
@@ -111,7 +130,6 @@ export default function ProductDetail(): React.ReactElement {
 
   const p = state.product;
 
-  // Price block (no nested ternaries)
   const onSaleNow = isSaleActive(p);
   const effCents = effectivePriceCents(p);
 
@@ -126,12 +144,11 @@ export default function ProductDetail(): React.ReactElement {
   }
 
   return (
-    <section className="mx-auto max-w-5xl px-4 py-8 grid gap-6 md:grid-cols-2">
-      <div className="rounded-xl border p-2" style={card}>
-        {/* TODO(images): render product images gallery */}
-        <div className="aspect-square w-full rounded bg-[var(--theme-card-alt)]" />
-      </div>
+    <section className="mx-auto max-w-6xl px-4 py-8 grid gap-6 lg:grid-cols-2">
+      {/* Left: image carousel (SoC component) */}
+      <ImageCarousel images={images} label="Product images" />
 
+      {/* Right: details */}
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold text-[var(--theme-text)]">{p.title}</h1>
         <div className="text-sm" style={{ color: 'var(--theme-link)' }}>
@@ -187,7 +204,7 @@ export default function ProductDetail(): React.ReactElement {
       </div>
 
       {p.description && (
-        <div className="md:col-span-2 rounded-xl border p-4" style={card}>
+        <div className="lg:col-span-2 rounded-xl border p-4" style={card}>
           <h2 className="mb-2 text-lg font-semibold text-[var(--theme-text)]">Description</h2>
           <p className="whitespace-pre-wrap text-sm opacity-90">{p.description}</p>
         </div>
