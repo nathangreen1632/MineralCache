@@ -12,7 +12,7 @@ import ProductDetail from './pages/products/ProductDetail';
 
 // Vendor
 import VendorApply from './pages/VendorApply';
-import VendorDashboard from './pages/VendorDashboard';
+import VendorDashboard from './pages/vendor/VendorDashboard.tsx';
 
 // Admin
 import AdminVendorApps from './pages/admin/AdminVendorApps';
