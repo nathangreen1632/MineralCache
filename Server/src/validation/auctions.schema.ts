@@ -1,10 +1,17 @@
+// Server/src/validation/auctions.schema.ts
 import { z } from 'zod';
 
-export const auctionIdParamSchema = z.object({
+/** Route params: /auctions/:id */
+export const bidParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
 
-export const placeBidSchema = z.object({
-  // For scaffolding, require a concrete bid; proxy logic comes later.
-  amountCents: z.coerce.number().int().min(1, 'amountCents must be ≥ 1'),
+/** Body: POST /auctions/:id/bid */
+export const bidBodySchema = z.object({
+  amountCents: z.coerce.number().int().positive(),
+  maxProxyCents: z.coerce.number().int().positive().optional(),
 });
+
+/** ── Back-compat aliases (remove once callers are updated) ── */
+export const auctionIdParamSchema = bidParamsSchema;
+export const placeBidSchema = bidBodySchema;
