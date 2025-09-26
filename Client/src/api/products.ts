@@ -101,6 +101,7 @@ export type Product = {
 export type ListQuery = {
   page?: number;
   pageSize?: number;
+  q?: string;
   vendorId?: number;
   vendorSlug?: string;
   species?: string;
