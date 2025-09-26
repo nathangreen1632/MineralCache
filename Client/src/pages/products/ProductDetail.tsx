@@ -1,7 +1,9 @@
+// Client/src/pages/products/ProductDetail.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getProduct, type Product } from '../../api/products';
 import ImageCarousel from '../../components/products/ImageCarousel';
+import ProductAuctionPanel from '../../components/products/ProductAuctionPanel'; // 🔧 NEW
 
 function centsToUsd(cents: number | null | undefined): string {
   const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
@@ -143,6 +145,12 @@ export default function ProductDetail(): React.ReactElement {
     );
   }
 
+  // 🔧 Auctions: support optional auction panel if product exposes auctionId
+  const auctionId =
+    typeof (p as any).auctionId === 'number' && (p as any).auctionId > 0
+      ? ((p as any).auctionId as number)
+      : undefined;
+
   return (
     <section className="mx-auto max-w-6xl px-4 py-8 grid gap-6 lg:grid-cols-2">
       {/* Left: image carousel (SoC component) */}
@@ -157,6 +165,9 @@ export default function ProductDetail(): React.ReactElement {
         </div>
 
         <div className="text-xl font-bold text-[var(--theme-text)]">{priceEl}</div>
+
+        {/* 🔧 Auctions: render panel when auctionId is present */}
+        {auctionId ? <ProductAuctionPanel auctionId={auctionId} /> : null}
 
         {p.description && (
           <div className="whitespace-pre-wrap text-sm opacity-90 text-[var(--theme-text)]">
