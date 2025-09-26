@@ -8,7 +8,7 @@ import { OrderItem } from '../models/orderItem.model.js';
 import { createPaymentIntent } from '../services/stripe.service.js';
 import { Commission } from '../config/fees.config.js';
 import { db } from '../models/sequelize.js';
-import { computeVendorShipping } from '../services/shipping.service.js';
+import { computeVendorShippingByLines } from '../services/shipping.service.js';
 import { obs } from '../services/observability.service.js'; // ✅ NEW
 
 /** Server-side cart → totals + per-vendor shipping (rule-based) */
@@ -77,8 +77,8 @@ async function computeCartTotals(userId: number) {
   let subtotalCents = 0;
   let itemCount = 0;
 
-  const vendorSubtotals = new Map<number, number>();
-  const vendorItemCounts = new Map<number, number>();
+  // ✅ group real line objects per vendor for weight-aware shipping
+  const vendorGroups = new Map<number, Array<{ product: Product; quantity: number }>>();
 
   for (const it of items) {
     const qty = Number(it.quantity);
@@ -103,8 +103,11 @@ async function computeCartTotals(userId: number) {
     itemCount += qty;
 
     const vendorId = Number((p as any).vendorId);
-    vendorSubtotals.set(vendorId, (vendorSubtotals.get(vendorId) || 0) + lineTotal);
-    vendorItemCounts.set(vendorId, (vendorItemCounts.get(vendorId) || 0) + qty);
+
+    if (!vendorGroups.has(vendorId)) {
+      vendorGroups.set(vendorId, []);
+    }
+    vendorGroups.get(vendorId)!.push({ product: p, quantity: qty });
 
     lines.push({
       productId: Number(p.id),
@@ -116,24 +119,31 @@ async function computeCartTotals(userId: number) {
     });
   }
 
-  // ---- Apply shipping rules per vendor and build snapshot
+  // ---- Apply shipping rules per vendor using real lines and build snapshot
   const vendorShippingSnapshot: Record<
     string,
     { cents: number; ruleId: number | null; label: string; params: any }
   > = {};
 
-  for (const [vendorId, sub] of vendorSubtotals.entries()) {
-    const count = vendorItemCounts.get(vendorId) || 0;
-    const applied = await computeVendorShipping({
+  for (const [vendorId, groupItems] of vendorGroups.entries()) {
+    const { shippingCents, snapshot } = await computeVendorShippingByLines({
       vendorId,
-      subtotalCents: sub,
-      itemCount: count,
+      items: groupItems,
     });
+
     vendorShippingSnapshot[String(vendorId)] = {
-      cents: applied.computedCents,
-      ruleId: applied.ruleId,
-      label: applied.label,
-      params: applied.params,
+      cents: shippingCents,
+      ruleId: snapshot.ruleId,
+      label: snapshot.label,
+      params: {
+        baseCents: snapshot.baseCents,
+        perItemCents: snapshot.perItemCents,
+        perWeightCents: snapshot.perWeightCents,
+        minCents: snapshot.minCents,
+        maxCents: snapshot.maxCents,
+        freeThresholdCents: snapshot.freeThresholdCents,
+        source: snapshot.source,
+      },
     };
   }
 
