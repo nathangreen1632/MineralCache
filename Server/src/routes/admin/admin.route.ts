@@ -7,7 +7,7 @@ import { adminListVendorsSchema, adminRejectSchema } from '../../validation/vend
 import { updateAdminSettingsSchema } from '../../validation/adminSettings.schema.js';
 import { listVendorApps, approveVendor, rejectVendor, getAdminSettings, patchAdminSettings } from '../../controllers/admin/admin.controller.js';
 import { shippingRulesRouter } from './shippingRules.route.js';
-import { adminListOrdersSchema } from '../../validation/adminOrders.schema.js'; // ✅ NEW
+import { adminListOrdersQuerySchema } from '../../validation/adminOrders.schema.js'; // ✅ NEW (use the alias)
 import { listAdminOrders, getAdminOrder } from '../../controllers/admin/orders.controller.js'; // ✅ NEW
 
 const router: Router = Router();
@@ -26,7 +26,7 @@ router.patch('/settings', requireAdmin, burstLimiter, validateBody(updateAdminSe
 router.use('/shipping-rules', requireAdmin, shippingRulesRouter);
 
 // Orders (admin) ✅ NEW
-router.get('/orders', requireAdmin, burstLimiter, validateQuery(adminListOrdersSchema), listAdminOrders);
+router.get('/orders', requireAdmin, burstLimiter, validateQuery(adminListOrdersQuerySchema), listAdminOrders);
 router.get('/orders/:id', requireAdmin, burstLimiter, getAdminOrder);
 
 export default router;
