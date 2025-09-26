@@ -16,6 +16,9 @@ const server = createServer(app);
 // Export if other modules need access to the io instance
 export const io = initSockets(server, { path: '/socket.io' });
 
+// ✅ Make Socket.IO available to controllers via req.app.get('io')
+app.set('io', io);
+
 // DB status log (do not crash app if DB unavailable); always start server
 (async () => {
   const result = await db.ping();
