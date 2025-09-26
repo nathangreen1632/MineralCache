@@ -1,10 +1,12 @@
 // Server/src/controllers/admin/orders.controller.ts
 import type { Request, Response, NextFunction } from 'express';
 import { Op } from 'sequelize';
-import { z } from 'zod';
 import { Order } from '../../models/order.model.js';
 import { OrderItem } from '../../models/orderItem.model.js';
-import { adminListOrdersSchema, adminOrderIdParamSchema } from '../../validation/adminOrders.schema.js';
+import {
+  adminListOrdersSchema,
+  adminOrderIdParamSchema,
+} from '../../validation/adminOrders.schema.js';
 
 function toDateBound(s?: string, endOfDay = false): Date | null {
   if (!s) return null;
@@ -51,14 +53,14 @@ export async function listAdminOrders(req: Request, res: Response, next: NextFun
     else if (start) where.createdAt = { [Op.gte]: start };
     else if (end) where.createdAt = { [Op.lte]: end };
 
-    // If filtering by vendor, preselect order ids that have at least one item from that vendor
+    // Optional vendor filter: orders that contain at least one item for that vendor
     if (vendorId) {
       const rows = await OrderItem.findAll({
         where: { vendorId },
         attributes: ['orderId'],
         group: ['orderId'],
       });
-      const ids = rows.map((r: any) => Number(r.orderId));
+      const ids = rows.map((r: any) => Number(r.orderId)).filter((n) => Number.isFinite(n));
       if (ids.length === 0) {
         res.json({ items: [], total: 0, page, pageSize });
         return;
@@ -78,11 +80,20 @@ export async function listAdminOrders(req: Request, res: Response, next: NextFun
       order: orderClause as any,
       offset,
       limit: pageSize,
-      distinct: true, // ensures count is not multiplied by include
+      distinct: true, // ensure count isn’t multiplied by include
       include: [
         {
           model: OrderItem,
-          attributes: ['id', 'orderId', 'productId', 'vendorId', 'title', 'unitPriceCents', 'quantity', 'lineTotalCents'],
+          attributes: [
+            'id',
+            'orderId',
+            'productId',
+            'vendorId',
+            'title',
+            'unitPriceCents',
+            'quantity',
+            'lineTotalCents',
+          ],
         },
       ],
     });
@@ -111,7 +122,16 @@ export async function getAdminOrder(req: Request, res: Response, next: NextFunct
       include: [
         {
           model: OrderItem,
-          attributes: ['id', 'orderId', 'productId', 'vendorId', 'title', 'unitPriceCents', 'quantity', 'lineTotalCents'],
+          attributes: [
+            'id',
+            'orderId',
+            'productId',
+            'vendorId',
+            'title',
+            'unitPriceCents',
+            'quantity',
+            'lineTotalCents',
+          ],
         },
       ],
     });
