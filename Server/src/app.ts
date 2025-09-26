@@ -13,7 +13,7 @@ import { requestId } from './middleware/requestId.middleware.js';
 import { requestContext } from './middleware/requestContext.middleware.js'; // ✅ NEW
 import { jsonErrorHandler } from './middleware/error.middleware.js';
 import { getVersionInfo } from './utils/version.util.js'; // ✅ NEW
-import { assertStripeAtBoot } from './services/stripe.service.js'; // ✅ NEW
+import { assertStripeAtBoot, getStripeStatus } from './services/stripe.service.js'; // ✅ UPDATED: include getStripeStatus
 import webhooksRouter from "./routes/webhooks.route.js";
 
 // ✅ Fail fast if Stripe is enabled but not correctly configured
@@ -56,7 +56,11 @@ const READY_PATH = '/api/ready';
 const VERSION_PATH = '/api/version'; // ✅ NEW
 
 app.get(HEALTH_PATH, (_req, res) =>
-  res.json({ ok: true, ts: new Date().toISOString() })
+  res.json({
+    ok: true,
+    ts: new Date().toISOString(),
+    stripe: getStripeStatus(), // ✅ include Stripe readiness details
+  })
 );
 
 app.get(READY_PATH, async (_req, res) => {
