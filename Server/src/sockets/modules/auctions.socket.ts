@@ -1,6 +1,7 @@
 // Server/src/sockets/modules/auctions.socket.ts
 import type { Server, Socket } from 'socket.io';
 import { auctionRoomName } from '../../utils/rooms.util.js';
+import { emitAuctionUserJoined, emitAuctionUserLeft } from '../emitters/auctions.emit.js';
 
 type JoinPayload = { auctionId: number | string };
 type LeavePayload = { auctionId: number | string };
@@ -12,12 +13,15 @@ export function registerAuctionSocketHandlers(io: Server, socket: Socket) {
       await socket.join(rn);
 
       const count = (await io.in(rn).fetchSockets()).length;
+      const userId = typeof socket.handshake?.auth?.userId === 'number'
+        ? socket.handshake.auth.userId
+        : null;
 
-      socket.to(rn).emit('auction:user-joined', {
-        auctionId: payload.auctionId,
-        socketId: socket.id,
-        count,
-      });
+      // Standardized room-aware emitter
+      emitAuctionUserJoined(io, payload.auctionId, userId);
+
+      // Optional: broadcast current room count snapshot
+      io.to(rn).emit('auction:room-count', { auctionId: payload.auctionId, count });
 
       if (ack) ack({ ok: true, room: rn, count });
     } catch (e: any) {
@@ -31,12 +35,15 @@ export function registerAuctionSocketHandlers(io: Server, socket: Socket) {
       await socket.leave(rn);
 
       const count = (await io.in(rn).fetchSockets()).length;
+      const userId = typeof socket.handshake?.auth?.userId === 'number'
+        ? socket.handshake.auth.userId
+        : null;
 
-      socket.to(rn).emit('auction:user-left', {
-        auctionId: payload.auctionId,
-        socketId: socket.id,
-        count,
-      });
+      // Standardized room-aware emitter
+      emitAuctionUserLeft(io, payload.auctionId, userId);
+
+      // Optional: broadcast current room count snapshot
+      io.to(rn).emit('auction:room-count', { auctionId: payload.auctionId, count });
 
       if (ack) ack({ ok: true, room: rn, count });
     } catch (e: any) {
@@ -51,12 +58,15 @@ export function registerAuctionSocketHandlers(io: Server, socket: Socket) {
   });
 
   socket.on('disconnecting', () => {
+    const userId = typeof socket.handshake?.auth?.userId === 'number'
+      ? socket.handshake.auth.userId
+      : null;
+
     const rooms = Array.from(socket.rooms).filter((r) => r.startsWith('auction:'));
     rooms.forEach((rn) => {
-      socket.to(rn).emit('auction:user-left', {
-        auctionId: rn.split(':')[1],
-        socketId: socket.id,
-      });
+      const auctionId = rn.split(':')[1];
+      // Standardized room-aware emitter on disconnect
+      emitAuctionUserLeft(io, auctionId, userId);
     });
   });
 }
