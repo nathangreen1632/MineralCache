@@ -1,7 +1,7 @@
 // Server/src/controllers/auctions.controller.ts
 import type { Request, Response } from 'express';
 import type { Server as IOServer } from 'socket.io';
-import { emitAuctionNewBid, emitAuctionEnded } from '../sockets/emitters/auctions.emit.js';
+import { emitAuctionNewBid, emitAuctionEnded, emitAuctionLeadingBid, emitAuctionOutbid } from '../sockets/emitters/auctions.emit.js';
 
 /** ------------------------------------------------------------------------
  * Helpers (auth + age gate)
@@ -40,14 +40,44 @@ function parsePositiveInt(v: unknown): number | null {
 }
 
 /** ------------------------------------------------------------------------
+ * In-memory scaffold state (reset on process restart) — no DB yet
+ * -----------------------------------------------------------------------*/
+type AuctionState = {
+  leadingBidCents: number;
+  leadingUserId: number | null;
+  history: Array<{ userId: number; amountCents: number; ts: number }>;
+};
+
+const AUCTIONS = new Map<number, AuctionState>();
+
+function getOrCreateAuction(id: number): AuctionState {
+  let a = AUCTIONS.get(id);
+  if (!a) {
+    a = { leadingBidCents: 0, leadingUserId: null, history: [] };
+    AUCTIONS.set(id, a);
+  }
+  return a;
+}
+
+/** ------------------------------------------------------------------------
  * Public reads
  * -----------------------------------------------------------------------*/
 export async function listAuctions(_req: Request, res: Response): Promise<void> {
   res.json({ items: [], total: 0 });
 }
 
-export async function getAuction(_req: Request, res: Response): Promise<void> {
-  res.json({ item: null });
+export async function getAuction(req: Request, res: Response): Promise<void> {
+  const id = parsePositiveInt((req.params as any)?.id);
+  if (id == null) {
+    res.status(400).json({ error: 'Invalid auction id' });
+    return;
+  }
+  const a = getOrCreateAuction(id);
+  res.json({
+    id,
+    leadingBidCents: a.leadingBidCents,
+    leadingUserId: a.leadingUserId,
+  });
 }
 
 /** ------------------------------------------------------------------------
@@ -72,25 +102,67 @@ export async function placeBid(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
   if (!ensureAdult(req, res)) return;
 
-  const auctionId = parsePositiveInt((req.body)?.auctionId);
+  // With routes: POST /api/auctions/:id/bid (amountCents in body)
+  const auctionId = parsePositiveInt((req.params as any)?.id);
   const amountCents = parsePositiveInt((req.body)?.amountCents);
 
   if (auctionId == null || amountCents == null) {
-    res.status(400).json({ error: 'Invalid auctionId or amountCents' });
+    res.status(400).json({ error: 'Invalid auction id or amountCents' });
     return;
   }
 
   // TODO: validate against DB, apply proxy-bid logic, persist bid
 
+  // Scaffolding: simple min increment ladder ($1)
+  const a = getOrCreateAuction(auctionId);
+  const minIncrement = 100;
+  const minAcceptable = a.leadingBidCents > 0 ? a.leadingBidCents + minIncrement : minIncrement;
+
+  if (amountCents < minAcceptable) {
+    res.status(400).json({
+      error: 'Bid too low',
+      code: 'BID_TOO_LOW',
+      minAcceptableCents: minAcceptable,
+      leadingBidCents: a.leadingBidCents,
+    });
+    return;
+  }
+
+  const previousLeader = a.leadingUserId;
+  const previousAmount = a.leadingBidCents;
+
+  // Update in-memory state (scaffold)
+  a.leadingBidCents = amountCents;
+  a.leadingUserId = Number((req as any).user.id);
+  a.history.push({ userId: Number((req as any).user.id), amountCents, ts: Date.now() });
+
   const io = getIO(req);
   if (io) {
+    // Back-compat "new-bid" event
     emitAuctionNewBid(io, auctionId, {
+      amountCents,
+      userId: (req as any).user.id,
+    });
+
+    // Outbid + current leader hints for richer UIs
+    if (previousLeader && previousAmount > 0 && previousLeader !== (req as any).user.id) {
+      emitAuctionOutbid(io, auctionId, {
+        previousUserId: previousLeader,
+        amountCents,
+      });
+    }
+    emitAuctionLeadingBid(io, auctionId, {
       amountCents,
       userId: (req as any).user.id,
     });
   }
 
-  res.status(202).json({ ok: true });
+  res.status(201).json({
+    ok: true,
+    auctionId,
+    leadingBidCents: a.leadingBidCents,
+    leadingUserId: a.leadingUserId,
+  });
 }
 
 /** ------------------------------------------------------------------------
@@ -101,7 +173,8 @@ export async function buyNow(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
   if (!ensureAdult(req, res)) return;
 
-  const auctionId = parsePositiveInt((req.body)?.auctionId);
+  // With routes: POST /api/auctions/:id/buy-now
+  const auctionId = parsePositiveInt((req.params as any)?.id);
   if (auctionId == null) {
     res.status(400).json({ error: 'Invalid auctionId' });
     return;
