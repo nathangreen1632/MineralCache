@@ -5,16 +5,8 @@ import { burstLimiter } from '../../middleware/rateLimit.middleware.js';
 import { validateBody, validateQuery } from '../../middleware/validate.middleware.js';
 import { adminListVendorsSchema, adminRejectSchema } from '../../validation/vendor.schema.js';
 import { updateAdminSettingsSchema } from '../../validation/adminSettings.schema.js';
-
-// Admin settings + vendor app endpoints (existing controllers)
-import {
-  listVendorApps,
-  approveVendor,
-  rejectVendor,
-  // 🆕 Real settings handlers
-  getAdminSettings,
-  patchAdminSettings,
-} from '../../controllers/admin/admin.controller.js';
+import { listVendorApps, approveVendor, rejectVendor, getAdminSettings, patchAdminSettings } from '../../controllers/admin/admin.controller.js';
+import { shippingRulesRouter } from './shippingRules.route.js';
 
 const router: Router = Router();
 
@@ -26,12 +18,9 @@ router.post('/vendor-apps/:id/reject', requireAdmin, validateBody(adminRejectSch
 // Platform settings
 // Keep the route shape the same, but use the new handlers + limiter + body validation.
 router.get('/settings', requireAdmin, burstLimiter, getAdminSettings);
-router.patch(
-  '/settings',
-  requireAdmin,
-  burstLimiter,
-  validateBody(updateAdminSettingsSchema),
-  patchAdminSettings
-);
+router.patch('/settings', requireAdmin, burstLimiter, validateBody(updateAdminSettingsSchema), patchAdminSettings);
+
+// Shipping rules (admin)
+router.use('/shipping-rules', requireAdmin, shippingRulesRouter);
 
 export default router;
