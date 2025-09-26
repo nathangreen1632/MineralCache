@@ -1,3 +1,4 @@
+// Server/src/routes/admin/shippingRules.route.ts
 import { Router } from 'express';
 import { validateBody } from '../../middleware/validate.middleware.js';
 import { createShippingRuleSchema, updateShippingRuleSchema } from '../../validation/shippingRules.schema.js';
