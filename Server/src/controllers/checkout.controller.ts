@@ -11,6 +11,30 @@ import { db } from '../models/sequelize.js';
 import { computeVendorShippingByLines } from '../services/shipping.service.js';
 import { obs } from '../services/observability.service.js'; // ✅ NEW
 
+// ✅ NEW: proportional allocator that preserves total cents exactly
+function allocateProRataCents(lineTotals: number[], totalFeeCents: number): number[] {
+  const n = lineTotals.length;
+  if (totalFeeCents <= 0 || n === 0) return Array(n).fill(0);
+  const subtotal = lineTotals.reduce((a, b) => a + Math.max(0, Number(b) || 0), 0);
+  if (subtotal <= 0) return Array(n).fill(0);
+
+  // Largest Remainder Method (Hamilton apportionment)
+  const shares = lineTotals.map((lt) => (lt > 0 ? (lt / subtotal) * totalFeeCents : 0));
+  const floors = shares.map((s) => Math.floor(s));
+  let assigned = floors.reduce((a, b) => a + b, 0);
+  let remainder = totalFeeCents - assigned;
+
+  const remainders = shares.map((s, i) => ({ i, frac: s - Math.floor(s) }));
+  remainders.sort((a, b) => b.frac - a.frac);
+
+  const result = floors.slice();
+  for (let k = 0; k < remainders.length && remainder > 0; k += 1) {
+    result[remainders[k].i] += 1;
+    remainder -= 1;
+  }
+  return result;
+}
+
 /** Server-side cart → totals + per-vendor shipping (rule-based) */
 async function computeCartTotals(userId: number) {
   const cart = await Cart.findOne({ where: { userId } });
@@ -236,6 +260,14 @@ export async function createCheckoutIntent(
     return;
   }
 
+  // ✅ NEW: compute per-line commission allocation BEFORE writing items
+  const lineTotals = totals.lines.map((l) => Number(l.lineTotalCents) || 0);
+  const perLineFees = allocateProRataCents(lineTotals, platformFeeCents);
+  const feeByProductId = new Map<number, number>();
+  totals.lines.forEach((l, i) => {
+    feeByProductId.set(Number(l.productId), perLineFees[i] || 0);
+  });
+
   // Create (or no-op if already exists) the pending order + items
   await sequelize.transaction(async (t) => {
     if (intentId) {
@@ -268,6 +300,7 @@ export async function createCheckoutIntent(
     obs.orderCreated(req, Number(order.id), { totalCents: totals.totalCents });
 
     for (const l of totals.lines) {
+      const commissionCents = feeByProductId.get(Number(l.productId)) ?? 0;
       await OrderItem.create(
         {
           orderId: Number(order.id),
@@ -277,6 +310,10 @@ export async function createCheckoutIntent(
           unitPriceCents: Number(l.unitPriceCents),
           quantity: Number(l.quantity),
           lineTotalCents: Number(l.lineTotalCents),
+
+          // ✅ NEW: per-item commission snapshot
+          commissionPct: pct,
+          commissionCents,
         },
         { transaction: t }
       );
