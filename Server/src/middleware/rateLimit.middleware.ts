@@ -128,3 +128,23 @@ export const registerLimiter = rateLimit({
     });
   },
 });
+
+/** ✅ NEW: Bidding rate limit (auth-heavy, user-or-IP keyed)
+ * Defaults:
+ *  - Burst: 8 requests / 4s
+ *  - Sustained: 120 requests / 10m
+ * Override with:
+ *  BIDDING_RATE_BURST_MAX
+ *  BIDDING_RATE_BURST_WINDOW_MS
+ *  BIDDING_RATE_SUSTAIN_MAX
+ *  BIDDING_RATE_SUSTAIN_WINDOW_MS
+ */
+const BID_BURST_MAX = Number.parseInt(process.env.BIDDING_RATE_BURST_MAX ?? '8', 10);
+const BID_BURST_WIN = Number.parseInt(process.env.BIDDING_RATE_BURST_WINDOW_MS ?? '4000', 10);
+const BID_SUSTAIN_MAX = Number.parseInt(process.env.BIDDING_RATE_SUSTAIN_MAX ?? '120', 10);
+const BID_SUSTAIN_WIN = Number.parseInt(process.env.BIDDING_RATE_SUSTAIN_WINDOW_MS ?? '600000', 10); // 10 min
+
+export const biddingRateLimit = chainLimiters([
+  fixedWindowLimiter(BID_BURST_WIN, BID_BURST_MAX, userOrIpKey),
+  fixedWindowLimiter(BID_SUSTAIN_WIN, BID_SUSTAIN_MAX, userOrIpKey),
+]);
