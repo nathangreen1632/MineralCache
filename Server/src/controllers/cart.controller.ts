@@ -7,6 +7,7 @@ import { ensureAuthed, ensureAdult } from '../middleware/authz.middleware.js';
 import { Cart } from '../models/cart.model.js';
 import { Product } from '../models/product.model.js';
 import { updateCartSchema } from '../validation/cart.schema.js';
+import { computeVendorShipping } from '../services/shipping.service.js';
 
 /** ---------------- Zod error helper (no deprecated APIs) ---------------- */
 function zDetails(err: ZodError) {
@@ -23,13 +24,10 @@ function zDetails(err: ZodError) {
 
 /** ---------------- Totals helper ----------------
  * Computes:
- * - subtotalCents = sum(priceCents * qty)
- * - shippingCents = flat per unique vendor (DEFAULT_SHIPPING_CENTS)
+ * - subtotalCents = sum(unitPrice * qty)
+ * - shippingCents = per-vendor via Shipping Rules (server-side)
  * - totalCents = subtotal + shipping
- * TODO(ship): allow per-vendor overrides from settings or vendor table
  * ---------------------------------------------------------------------- */
-const DEFAULT_SHIPPING_CENTS = Number(process.env.DEFAULT_SHIPPING_CENTS ?? 0);
-
 async function computeTotals(items: Array<{ productId: number; quantity: number }>) {
   if (!items.length) {
     return {
@@ -44,7 +42,7 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
   const ids = [...new Set(items.map((i) => i.productId))];
   const products = await Product.findAll({
     where: { id: { [Op.in]: ids }, archivedAt: { [Op.is]: null } as any },
-    attributes: ['id', 'vendorId', 'title', 'priceCents'],
+    attributes: ['id', 'vendorId', 'title', 'priceCents', 'salePriceCents'],
   });
 
   const byId = new Map(products.map((p) => [Number(p.id), p]));
@@ -58,28 +56,60 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
   }> = [];
 
   const vendorSet = new Set<number>();
+  const vendorSubtotals = new Map<number, number>();
+  const vendorItemCounts = new Map<number, number>();
   let subtotalCents = 0;
 
   for (const row of items) {
     const p = byId.get(row.productId);
     if (!p) continue; // silently drop unknown/archived
-    const qty = row.quantity;
-    const price = (p as any).priceCents as number;
-    const line = price * qty;
+
+    // Prefer effective price if model provides it; fall back to priceCents
+    let unitPrice = 0;
+    try {
+      // @ts-ignore optional instance method
+      unitPrice =
+        typeof (p as any).getEffectivePriceCents === 'function'
+          ? Number((p as any).getEffectivePriceCents())
+          : Number((p as any).priceCents || 0);
+    } catch {
+      unitPrice = Number((p as any).priceCents || 0);
+    }
+
+    const qty = Number(row.quantity || 0);
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+
+    const line = unitPrice * qty;
     subtotalCents += line;
-    vendorSet.add(Number((p as any).vendorId));
+
+    const vId = Number((p as any).vendorId);
+    vendorSet.add(vId);
+    vendorSubtotals.set(vId, (vendorSubtotals.get(vId) || 0) + line);
+    vendorItemCounts.set(vId, (vendorItemCounts.get(vId) || 0) + qty);
+
     lines.push({
       productId: row.productId,
-      vendorId: Number((p as any).vendorId),
-      title: (p as any).title as string,
-      priceCents: price,
+      vendorId: vId,
+      title: String((p as any).title || ''),
+      priceCents: unitPrice,
       quantity: qty,
       lineTotalCents: line,
     });
   }
 
+  // Per-vendor shipping via rules
+  let shippingCents = 0;
+  for (const [vId, sub] of vendorSubtotals.entries()) {
+    const itemCount = vendorItemCounts.get(vId) || 0;
+    const applied = await computeVendorShipping({
+      vendorId: vId,
+      subtotalCents: sub,
+      itemCount,
+    });
+    shippingCents += applied.computedCents;
+  }
+
   const vendors = [...vendorSet];
-  const shippingCents = vendors.length * DEFAULT_SHIPPING_CENTS; // TODO(ship): per-vendor rates
   const totalCents = subtotalCents + shippingCents;
 
   return { lines, vendors, subtotalCents, shippingCents, totalCents };
