@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { listProducts, type ListQuery, type Product } from '../../api/products';
+import { searchProducts } from '../../api/search'; // 🔎 NEW
 
 function centsToUsd(cents?: number | null): string {
   const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
@@ -187,18 +188,34 @@ export default function ProductList(): React.ReactElement {
     setInputQ(params.get('q') ?? '');
   }, [query, params]);
 
-  // Fetch on query change
+  // Fetch on query change (route to search when q is present)
   useEffect(() => {
     let alive = true;
     (async () => {
       setState({ kind: 'loading' });
+
+      const qTerm = (params.get('q') ?? '').trim();
+
       try {
-        const { data, error, status } = await listProducts(query);
+        // If keyword present → /api/search/products; else → /api/products
+        const resp = qTerm
+          ? await searchProducts({
+            q: qTerm,
+            page: query.page,
+            pageSize: query.pageSize,
+            sort: query.sort,
+            vendorSlug: query.vendorSlug,
+          })
+          : await listProducts(query);
+
         if (!alive) return;
+
+        const { data, error, status } = resp;
         if (error || !data) {
           setState({ kind: 'error', message: error || `Failed (${status})` });
           return;
         }
+
         setState({
           kind: 'loaded',
           data: {
@@ -216,6 +233,7 @@ export default function ProductList(): React.ReactElement {
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
   function updateQuery(partial: Partial<ListQuery>) {
