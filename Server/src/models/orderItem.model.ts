@@ -22,6 +22,10 @@ export class OrderItem extends Model<
   declare quantity: number;
   declare lineTotalCents: number;
 
+  // ✅ NEW: per-line commission snapshot
+  declare commissionPct: number;      // e.g. 0.08 for 8%
+  declare commissionCents: number;    // allocated cents from order fee
+
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 }
@@ -45,6 +49,10 @@ if (!sequelize) {
       unitPriceCents: { type: DataTypes.INTEGER, allowNull: false, validate: { min: 0 } },
       quantity: { type: DataTypes.INTEGER, allowNull: false, validate: { min: 1 } },
       lineTotalCents: { type: DataTypes.INTEGER, allowNull: false, validate: { min: 0 } },
+
+      // ✅ NEW: commission snapshot
+      commissionPct: { type: DataTypes.DECIMAL(6, 5), allowNull: false, defaultValue: 0 }, // 0.00000 - 9.99999
+      commissionCents: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
 
       createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
       updatedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
