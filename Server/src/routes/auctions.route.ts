@@ -2,6 +2,8 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { require18Plus } from '../middleware/ageGate.middleware.js';
+import { validateBody } from '../middleware/validate.middleware.js'; // ✅ NEW
+import { placeBidSchema } from '../validation/auctions.schema.js'; // ✅ NEW
 import {
   createAuction,
   getAuction,
@@ -20,7 +22,7 @@ router.get('/:id', getAuction);
 router.post('/', requireAuth, createAuction);
 
 // Bidding & Buy Now (auth + 18+ required)
-router.post('/:id/bid', require18Plus, placeBid);
+router.post('/:id/bid', requireAuth, require18Plus, validateBody(placeBidSchema), placeBid); // ✅ add auth + zod validation
 router.post('/:id/buy-now', require18Plus, buyNow);
 
 export default router;
