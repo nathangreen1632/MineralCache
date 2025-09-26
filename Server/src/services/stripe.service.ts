@@ -23,19 +23,35 @@ if (stripeFeatureEnabled && secret.length > 0) {
   });
 }
 
+/** Shape for Stripe readiness (used by health/admin UI) */
+export type StripeStatus = {
+  enabled: boolean;
+  ready: boolean;
+  missing: string[];
+  mode: 'test' | 'live' | 'disabled';
+};
+
 /** Health helper for /health */
-export function getStripeStatus() {
+export function getStripeStatus(): StripeStatus {
+  const enabled = stripeFeatureEnabled;
   const hasSecret = secret.length > 0;
-  const ready = stripeFeatureEnabled ? hasSecret && !!stripe : false;
   const missing: string[] = [];
 
-  if (stripeFeatureEnabled && !hasSecret) missing.push('STRIPE_SECRET_KEY');
-  if (stripeFeatureEnabled && !process.env.STRIPE_WEBHOOK_SECRET) missing.push('STRIPE_WEBHOOK_SECRET');
+  if (enabled && !hasSecret) missing.push('STRIPE_SECRET_KEY');
+  if (enabled && !process.env.STRIPE_WEBHOOK_SECRET) missing.push('STRIPE_WEBHOOK_SECRET');
+
+  let mode: StripeStatus['mode'] = 'disabled';
+  if (enabled) {
+    mode = secret.startsWith('sk_live_') ? 'live' : 'test';
+  }
+
+  const ready = enabled ? missing.length === 0 && !!stripe : false;
 
   return {
-    enabled: stripeFeatureEnabled,
+    enabled,
     ready,
     missing,
+    mode,
   };
 }
 
