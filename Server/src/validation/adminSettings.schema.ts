@@ -1,3 +1,4 @@
+// Server/src/validation/adminSettings.schema.ts
 import { z } from 'zod';
 
 export const updateAdminSettingsSchema = z
