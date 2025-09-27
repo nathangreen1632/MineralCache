@@ -1,53 +1,95 @@
-'use strict';
-
-/**
- * Idempotent: adds columns used by the new shipping fallback + admin UI,
- * and creates helpful indexes/constraints.
- */
+/** @type {import('sequelize-cli').Migration} */
 module.exports = {
     async up(queryInterface, Sequelize) {
-        const qi = queryInterface;
-        const { sequelize } = qi;
+        const t = await queryInterface.sequelize.transaction();
+        try {
+            // Ensure columns exist (idempotent)
+            const addColIfMissing = async (table, column, spec) => {
+                const desc = await queryInterface.describeTable(table, { transaction: t });
+                if (!desc[column]) {
+                    await queryInterface.addColumn(table, column, spec, { transaction: t });
+                }
+            };
 
-        // Columns (IF NOT EXISTS)
-        await sequelize.query(`
-      ALTER TABLE IF EXISTS public.shipping_rules
-        ADD COLUMN IF NOT EXISTS active boolean DEFAULT true NOT NULL,
-        ADD COLUMN IF NOT EXISTS is_default_global boolean DEFAULT false NOT NULL,
-        ADD COLUMN IF NOT EXISTS priority integer DEFAULT 100 NOT NULL
-    `);
+            await addColIfMissing('shipping_rules', 'active', {
+                type: Sequelize.BOOLEAN,
+                allowNull: false,
+                defaultValue: true,
+                comment: 'Whether this rule can be selected',
+            });
 
-        // Unique constraint: only one global default rule (vendor_id IS NULL)
-        await sequelize.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint
-          WHERE conname = 'shipping_rules_one_global_default_unique'
-        ) THEN
-          ALTER TABLE public.shipping_rules
-            ADD CONSTRAINT shipping_rules_one_global_default_unique
-            UNIQUE NULLS NOT DISTINCT (is_default_global, vendor_id)
-            DEFERRABLE INITIALLY DEFERRED;
-        END IF;
-      END
-      $$;
-    `);
+            await addColIfMissing('shipping_rules', 'is_default_global', {
+                type: Sequelize.BOOLEAN,
+                allowNull: false,
+                defaultValue: false,
+                comment: 'If true, this is the global default rule',
+            });
 
-        // Helpful indexes
-        await sequelize.query(`
-      CREATE INDEX IF NOT EXISTS shipping_rules_vendor_active_idx
-        ON public.shipping_rules (vendor_id, active, priority, id);
-    `);
+            await addColIfMissing('shipping_rules', 'priority', {
+                type: Sequelize.INTEGER,
+                allowNull: false,
+                defaultValue: 100,
+                comment: 'Lower goes first during selection',
+            });
 
-        await sequelize.query(`
-      CREATE INDEX IF NOT EXISTS shipping_rules_global_active_idx
-        ON public.shipping_rules (active, is_default_global, priority, id)
-        WHERE vendor_id IS NULL;
-    `);
+            // Detect how the vendor column is named (or if it exists at all)
+            const desc = await queryInterface.describeTable('shipping_rules', { transaction: t });
+            const hasVendorIdSnake = !!desc.vendor_id;
+            const hasVendorIdCamel = !!desc.vendorId;
+            const vendorCol = hasVendorIdSnake ? '"vendor_id"' : (hasVendorIdCamel ? '"vendorId"' : null);
+
+            // Create partial unique indexes instead of a composite constraint.
+            // 1) Only ONE global default where vendor IS NULL.
+            await queryInterface.sequelize.query(
+                `
+        CREATE UNIQUE INDEX IF NOT EXISTS shipping_rules_one_global_default_unique
+        ON public.shipping_rules ((is_default_global))
+        WHERE is_default_global IS TRUE ${vendorCol ? `AND ${vendorCol} IS NULL` : ''};
+        `,
+                { transaction: t }
+            );
+
+            // 2) Only ONE vendor default per vendor (if vendor column exists).
+            if (vendorCol) {
+                await queryInterface.sequelize.query(
+                    `
+          CREATE UNIQUE INDEX IF NOT EXISTS shipping_rules_one_vendor_default_unique
+          ON public.shipping_rules (${vendorCol})
+          WHERE is_default_global IS TRUE;
+          `,
+                    { transaction: t }
+                );
+            }
+
+            await t.commit();
+        } catch (err) {
+            await t.rollback();
+            throw err;
+        }
     },
 
     async down(queryInterface /* , Sequelize */) {
-        // Keep columns and indexes; they are harmless and used going forward.
-    }
+        const t = await queryInterface.sequelize.transaction();
+        try {
+            // Drop the indexes if present; leave columns in place (they're safe).
+            await queryInterface.sequelize.query(
+                `DROP INDEX IF EXISTS shipping_rules_one_global_default_unique;`,
+                { transaction: t }
+            );
+            await queryInterface.sequelize.query(
+                `DROP INDEX IF EXISTS shipping_rules_one_vendor_default_unique;`,
+                { transaction: t }
+            );
+
+            // Optionally remove the columns (commented out to keep data).
+            // await queryInterface.removeColumn('shipping_rules', 'priority', { transaction: t });
+            // await queryInterface.removeColumn('shipping_rules', 'is_default_global', { transaction: t });
+            // await queryInterface.removeColumn('shipping_rules', 'active', { transaction: t });
+
+            await t.commit();
+        } catch (err) {
+            await t.rollback();
+            throw err;
+        }
+    },
 };
