@@ -18,6 +18,8 @@ import {
   reorderImagesSchema,
 } from '../validation/productImage.schema.js';
 
+type ProductListQuery = z.infer<typeof listProductsQuerySchema>;
+
 /** ---------------------------------------------
  * Zod error -> minimal stable details (no deprecated APIs)
  * --------------------------------------------*/
@@ -350,10 +352,15 @@ function effectivePriceExpr(nowIso: string) {
 }
 
 export async function listProducts(req: Request, res: Response): Promise<void> {
-  const parsed = listProductsQuerySchema.safeParse(req.query);
-  if (!parsed.success) {
-    res.status(400).json({ error: 'Invalid query', details: zDetails(parsed.error) });
-    return;
+  // ✅ Prefer the validated query stashed by validateQuery(); fallback to parsing once if absent.
+  let q: ProductListQuery | null = (res.locals.query as ProductListQuery) ?? null;
+  if (!q) {
+    const parsed = listProductsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid query', details: zDetails(parsed.error) });
+      return;
+    }
+    q = parsed.data;
   }
 
   try {
@@ -376,7 +383,7 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       // Back-compat (deprecated)
       minCents,
       maxCents,
-    } = parsed.data as any;
+    } = q as any;
 
     const nowIso = new Date().toISOString();
     const andClauses: any[] = [{ archivedAt: { [Op.is]: null } }];
