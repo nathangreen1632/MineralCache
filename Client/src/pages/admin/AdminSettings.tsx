@@ -7,6 +7,50 @@ function centsToUsd(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+/** ===== Server DTO (what /admin/settings returns) ===== */
+type ServerAdminSettingsDTO = {
+  commission: {
+    bps: number;            // e.g. 800 for 8%
+    minFeeCents: number;    // e.g. 75
+  };
+  shippingDefaults: {
+    flatCents: number;              // base per order
+    perItemCents?: number | null;
+    freeThresholdCents?: number | null;
+    handlingCents?: number | null;
+    currency: string;
+  };
+  stripeEnabled?: boolean;
+  updatedAt?: string;
+};
+
+/** Map server DTO -> client form shape (AdminSettings) */
+function fromServer(dto: ServerAdminSettingsDTO): AdminSettings {
+  return {
+    commissionPct: Math.round((dto.commission?.bps ?? 0) / 100), // 800 bps -> 8
+    minFeeCents: dto.commission?.minFeeCents ?? 0,
+    shippingDefaults: {
+      baseCents: dto.shippingDefaults?.flatCents ?? 0,
+      perItemCents: dto.shippingDefaults?.perItemCents ?? 0,
+      freeThresholdCents: dto.shippingDefaults?.freeThresholdCents ?? 0,
+    },
+    stripeEnabled: !!dto.stripeEnabled,
+  };
+}
+
+/** Map client form -> server PATCH payload */
+function toServer(form: AdminSettings) {
+  return {
+    commissionBps: Math.round((form.commissionPct ?? 0) * 100), // 8 -> 800
+    minFeeCents: form.minFeeCents ?? 0,
+    shipFlatCents: form.shippingDefaults?.baseCents ?? 0,
+    shipPerItemCents: form.shippingDefaults?.perItemCents ?? 0,
+    shipFreeThresholdCents: form.shippingDefaults?.freeThresholdCents ?? 0,
+    // keep currency/handling & other flags untouched unless you add fields to the UI
+    stripeEnabled: form.stripeEnabled ?? undefined,
+  };
+}
+
 export default function AdminSettings(): React.ReactElement {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -19,13 +63,17 @@ export default function AdminSettings(): React.ReactElement {
       const [s, h] = await Promise.all([getAdminSettings(), getHealth()]);
       if (!alive) return;
 
-      if (s.error || !s.data) {
-        setMsg(s.error ?? 'Failed to load settings.');
+      // getAdminSettings() is typed to AdminSettings, but the server actually returns the DTO.
+      // Safely coerce and map here.
+      const sPayload = (s as any)?.data as ServerAdminSettingsDTO | undefined;
+
+      if (!sPayload) {
+        setMsg((s as any)?.error ?? 'Failed to load settings.');
       } else {
-        setForm(s.data);
+        setForm(fromServer(sPayload));
       }
 
-      if (h.error || !h.data) {
+      if ((h as any).error || !h.data) {
         setStripeInfo({ enabled: false, ready: false });
       } else {
         setStripeInfo({ enabled: !!h.data.stripe.enabled, ready: !!h.data.stripe.ready });
@@ -50,7 +98,8 @@ export default function AdminSettings(): React.ReactElement {
     if (!form) return;
     setBusy(true);
     setMsg(null);
-    const { error } = await updateAdminSettings(form);
+    const payload = toServer(form);
+    const { error } = await updateAdminSettings(payload as any);
     setBusy(false);
     setMsg(error ?? 'Saved.');
   }
