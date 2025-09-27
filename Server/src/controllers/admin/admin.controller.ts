@@ -62,6 +62,9 @@ function toDto(s: AdminSettings) {
  * --------------------------------------------*/
 export async function getAdminSettings(_req: Request, res: Response): Promise<void> {
   try {
+    // unified currency fallback (CURRENCY preferred, then STRIPE_CURRENCY, then 'usd')
+    const envCurrency = (process.env.CURRENCY || process.env.STRIPE_CURRENCY || 'usd').toLowerCase();
+
     let s = await AdminSettings.findByPk(1);
     // Fallback row in case migration wasn’t run yet — uses env defaults
     s ??= AdminSettings.build({
@@ -69,7 +72,7 @@ export async function getAdminSettings(_req: Request, res: Response): Promise<vo
       commission_bps: 800,
       min_fee_cents: 75,
       stripe_enabled: String(process.env.STRIPE_ENABLED ?? '').toLowerCase() === 'true',
-      currency: (process.env.STRIPE_CURRENCY || 'usd').toLowerCase(),
+      currency: envCurrency, // ← unified fallback
       ship_flat_cents: Number(process.env.SHIP_FLAT_CENTS ?? 0),
       ship_per_item_cents: Number(process.env.SHIP_PER_ITEM_CENTS ?? 0),
       ship_free_threshold_cents: process.env.SHIP_FREE_THRESHOLD_CENTS
@@ -96,6 +99,9 @@ export async function patchAdminSettings(req: Request, res: Response): Promise<v
       return;
     }
 
+    // unified currency fallback (CURRENCY preferred, then STRIPE_CURRENCY, then 'usd')
+    const envCurrency = (process.env.CURRENCY || process.env.STRIPE_CURRENCY || 'usd').toLowerCase();
+
     // Ensure singleton row exists
     let s = await AdminSettings.findByPk(1);
     s ??= await AdminSettings.create({
@@ -103,7 +109,7 @@ export async function patchAdminSettings(req: Request, res: Response): Promise<v
       commission_bps: 800,
       min_fee_cents: 75,
       stripe_enabled: String(process.env.STRIPE_ENABLED ?? '').toLowerCase() === 'true',
-      currency: (process.env.STRIPE_CURRENCY || 'usd').toLowerCase(),
+      currency: envCurrency, // ← unified fallback
       ship_flat_cents: Number(process.env.SHIP_FLAT_CENTS ?? 0),
       ship_per_item_cents: Number(process.env.SHIP_PER_ITEM_CENTS ?? 0),
       ship_free_threshold_cents: process.env.SHIP_FREE_THRESHOLD_CENTS
