@@ -49,8 +49,8 @@ export type StripeOnboardingResponse =
   | { onboardingUrl: null; enabled: true; error: string };
 
 // If you need the FULL vendor record (new shape), use this.
+// Server route is mounted at /vendors/me (lib/api handles /api prefix).
 export function getMyVendorFull() {
-  // Server route is mounted at /vendors/me (no /api prefix; lib/api handles base)
   return get<VendorMeResponse>('/vendors/me');
 }
 
@@ -138,15 +138,17 @@ export type VendorProductRow = {
 
 export function listVendorProducts(page = 1, pageSize = 50) {
   const qs = `?page=${page}&pageSize=${pageSize}`;
-  return get<{ items: VendorProductRow[]; total: number }>('/vendor/products' + qs);
+  // ✅ FIX: plural + scoped route
+  return get<{ items: VendorProductRow[]; total: number }>(`/vendors/me/products${qs}`);
 }
 
 export function updateVendorProductFlags(
   productId: number,
   body: { onSale?: boolean; archived?: boolean }
 ) {
+  // ✅ FIX: plural + scoped route
   return put<{ ok: true }, { onSale?: boolean; archived?: boolean }>(
-    `/vendor/products/${productId}`,
+    `/vendors/me/products/${productId}`,
     body
   );
 }
@@ -187,7 +189,8 @@ export function listVendorOrders(params: {
   search.set('page', String(params.page ?? 1));
   search.set('pageSize', String(params.pageSize ?? 50));
   const qs = `?${search.toString()}`;
-  return get<{ items: VendorOrderListItem[]; total: number }>('/vendor/orders' + qs);
+  // ✅ FIX: plural + scoped route
+  return get<{ items: VendorOrderListItem[]; total: number }>(`/vendors/me/orders${qs}`);
 }
 
 /* =========================
