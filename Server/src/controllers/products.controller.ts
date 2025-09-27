@@ -288,18 +288,49 @@ export async function getProduct(req: Request, res: Response): Promise<void> {
   }
 
   try {
+    const id = Number(idParsed.data.id);
+
     const product = await Product.findOne({
-      where: { id: idParsed.data.id, archivedAt: { [Op.is]: null } as any },
+      where: { id, archivedAt: { [Op.is]: null } as any },
     });
     if (!product) {
       res.status(404).json({ error: 'Not found' });
       return;
     }
-    res.json({ product });
+
+    // Order images with primary first, then sortOrder, then id (hide soft-deleted)
+    const images = await ProductImage.findAll({
+      where: { productId: id },
+      paranoid: true,
+      order: [
+        ['isPrimary', 'DESC'],
+        ['sortOrder', 'ASC'],
+        ['id', 'ASC'],
+      ],
+    });
+
+    const photos = images.map((img: any) => ({
+      id: Number(img.id),
+      isPrimary: Boolean(img.isPrimary),
+      url320: img.url320 ?? null,
+      url800: img.url800 ?? null,
+      url1600: img.url1600 ?? null,
+    }));
+
+    const json = product.toJSON() as Record<string, unknown>;
+    (json as any).photos = photos;
+
+    // Optional convenience for UIs that want a single hero image
+    const primary = photos.find((p) => p.isPrimary);
+    (json as any).primaryImageUrl =
+      primary?.url800 ?? primary?.url1600 ?? primary?.url320 ?? null;
+
+    res.json({ product: json });
   } catch (e: any) {
     res.status(500).json({ error: 'Failed to load product', detail: e?.message });
   }
 }
+
 
 /** ---------------------------------------------
  * Catalog list — filters & sorting (effective price, size range, etc.)
