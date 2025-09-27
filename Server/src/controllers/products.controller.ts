@@ -298,7 +298,7 @@ export async function getProduct(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Order images with primary first, then sortOrder, then id (hide soft-deleted)
+    // List images: primary first, then sort order, then id; hide soft-deleted (paranoid: true)
     const images = await ProductImage.findAll({
       where: { productId: id },
       paranoid: true,
@@ -320,10 +320,10 @@ export async function getProduct(req: Request, res: Response): Promise<void> {
     const json = product.toJSON() as Record<string, unknown>;
     (json as any).photos = photos;
 
-    // Optional convenience for UIs that want a single hero image
+    // Convenience: a single hero image for UIs that want it
     const primary = photos.find((p) => p.isPrimary);
     (json as any).primaryImageUrl =
-      primary?.url800 ?? primary?.url1600 ?? primary?.url320 ?? null;
+      primary?.url1600 ?? primary?.url800 ?? primary?.url320 ?? null;
 
     res.json({ product: json });
   } catch (e: any) {
