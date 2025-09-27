@@ -25,7 +25,7 @@ router.post('/me/stripe/link', requireAuth, linkStripeOnboarding);
 router.get('/me/orders', requireAuth, getVendorOrders);
 
 // Vendor Products (scoped to the authenticated vendor)
-router.use('/products', requireAuth, vendorProductsRouter);
+router.use('/me/products', requireAuth, vendorProductsRouter);
 
 // Public vendor profile by slug — keep LAST to avoid swallowing other routes
 router.get('/:slug', getVendorBySlug);
