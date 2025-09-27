@@ -1,5 +1,5 @@
 // Client/src/api/admin.ts
-import { get, put } from '../lib/api';
+import { get, patch } from '../lib/api';
 
 /* =========================
    ORDERS (Admin)
@@ -97,6 +97,6 @@ export function getAdminSettings() {
 }
 
 export function updateAdminSettings(body: Partial<AdminSettings>) {
-  // Backend allows PATCH, but our wrapper uses PUT—server can treat it as upsert/patch.
-  return put<{ ok: true }, Partial<AdminSettings>>('/admin/settings', body);
+  // Server expects PATCH for partial updates.
+  return patch<{ ok: true }, Partial<AdminSettings>>('/admin/settings', body);
 }
