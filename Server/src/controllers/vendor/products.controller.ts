@@ -2,7 +2,11 @@ import type { Request, Response, NextFunction } from 'express';
 import { Op, fn, col, literal, type WhereOptions } from 'sequelize';
 import { Product } from '../../models/product.model.js';
 import { ProductImage } from '../../models/productImage.model.js';
-import { vendorListProductsSchema, vendorUpdateProductSchema } from '../../validation/vendorProducts.schema.js';
+import {
+  listVendorProductsQuerySchema,
+  updateVendorProductFlagsSchema,
+  type ListVendorProductsQuery,
+} from '../../validation/vendorProducts.schema.js';
 
 function getVendorId(req: Request): number {
   const u: any = (req as any).user ?? (req.session as any)?.user ?? null;
@@ -29,12 +33,13 @@ export async function listVendorProducts(req: Request, res: Response, next: Next
   try {
     const vendorId = getVendorId(req);
 
-    const parsed = vendorListProductsSchema.safeParse(req.query);
+    // validate query with new schema
+    const parsed = listVendorProductsQuerySchema.safeParse(req.query);
     if (!parsed.success) {
-      res.status(400).json({ error: 'Invalid query', details: parsed.error.flatten() });
+      res.status(400).json({ error: 'Invalid query', details: parsed.error.flatten?.() });
       return;
     }
-    const { page = 1, pageSize = 25, status = 'active', q, sort } = parsed.data;
+    const { page = 1, pageSize = 25, status = 'active', q, sort } = parsed.data as ListVendorProductsQuery;
 
     const where: WhereOptions = { vendorId };
     if (status === 'active') {
@@ -42,16 +47,16 @@ export async function listVendorProducts(req: Request, res: Response, next: Next
     } else if (status === 'archived') {
       Object.assign(where, { archivedAt: { [Op.not]: null } as any });
     }
-    if (q && q.trim()) {
-      Object.assign(where, { title: { [Op.iLike]: `%${q.trim()}%` } });
+    if (q && String(q).trim()) {
+      Object.assign(where, { title: { [Op.iLike]: `%${String(q).trim()}%` } });
     }
 
     const offset = (page - 1) * pageSize;
 
-    // Base fetch
+    // Base fetch (no 'onSale' column; derive later from salePriceCents/schedule)
     const { rows, count } = await Product.findAndCountAll({
       where,
-      attributes: ['id', 'vendorId', 'title', 'priceCents', 'salePriceCents', 'onSale', 'archivedAt', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'vendorId', 'title', 'priceCents', 'salePriceCents', 'archivedAt', 'createdAt', 'updatedAt'],
       order: sortOrder(sort),
       limit: pageSize,
       offset,
@@ -70,7 +75,6 @@ export async function listVendorProducts(req: Request, res: Response, next: Next
       });
       primaryByProduct = new Map(primaries.map((p: any) => [Number(p.productId), p]));
 
-      // if some products lack isPrimary, pick their first by sortOrder
       const missing = ids.filter((id) => !primaryByProduct.has(id));
       if (missing.length > 0) {
         const firsts = await ProductImage.findAll({
@@ -96,13 +100,17 @@ export async function listVendorProducts(req: Request, res: Response, next: Next
     const items = rows.map((p: any) => {
       const pid = Number(p.id);
       const primary = primaryByProduct.get(pid) ?? null;
+
+      // derive onSale: present if salePriceCents is set; you can tighten with schedule if needed
+      const onSale = p.salePriceCents != null;
+
       return {
         id: pid,
         vendorId: Number(p.vendorId),
         title: String(p.title ?? ''),
         priceCents: Number(p.priceCents ?? 0),
-        salePriceCents: Number(p.salePriceCents ?? 0),
-        onSale: Boolean(p.onSale),
+        salePriceCents: p.salePriceCents != null ? Number(p.salePriceCents) : null,
+        onSale,
         archivedAt: p.archivedAt,
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
@@ -135,11 +143,13 @@ export async function updateVendorProduct(req: Request, res: Response, next: Nex
       return;
     }
 
-    const parsed = vendorUpdateProductSchema.safeParse(req.body);
+    // validate body with new schema (normalizes legacy `archive` → `archived`)
+    const parsed = updateVendorProductFlagsSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
+      res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten?.() });
       return;
     }
+    const { onSale, archived } = parsed.data;
 
     const product = await Product.findOne({ where: { id: pid, vendorId } });
     if (!product) {
@@ -147,12 +157,13 @@ export async function updateVendorProduct(req: Request, res: Response, next: Nex
       return;
     }
 
-    const { onSale, archive } = parsed.data;
-
     const updates: any = {};
-    if (typeof onSale === 'boolean') updates.onSale = onSale;
-    if (typeof archive === 'boolean') {
-      updates.archivedAt = archive ? new Date() : null;
+    // represent onSale by presence/absence of salePriceCents (simple toggle; refine if using schedules)
+    if (typeof onSale === 'boolean') {
+      updates.salePriceCents = onSale ? Math.max(1, Number((product as any).salePriceCents ?? 1)) : null;
+    }
+    if (typeof archived === 'boolean') {
+      updates.archivedAt = archived ? new Date() : null;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -176,8 +187,8 @@ export async function updateVendorProduct(req: Request, res: Response, next: Nex
       vendorId: Number(product.vendorId),
       title: String((product as any).title ?? ''),
       priceCents: Number((product as any).priceCents ?? 0),
-      salePriceCents: Number((product as any).salePriceCents ?? 0),
-      onSale: Boolean((product as any).onSale),
+      salePriceCents: (product as any).salePriceCents != null ? Number((product as any).salePriceCents) : null,
+      onSale: (product as any).salePriceCents != null,
       archivedAt: (product as any).archivedAt,
       createdAt: (product as any).createdAt,
       updatedAt: (product as any).updatedAt,
