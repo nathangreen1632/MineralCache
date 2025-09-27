@@ -1,5 +1,5 @@
 // Client/src/api/vendor.ts
-import { get, put, post } from '../lib/api';
+import { get, put, post, del } from '../lib/api';
 
 /* =========================
    LEGACY (kept for compatibility)
@@ -191,41 +191,73 @@ export function listVendorOrders(params: {
 }
 
 /* =========================
-   PHOTOS (kept)
+   PHOTOS (rewired to product-scoped /products/:id/images routes)
    ========================= */
 
 export type ProductPhoto = {
   id: number;
-  position: number;
   isPrimary: boolean;
-  deletedAt?: string | null;
-  // derivative URLs if your server returns them
-  url1600?: string | null;
-  url800?: string | null;
-  url320?: string | null;
-  // fallback single url if derivatives not exposed
-  url?: string | null;
+  url320: string | null;
+  url800: string | null;
+  url1600: string | null;
+
+  // extras used by PhotoCard/ProductPhotosTab
+  url: string | null;        // generic fallback url for img src
+  deletedAt: string | null;  // soft-delete marker (server may omit; default null)
+  position: number;          // UI sort index (always provided by mapper)
 };
 
-export function listProductPhotos(productId: number) {
-  return get<{ items: ProductPhoto[] }>(`/vendor/products/${productId}/photos`);
+/** List photos via product detail (expects server to include product.photos) */
+export async function listProductPhotos(
+  productId: number
+): Promise<{ data: { items: ProductPhoto[] }; error?: string }> {
+  try {
+    // Server getProduct returns: { product: { photos: {id,isPrimary,url320,url800,url1600}[] } }
+    const res = await get<{ product: { photos?: Partial<ProductPhoto>[] } }>(`/products/${productId}`);
+
+    // Support ApiResult<T> or raw T
+    const payload: any = (res as any)?.data ?? res;
+    const photos: ProductPhoto[] = (payload?.product?.photos ?? []).map(
+      (p: Partial<ProductPhoto>, idx: number): ProductPhoto => {
+        const url = p.url1600 ?? p.url800 ?? p.url320 ?? p.url ?? null;
+        return {
+          id: Number(p.id!),
+          isPrimary: Boolean(p.isPrimary),
+          url320: (p.url320 ?? null) as any,
+          url800: (p.url800 ?? null) as any,
+          url1600: (p.url1600 ?? null) as any,
+          url,                                // fallback used by PhotoCard
+          deletedAt: (p as any).deletedAt ?? null,
+          position: (p as any).position ?? idx, // ensure it's always a number
+        };
+      }
+    );
+
+    return { data: { items: photos } };
+  } catch (e: any) {
+    // Keep the shape consistent with your component’s destructure
+    return { data: { items: [] }, error: e?.message ?? 'Failed to load photos' };
+  }
 }
 
-export function reorderProductPhotos(productId: number, photoIdsInOrder: number[]) {
-  return put<{ ok: true }, { ids: number[] }>(
-    `/vendor/products/${productId}/photos/reorder`,
-    { ids: photoIdsInOrder }
-  );
+/** Reorder photos by array of photo IDs (primary handled separately) */
+export function reorderProductPhotos(productId: number, orderedIds: number[]) {
+  return post<{ ok: true }, { order: number[] }>(`/products/${productId}/images/reorder`, {
+    order: orderedIds,
+  });
 }
 
+/** Mark a photo as primary */
 export function setPrimaryProductPhoto(productId: number, photoId: number) {
-  return post<{ ok: true }, {}>(`/vendor/products/${productId}/photos/${photoId}/primary`, {});
+  return post<{ ok: true }, {}>(`/products/${productId}/images/${photoId}/primary`, {});
 }
 
+/** Soft-delete a photo */
 export function softDeleteProductPhoto(productId: number, photoId: number) {
-  return put<{ ok: true }, {}>(`/vendor/products/${productId}/photos/${photoId}/delete`, {});
+  return del<{ ok: true }>(`/products/${productId}/images/${photoId}`);
 }
 
+/** Restore a previously soft-deleted photo */
 export function restoreProductPhoto(productId: number, photoId: number) {
-  return put<{ ok: true }, {}>(`/vendor/products/${productId}/photos/${photoId}/restore`, {});
+  return post<{ ok: true }, {}>(`/products/${productId}/images/${photoId}/restore`, {});
 }
