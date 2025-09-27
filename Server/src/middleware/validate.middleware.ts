@@ -17,7 +17,8 @@ function toValidationResponse(err: ZodError): ValidationErrorResponse {
   return { ok: false, code: 'VALIDATION_FAILED', errors };
 }
 
-function makeValidator<T>(pick: 'body' | 'query' | 'params', schema: ZodType<T>) {
+/** Generic validator for writable request bags (body, params). */
+function makeValidator<T>(pick: 'body' | 'params', schema: ZodType<T>) {
   return (req: Request, res: Response, next: NextFunction) => {
     const candidate = (req as any)[pick];
     const parsed = schema.safeParse(candidate);
@@ -34,10 +35,22 @@ export function validateBody<T>(schema: ZodType<T>) {
   return makeValidator('body', schema);
 }
 
-export function validateQuery<T>(schema: ZodType<T>) {
-  return makeValidator('query', schema);
-}
-
 export function validateParams<T>(schema: ZodType<T>) {
   return makeValidator('params', schema);
+}
+
+/**
+ * Special-case for Express 5: req.query is a read-only getter.
+ * Validate but DO NOT assign back to req.query; stash on res.locals.query instead.
+ */
+export function validateQuery<T>(schema: ZodType<T>) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const parsed = schema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json(toValidationResponse(parsed.error));
+    }
+    // Store validated query for controllers to read
+    res.locals.query = parsed.data;
+    return next();
+  };
 }
