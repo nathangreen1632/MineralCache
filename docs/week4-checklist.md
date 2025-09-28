@@ -108,3 +108,4 @@ _This plan builds directly on Week‑3. No linting, no Postman/Insomnia, no seed
 - Keep Stripe Connect transfers **off**; Week‑4 focuses on accounting snapshots only.
 - Continue using graceful JSON errors and structured logs (`requestId`, `userId`).
 - Skip seeds and linting as previously agreed.
+
