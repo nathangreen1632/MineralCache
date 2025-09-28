@@ -7,6 +7,10 @@ import { OrderItem } from '../../models/orderItem.model.js';
 import { Product } from '../../models/product.model.js';
 import { obs } from '../../services/observability.service.js';
 
+// ✅ NEW: email + buyer fetch
+import { sendOrderEmail } from '../../services/email.service.js';
+import { User } from '../../models/user.model.js';
+
 export async function createPaymentIntent(_req: Request, res: Response): Promise<void> {
   // Use the new checkout flow
   res.status(410).json({ error: 'Use /api/checkout/intent' });
@@ -34,6 +38,11 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
         const intentId = String(pi?.id || '');
         if (!intentId) break;
 
+        // We'll capture these to send email after the transaction commits.
+        let paidOrderId: number | null = null;
+        let paidOrderNumber: string | null = null;
+        let buyerUserId: number | null = null;
+
         await sequelize.transaction(async (t) => {
           const order = await Order.findOne({
             where: { paymentIntentId: intentId },
@@ -60,9 +69,51 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
             );
           }
 
+          // Stash for post-commit email
+          paidOrderId = Number(order.id);
+
+// Safely read optional order number without requiring it on the TS model
+          const rawOrderNumber =
+            (order as any)?.orderNumber ??
+            (typeof (order as any)?.get === 'function' ? (order as any).get('orderNumber') : undefined) ??
+            (typeof (order as any)?.get === 'function' ? (order as any).get('order_number') : undefined) ??
+            null;
+
+          paidOrderNumber = typeof rawOrderNumber === 'string' && rawOrderNumber.length > 0
+            ? rawOrderNumber
+            : null;
+
+          buyerUserId = Number((order as any).buyerUserId ?? order.get?.('buyerUserId'));
+
           // ✅ Observability: order paid
           obs.orderPaid(req, Number(order.id), intentId);
         });
+
+        // Send order confirmation email (post-commit; never blocks webhook success)
+        if (paidOrderId && buyerUserId) {
+          try {
+            const buyer = await User.findByPk(buyerUserId);
+            if (buyer?.email) {
+              const items = await OrderItem.findAll({ where: { orderId: paidOrderId } });
+              const itemsBrief = items
+                .map((i) => {
+                  const qty = i.quantity;
+                  return `• ${i.title} ×${qty}`;
+                })
+                .join('<br/>');
+
+              await sendOrderEmail('order_paid', {
+                orderId: paidOrderId,
+                orderNumber: paidOrderNumber,
+                buyer: { email: buyer.email, name: (buyer as any)?.fullName ?? null },
+                itemsBrief,
+              });
+            }
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn('[webhook.email.order_paid] failed', err);
+          }
+        }
 
         break;
       }
@@ -122,7 +173,6 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
         }
         break;
       }
-
 
       case 'charge.refunded': {
         const charge = event.data.object as any;
