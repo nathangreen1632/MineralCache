@@ -22,6 +22,10 @@ export class AdminSettings extends Model<
   declare ship_free_threshold_cents: number | null;
   declare ship_handling_cents: number | null;
 
+  // NEW: outbound email + branding
+  declare emailFrom: string | null;
+  declare brandName: string | null;
+
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 }
@@ -36,6 +40,7 @@ if (!sequelize) {
   AdminSettings.init(
     {
       id: { type: DataTypes.SMALLINT, primaryKey: true, defaultValue: 1 },
+
       commission_bps: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 800 },
       min_fee_cents: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 75 },
       stripe_enabled: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
@@ -45,6 +50,10 @@ if (!sequelize) {
       ship_per_item_cents: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       ship_free_threshold_cents: { type: DataTypes.INTEGER, allowNull: true },
       ship_handling_cents: { type: DataTypes.INTEGER, allowNull: true },
+
+      // NEW fields (stored as snake_case columns)
+      emailFrom: { type: DataTypes.STRING, allowNull: true, field: 'email_from' },
+      brandName: { type: DataTypes.STRING, allowNull: true, field: 'brand_name' },
 
       createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
       updatedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
