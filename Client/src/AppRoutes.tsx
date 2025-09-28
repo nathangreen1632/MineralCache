@@ -23,6 +23,8 @@ import AdminSettings from './pages/admin/AdminSettings';
 // Vendor product CRUD
 import ProductCreate from './pages/products/ProductCreate';
 import ProductEdit from './pages/products/ProductEdit';
+import VendorProductsPage from './pages/vendor/VendorProductsPage';
+import VendorOrdersPage from './pages/vendor/VendorOrdersPage';
 
 // Cart & Checkout
 import CartPage from './pages/cart/CartPage';
@@ -65,6 +67,8 @@ export default function AppRoutes(): React.ReactElement {
         {/* Vendor */}
         <Route path="vendor/apply" element={<VendorApply />} />
         <Route path="vendor/dashboard" element={<VendorDashboard />} />
+        <Route path="vendor/products" element={<VendorProductsPage />} />
+        <Route path="vendor/orders" element={<VendorOrdersPage />} />
 
         {/* Admin */}
         <Route path="admin/vendor-apps" element={<AdminVendorApps />} />
