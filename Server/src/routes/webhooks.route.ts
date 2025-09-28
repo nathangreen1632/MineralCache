@@ -1,6 +1,6 @@
 // Server/src/routes/webhooks.route.ts
 import { Router, raw } from 'express';
-import { stripeWebhook } from '../controllers/payments.controller.js';
+import { stripeWebhook } from '../controllers/webhooks/stripe.controller.js';
 
 const router: Router = Router();
 

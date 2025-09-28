@@ -12,18 +12,28 @@ import ProductDetail from './pages/products/ProductDetail';
 
 // Vendor
 import VendorApply from './pages/VendorApply';
-import VendorDashboard from './pages/VendorDashboard';
+import VendorDashboard from './pages/vendor/VendorDashboard';
 
 // Admin
 import AdminVendorApps from './pages/admin/AdminVendorApps';
+import AdminOrders from './pages/admin/AdminOrders';
+import AdminOrderDetail from './pages/admin/AdminOrderDetail';
+import AdminSettings from './pages/admin/AdminSettings';
 
 // Vendor product CRUD
 import ProductCreate from './pages/products/ProductCreate';
 import ProductEdit from './pages/products/ProductEdit';
+import VendorProductsPage from './pages/vendor/VendorProductsPage';
+import VendorOrdersPage from './pages/vendor/VendorOrdersPage';
 
 // Cart & Checkout
 import CartPage from './pages/cart/CartPage';
 import CheckoutPage from './pages/cart/CheckoutPage';
+
+// Orders
+import OrderConfirmationPage from './pages/orders/OrderConfirmationPage';
+import MyOrdersPage from './pages/orders/MyOrdersPage';
+import OrderDetailPage from './pages/orders/OrderDetailPage';
 
 // Age gate banner (mounted globally)
 import AgeGateNotice from './components/AgeGateNotice';
@@ -49,12 +59,22 @@ export default function AppRoutes(): React.ReactElement {
         <Route path="cart" element={<CartPage />} />
         <Route path="checkout" element={<CheckoutPage />} />
 
+        {/* Orders */}
+        <Route path="orders/confirmation" element={<OrderConfirmationPage />} />
+        <Route path="account/orders" element={<MyOrdersPage />} />
+        <Route path="account/orders/:id" element={<OrderDetailPage />} />
+
         {/* Vendor */}
         <Route path="vendor/apply" element={<VendorApply />} />
         <Route path="vendor/dashboard" element={<VendorDashboard />} />
+        <Route path="vendor/products" element={<VendorProductsPage />} />
+        <Route path="vendor/orders" element={<VendorOrdersPage />} />
 
         {/* Admin */}
         <Route path="admin/vendor-apps" element={<AdminVendorApps />} />
+        <Route path="admin/orders" element={<AdminOrders />} />
+        <Route path="admin/orders/:id" element={<AdminOrderDetail />} />
+        <Route path="admin/settings" element={<AdminSettings />} />
 
         {/* Vendor product CRUD */}
         <Route path="products/new" element={<ProductCreate />} />

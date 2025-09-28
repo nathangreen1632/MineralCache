@@ -1,14 +1,70 @@
 // Server/src/services/stripe.service.ts
 import Stripe from 'stripe';
 
-const secret = process.env.STRIPE_SECRET_KEY || '';
-export const stripeEnabled = secret.length > 0;
+// ---------- Feature flag + key detection
+
+const FLAG = String(process.env.STRIPE_ENABLED ?? '').trim().toLowerCase();
+export const stripeFeatureEnabled =
+  FLAG === '1' || FLAG === 'true' || FLAG === 'yes' || FLAG === 'on';
+
+// Backwards-compat: preserve the old name for existing imports
+export const stripeEnabled = stripeFeatureEnabled;
+
+const secret = String(process.env.STRIPE_SECRET_KEY ?? '').trim();
 
 let stripe: Stripe | null = null;
-if (stripeEnabled) {
-  // keep your pinned version
-  stripe = new Stripe(secret, { apiVersion: '2025-08-27.basil', maxNetworkRetries: 2 });
+
+/** Initialize Stripe client ONLY if feature flag is on and key present */
+if (stripeFeatureEnabled && secret.length > 0) {
+  // Keep your pinned API version
+  stripe = new Stripe(secret, {
+    apiVersion: '2025-08-27.basil',
+    maxNetworkRetries: 2,
+  });
 }
+
+/** Shape for Stripe readiness (used by health/admin UI) */
+export type StripeStatus = {
+  enabled: boolean;
+  ready: boolean;
+  missing: string[];
+  mode: 'test' | 'live' | 'disabled';
+};
+
+/** Health helper for /health */
+export function getStripeStatus(): StripeStatus {
+  const enabled = stripeFeatureEnabled;
+  const hasSecret = secret.length > 0;
+  const missing: string[] = [];
+
+  if (enabled && !hasSecret) missing.push('STRIPE_SECRET_KEY');
+  if (enabled && !process.env.STRIPE_WEBHOOK_SECRET) missing.push('STRIPE_WEBHOOK_SECRET');
+
+  let mode: StripeStatus['mode'] = 'disabled';
+  if (enabled) {
+    mode = secret.startsWith('sk_live_') ? 'live' : 'test';
+  }
+
+  const ready = enabled ? missing.length === 0 && !!stripe : false;
+
+  return {
+    enabled,
+    ready,
+    missing,
+    mode,
+  };
+}
+
+/** Hard fail at boot if STRIPE_ENABLED=true but required keys are missing */
+export function assertStripeAtBoot() {
+  const status = getStripeStatus();
+  if (status.enabled && !status.ready) {
+    const list = status.missing.length > 0 ? ` Missing: ${status.missing.join(', ')}` : '';
+    throw new Error(`Stripe ENABLED but not READY.${list}`);
+  }
+}
+
+// ---------- Core PaymentIntent creation
 
 export async function createPaymentIntent(args: {
   amountCents: number;
@@ -17,10 +73,14 @@ export async function createPaymentIntent(args: {
   metadata?: Record<string, string>;
   /** optional idempotency key for retried submits */
   idempotencyKey?: string;
-}): Promise<{ ok: true; clientSecret: string } | { ok: false; clientSecret: null; error: string }> {
-  if (!stripeEnabled || !stripe) {
-    return { ok: false, clientSecret: null, error: 'Payments disabled' };
-  }
+}): Promise<
+  | { ok: true; clientSecret: string; intentId: string }
+  | { ok: false; clientSecret: null; error: string }
+> {
+  const status = getStripeStatus();
+  if (!status.enabled) return { ok: false, clientSecret: null, error: 'Payments disabled' };
+  if (!status.ready || !stripe) return { ok: false, clientSecret: null, error: 'Payments not ready' };
+
   try {
     const options: Stripe.RequestOptions | undefined = args.idempotencyKey
       ? { idempotencyKey: args.idempotencyKey }
@@ -28,28 +88,48 @@ export async function createPaymentIntent(args: {
 
     const pi = await stripe.paymentIntents.create(
       {
-        amount: Math.trunc(args.amountCents),
-        currency: (args.currency || 'usd').toLowerCase(),
+        amount: Math.round(Number(args.amountCents || 0)),
+        currency: (args.currency ?? 'usd').toLowerCase(),
+        // Connect application fees are intentionally NOT used yet (flag off).
+        // Carry platform fee and other info in metadata for webhook reconciliation.
+        metadata: args.metadata ?? {},
+        // Allow 3DS when required
         automatic_payment_methods: { enabled: true },
-        ...(args.metadata ? { metadata: args.metadata } : {}),
       },
       options
     );
 
-    if (!pi.client_secret) return { ok: false, clientSecret: null, error: 'No client secret' };
-    return { ok: true, clientSecret: pi.client_secret };
+    if (!pi.client_secret) {
+      return { ok: false, clientSecret: null, error: 'No client secret returned' };
+    }
+    return { ok: true, clientSecret: pi.client_secret, intentId: pi.id };
   } catch (e: any) {
-    return { ok: false, clientSecret: null, error: e?.message || 'Stripe error' };
+    return { ok: false, clientSecret: null, error: e?.message || 'Failed to create PaymentIntent' };
   }
 }
 
-// ---------- Stripe Connect helpers
+// ---------- Webhook verification
+
+export function verifyStripeWebhook(rawBody: Buffer, sig: string | null) {
+  const status = getStripeStatus();
+  if (!status.enabled || !status.ready || !stripe) throw new Error('Stripe disabled');
+
+  const whSecret = String(process.env.STRIPE_WEBHOOK_SECRET ?? '').trim();
+  if (!whSecret) throw new Error('No STRIPE_WEBHOOK_SECRET');
+
+  return stripe.webhooks.constructEvent(rawBody, sig || '', whSecret);
+}
+
+// ---------- Stripe Connect helpers (kept for admin/vendor flows)
 
 export async function ensureVendorStripeAccount(vendor: {
   stripeAccountId?: string | null;
   displayName?: string | null;
 }): Promise<{ accountId: string | null; error?: string }> {
-  if (!stripeEnabled || !stripe) return { accountId: null, error: 'Stripe is not configured' };
+  const status = getStripeStatus();
+  if (!status.enabled || !status.ready || !stripe) {
+    return { accountId: null, error: 'Stripe is not configured' };
+  }
 
   const hasId = typeof vendor.stripeAccountId === 'string' && vendor.stripeAccountId.length > 0;
   if (hasId) return { accountId: String(vendor.stripeAccountId) };
@@ -70,7 +150,10 @@ export async function createAccountLink(args: {
   accountId: string;
   platformBaseUrl: string; // e.g., https://mineralcache.com
 }): Promise<{ url: string | null; error?: string }> {
-  if (!stripeEnabled || !stripe) return { url: null, error: 'Stripe is not configured' };
+  const status = getStripeStatus();
+  if (!status.enabled || !status.ready || !stripe) {
+    return { url: null, error: 'Stripe is not configured' };
+  }
   try {
     const link = await stripe.accountLinks.create({
       account: args.accountId,
@@ -84,11 +167,18 @@ export async function createAccountLink(args: {
   }
 }
 
-// ---------- Webhook verification
+// ---------- Charges / fees helpers
 
-export function verifyStripeWebhook(rawBody: Buffer, sig: string | null) {
-  if (!stripeEnabled || !stripe) throw new Error('Stripe disabled');
-  const whSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
-  if (!whSecret) throw new Error('No STRIPE_WEBHOOK_SECRET');
-  return stripe.webhooks.constructEvent(rawBody, sig || '', whSecret);
+/**
+ * Retrieve a Charge with its Balance Transaction expanded so you can read
+ * Stripe fees (`fee`) and `net` right inside the payload.
+ * Use from your webhook on `charge.succeeded`.
+ */
+export async function retrieveChargeWithBalanceTx(chargeId: string) {
+  const status = getStripeStatus();
+  if (!status.enabled || !status.ready || !stripe) {
+    throw new Error('Stripe disabled');
+  }
+  // `expand` lets us include the balance_transaction inline
+  return stripe.charges.retrieve(chargeId, { expand: ['balance_transaction'] });
 }

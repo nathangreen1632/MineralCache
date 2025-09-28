@@ -45,6 +45,10 @@ export class ProductImage extends Model<
   // Display order within a listing
   declare sortOrder: number;
 
+  // 🆕 Uploads polish
+  declare isPrimary: CreationOptional<boolean>;
+  declare deletedAt: Date | null;
+
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 }
@@ -87,6 +91,9 @@ if (!sequelize) {
 
       sortOrder: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
 
+      isPrimary: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+      deletedAt: { type: DataTypes.DATE, allowNull: true },
+
       createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
       updatedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
     },
@@ -94,10 +101,12 @@ if (!sequelize) {
       sequelize,
       tableName: 'product_images',
       modelName: 'ProductImage',
+      paranoid: true,
       indexes: [
         { fields: ['productId'] },
         { name: 'product_images_product_sort_idx', fields: ['productId', 'sortOrder'] },
         { name: 'product_images_product_created_idx', fields: ['productId', 'createdAt'] },
+        // NOTE: partial unique index for one primary per product is created in migration
       ],
     }
   );

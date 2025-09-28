@@ -1,16 +1,24 @@
 // Server/src/controllers/products.controller.ts
 import type { Request, Response } from 'express';
-import { Op, col, fn, literal, where, type Order } from 'sequelize';
+import { db } from '../models/sequelize.js';
+import { Op, col, fn, literal, where, type Order, type Transaction } from 'sequelize';
 import { z, type ZodError } from 'zod';
 import { Product } from '../models/product.model.js';
 import { Vendor } from '../models/vendor.model.js';
-import { ProductImage } from '../models/productImage.model.js'; // ✅ NEW: for per-listing quota
+import { ProductImage } from '../models/productImage.model.js';
 import {
   createProductSchema,
   updateProductSchema,
   listProductsQuerySchema,
   productIdParamSchema,
 } from '../validation/product.schema.js';
+import {
+  productIdParam as productImageProductIdParam,
+  imageIdParam,
+  reorderImagesSchema,
+} from '../validation/productImage.schema.js';
+
+type ProductListQuery = z.infer<typeof listProductsQuerySchema>;
 
 /** ---------------------------------------------
  * Zod error -> minimal stable details (no deprecated APIs)
@@ -25,6 +33,18 @@ function zDetails(err: ZodError) {
       code: i.code,
     })),
   };
+}
+
+// Helper: vendor ownership for a specific product
+async function assertVendorOwnsProduct(
+  productId: number,
+  userId: number,
+  role: string
+): Promise<boolean> {
+  if (role === 'admin') return true;
+  if (role !== 'vendor') return false;
+  const p = await Product.findOne({ where: { id: productId }, attributes: ['id', 'vendorId'] });
+  return !!p && Number((p as any).vendorId) === Number(userId);
 }
 
 /** ---------------------------------------------
@@ -270,18 +290,49 @@ export async function getProduct(req: Request, res: Response): Promise<void> {
   }
 
   try {
+    const id = Number(idParsed.data.id);
+
     const product = await Product.findOne({
-      where: { id: idParsed.data.id, archivedAt: { [Op.is]: null } as any },
+      where: { id, archivedAt: { [Op.is]: null } as any },
     });
     if (!product) {
       res.status(404).json({ error: 'Not found' });
       return;
     }
-    res.json({ product });
+
+    // List images: primary first, then sort order, then id; hide soft-deleted (paranoid: true)
+    const images = await ProductImage.findAll({
+      where: { productId: id },
+      paranoid: true,
+      order: [
+        ['isPrimary', 'DESC'],
+        ['sortOrder', 'ASC'],
+        ['id', 'ASC'],
+      ],
+    });
+
+    const photos = images.map((img: any) => ({
+      id: Number(img.id),
+      isPrimary: Boolean(img.isPrimary),
+      url320: img.url320 ?? null,
+      url800: img.url800 ?? null,
+      url1600: img.url1600 ?? null,
+    }));
+
+    const json = product.toJSON() as Record<string, unknown>;
+    (json as any).photos = photos;
+
+    // Convenience: a single hero image for UIs that want it
+    const primary = photos.find((p) => p.isPrimary);
+    (json as any).primaryImageUrl =
+      primary?.url1600 ?? primary?.url800 ?? primary?.url320 ?? null;
+
+    res.json({ product: json });
   } catch (e: any) {
     res.status(500).json({ error: 'Failed to load product', detail: e?.message });
   }
 }
+
 
 /** ---------------------------------------------
  * Catalog list — filters & sorting (effective price, size range, etc.)
@@ -301,10 +352,15 @@ function effectivePriceExpr(nowIso: string) {
 }
 
 export async function listProducts(req: Request, res: Response): Promise<void> {
-  const parsed = listProductsQuerySchema.safeParse(req.query);
-  if (!parsed.success) {
-    res.status(400).json({ error: 'Invalid query', details: zDetails(parsed.error) });
-    return;
+  // ✅ Prefer the validated query stashed by validateQuery(); fallback to parsing once if absent.
+  let q: ProductListQuery | null = (res.locals.query as ProductListQuery) ?? null;
+  if (!q) {
+    const parsed = listProductsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid query', details: zDetails(parsed.error) });
+      return;
+    }
+    q = parsed.data;
   }
 
   try {
@@ -327,7 +383,7 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       // Back-compat (deprecated)
       minCents,
       maxCents,
-    } = parsed.data as any;
+    } = q as any;
 
     const nowIso = new Date().toISOString();
     const andClauses: any[] = [{ archivedAt: { [Op.is]: null } }];
@@ -516,4 +572,180 @@ export async function attachImages(req: Request, res: Response): Promise<void> {
     existingCount,
     files: responseFiles,
   });
+}
+
+// POST /products/:id/images/:imageId/primary
+export async function setPrimaryImage(req: Request, res: Response) {
+  try {
+    const { id } = productImageProductIdParam.parse(req.params);
+    const { imageId } = imageIdParam.parse(req.params);
+    const user = (req.session as any)?.user;
+
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const owns = await assertVendorOwnsProduct(id, user.id, user.role);
+    if (!owns) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const sequelize = db.instance();
+    if (!sequelize) {
+      res.status(500).json({ error: 'Database not configured' });
+      return;
+    }
+
+    await sequelize.transaction(async (tx: Transaction) => {
+      // Ensure image belongs to product (paranoid true → excludes soft-deleted)
+      const img = await ProductImage.findOne({
+        where: { id: imageId, productId: id },
+        transaction: tx,
+        paranoid: true,
+      });
+      if (!img) throw new Error('Image not found for product');
+
+      // Clear other primaries, set this one primary
+      await ProductImage.update(
+        { isPrimary: false },
+        { where: { productId: id }, transaction: tx, paranoid: false }
+      );
+      await ProductImage.update(
+        { isPrimary: true },
+        { where: { id: imageId }, transaction: tx, paranoid: false }
+      );
+    });
+
+    res.json({ ok: true });
+  } catch (e: any) {
+    const msg = e?.message || 'Failed to set primary image';
+    res.status(400).json({ error: msg });
+  }
+}
+
+// POST /products/:id/images/reorder
+export async function reorderImages(req: Request, res: Response) {
+  try {
+    const { id } = productImageProductIdParam.parse(req.params);
+    const body = reorderImagesSchema.parse(req.body);
+    const user = (req.session as any)?.user;
+
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const owns = await assertVendorOwnsProduct(id, user.id, user.role);
+    if (!owns) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    // Verify all provided images belong to this product and are not soft-deleted
+    const imgs = await ProductImage.findAll({ where: { productId: id } }); // paranoid default
+    const validIds = new Set(imgs.map((i) => Number(i.id)));
+    for (const imageId of body.order) {
+      if (!validIds.has(Number(imageId))) {
+        res.status(400).json({ error: `Image ${imageId} does not belong to product ${id}` });
+        return;
+      }
+    }
+
+    const sequelize = db.instance();
+    if (!sequelize) {
+      res.status(500).json({ error: 'Database not configured' });
+      return;
+    }
+
+    await sequelize.transaction(async (tx: Transaction) => {
+      for (let i = 0; i < body.order.length; i += 1) {
+        const imageId = body.order[i];
+        await ProductImage.update({ sortOrder: i }, { where: { id: imageId }, transaction: tx });
+      }
+    });
+
+    res.json({ ok: true });
+  } catch (e: any) {
+    const msg = e?.message || 'Failed to reorder images';
+    res.status(400).json({ error: msg });
+  }
+}
+
+// DELETE /products/:id/images/:imageId (soft delete)
+export async function softDeleteImage(req: Request, res: Response) {
+  try {
+    const { id } = productImageProductIdParam.parse(req.params);
+    const { imageId } = imageIdParam.parse(req.params);
+    const user = (req.session as any)?.user;
+
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const owns = await assertVendorOwnsProduct(id, user.id, user.role);
+    if (!owns) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const sequelize = db.instance();
+    if (!sequelize) {
+      res.status(500).json({ error: 'Database not configured' });
+      return;
+    }
+
+    await sequelize.transaction(async (tx: Transaction) => {
+      const img = await ProductImage.findOne({
+        where: { id: imageId, productId: id },
+        transaction: tx,
+        paranoid: true,
+      });
+      if (!img) throw new Error('Image not found for product');
+
+      // If primary, clear primary first to satisfy the partial unique index
+      if ((img as any).isPrimary === true) {
+        await ProductImage.update({ isPrimary: false }, { where: { id: imageId }, transaction: tx });
+      }
+      await (img as any).destroy({ transaction: tx }); // paranoid → sets deletedAt
+    });
+
+    res.status(204).send();
+  } catch (e: any) {
+    const msg = e?.message || 'Failed to delete image';
+    res.status(400).json({ error: msg });
+  }
+}
+
+// POST /products/:id/images/:imageId/restore
+export async function restoreImage(req: Request, res: Response) {
+  try {
+    const { id } = productImageProductIdParam.parse(req.params);
+    const { imageId } = imageIdParam.parse(req.params);
+    const user = (req.session as any)?.user;
+
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const owns = await assertVendorOwnsProduct(id, user.id, user.role);
+    if (!owns) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const img = await ProductImage.findOne({
+      where: { id: imageId, productId: id },
+      paranoid: false,
+    });
+    if (!img) {
+      res.status(404).json({ error: 'Image not found' });
+      return;
+    }
+
+    await (img as any).restore(); // paranoid restore
+    res.json({ ok: true });
+  } catch (e: any) {
+    const msg = e?.message || 'Failed to restore image';
+    res.status(400).json({ error: msg });
+  }
 }

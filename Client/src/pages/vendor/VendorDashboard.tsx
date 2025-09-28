@@ -1,6 +1,12 @@
 // Client/src/pages/VendorDashboard.tsx
-import {useEffect, useMemo, useState} from 'react';
-import {createStripeOnboardingLink, getMyVendor, type VendorMeResponse} from '../api/vendor';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  createStripeOnboardingLink,
+  getMyVendorFull,
+  type VendorMeResponse,
+} from '../../api/vendor.ts';
+import VendorProductsTable from '../../components/vendor/VendorProductsTable.tsx';
+import VendorOrdersTab from '../../components/vendor/VendorOrdersTab.tsx';
 
 type LoadState =
   | { kind: 'idle' }
@@ -33,21 +39,21 @@ function StatusChip({ status }: Readonly<{ status: 'pending' | 'approved' | 'rej
 export default function VendorDashboard() {
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<'products' | 'orders'>('products');
+
   const vendor = state.kind === 'loaded' ? state.data : null;
 
   useEffect(() => {
     let alive = true;
     (async () => {
       setState({ kind: 'loading' });
-      try {
-        const res = await getMyVendor();
-        if (!alive) return;
-        setState({ kind: 'loaded', data: res.vendor ?? null });
-      } catch (e: any) {
-        const msg = e?.detail?.error || e?.message || 'Failed to load vendor';
-        if (!alive) return;
-        setState({ kind: 'error', message: String(msg) });
+      const { data, error } = await getMyVendorFull();
+      if (!alive) return;
+      if (error) {
+        setState({ kind: 'error', message: error });
+        return;
       }
+      setState({ kind: 'loaded', data: data?.vendor ?? null });
     })();
     return () => {
       alive = false;
@@ -62,20 +68,20 @@ export default function VendorDashboard() {
   async function handleStripeOnboarding() {
     setBusy(true);
     try {
-      const res = await createStripeOnboardingLink();
-      if (res.enabled && res.onboardingUrl) {
-        window.location.assign(res.onboardingUrl);
+      const { data, error } = await createStripeOnboardingLink();
+      if (error) {
+        alert(error);
         return;
       }
-      if (!res.enabled) {
-        alert(res.message ?? 'Stripe is not configured yet.');
+      if (data?.enabled && data.onboardingUrl) {
+        window.location.assign(data.onboardingUrl);
         return;
       }
-      // enabled but error
-      alert((res as any).error ?? 'Unable to start onboarding.');
-    } catch (e: any) {
-      const msg = e?.detail?.error || e?.message || 'Onboarding failed';
-      alert(String(msg));
+      if (data && !data.enabled) {
+        alert(data.message ?? 'Stripe is not configured yet.');
+        return;
+      }
+      alert('Unable to start onboarding.');
     } finally {
       setBusy(false);
     }
@@ -229,67 +235,30 @@ export default function VendorDashboard() {
         </div>
       )}
 
-      {/* Shell sections we’ll flesh out in Week-3 */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <section className="rounded-xl border p-4" style={cardStyle}>
-          <h2 className="mb-2 text-lg font-semibold" style={mutedText}>
-            Listings
-          </h2>
-          <p className="text-sm" style={subtleText}>
-            Quick links to create and manage products.
-          </p>
-          <div className="mt-3 flex gap-2">
-            <a
-              href="/products/new"
-              className="inline-flex items-center rounded-lg px-3 py-2 text-sm font-semibold"
-              style={{
-                background: 'var(--theme-button)',
-                color: 'var(--theme-text-white)',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--theme-button-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--theme-button)')}
-            >
-              New Product
-            </a>
-            <a
-              href="/vendor/products"
-              className="inline-flex items-center rounded-lg px-3 py-2 text-sm font-medium ring-1 ring-inset"
-              style={{
-                ...borderOnly,
-                background: 'var(--theme-surface)',
-                color: 'var(--theme-text)',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--theme-card-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--theme-surface)')}
-            >
-              Manage Products
-            </a>
-          </div>
-        </section>
-
-        <section className="rounded-xl border p-4" style={cardStyle}>
-          <h2 className="mb-2 text-lg font-semibold" style={mutedText}>
+      {/* Vendor Dashboard v2 — Tabs */}
+      <div className="mt-2 rounded-2xl border" style={cardStyle}>
+        <div className="flex gap-2 border-b p-2" style={{ borderColor: 'var(--theme-border)' }}>
+          <button
+            type="button"
+            onClick={() => setTab('products')}
+            className="inline-flex rounded-xl px-3 py-2 font-semibold"
+            style={{ background: tab === 'products' ? 'var(--theme-card-alt)' : 'transparent' }}
+          >
+            Products
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('orders')}
+            className="inline-flex rounded-xl px-3 py-2 font-semibold"
+            style={{ background: tab === 'orders' ? 'var(--theme-card-alt)' : 'transparent' }}
+          >
             Orders
-          </h2>
-          <p className="text-sm" style={subtleText}>
-            View recent orders once sales start rolling in.
-          </p>
-          <div className="mt-3">
-            <a
-              href="/vendor/orders"
-              className="inline-flex items-center rounded-lg px-3 py-2 text-sm font-medium ring-1 ring-inset"
-              style={{
-                ...borderOnly,
-                background: 'var(--theme-surface)',
-                color: 'var(--theme-text)',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--theme-card-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--theme-surface)')}
-            >
-              View Orders
-            </a>
-          </div>
-        </section>
+          </button>
+        </div>
+
+        <div className="p-4">
+          {tab === 'products' ? <VendorProductsTable /> : <VendorOrdersTab />}
+        </div>
       </div>
     </div>
   );

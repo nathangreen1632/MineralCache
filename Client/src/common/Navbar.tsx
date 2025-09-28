@@ -12,6 +12,8 @@ import {
   UserPlus,
   ChevronDown,
   LogIn, // ✅ added
+  Package, // ✅ My Orders + Vendor Orders icon
+  Settings, // ✅ Admin Settings icon
 } from 'lucide-react';
 import { useAuthStore } from '../stores/useAuthStore'; // ✅ added
 
@@ -127,13 +129,23 @@ export default function Navbar(): React.ReactElement {
           <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
         </NavGroup>
 
+        {/* Vendor tools (temporary direct links for quick access) */}
         <SideNavLink to="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard} />
+        <SideNavLink to="/vendor/products" label="Vendor · Products" Icon={Store} />
+        <SideNavLink to="/vendor/orders" label="Vendor · Orders" Icon={Package} />
         <SideNavLink to="/vendor/apply" label="Apply as Vendor" Icon={UserPlus} />
+
+        {/* Admin */}
         <SideNavLink to="/admin/vendor-apps" label="Admin · Vendor Apps" Icon={ClipboardList} />
+        <SideNavLink to="/admin/orders" label="Admin · Orders" Icon={Package} />
+        <SideNavLink to="/admin/settings" label="Admin · Settings" Icon={Settings} />
 
         {/* Cart & Checkout */}
         <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
         <SideNavLink to="/checkout" label="Checkout" Icon={CreditCard} />
+
+        {/* Account */}
+        <SideNavLink to="/account/orders" label="My Orders" Icon={Package} />
 
         {/* ✅ Auth: show Sign in when no user is present */}
         {!user && <SideNavLink to="/login" label="Sign in" Icon={LogIn} />}

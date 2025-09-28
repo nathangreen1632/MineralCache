@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import { Op, fn, col, where as sqlWhere } from 'sequelize'; // fn/col/where kept
 import { User } from '../models/user.model.js';
 import { loginSchema, registerSchema, verify18Schema, normalizeDob } from '../validation/auth.schema.js';
+import { logInfo, logWarn } from '../services/log.service.js'; // ✅ NEW
 
 /** ------------------------------------------------------------------------
  * Error details serializer
@@ -13,6 +14,13 @@ function zDetails(err: ZodError) {
   const anyZ = z as any;
   if (typeof anyZ.treeifyError === 'function') return anyZ.treeifyError(err);
   return { formErrors: [err.message], fieldErrors: {} as Record<string, string[]> };
+}
+
+/** ------------------------------ Observability ctx --------------------------- */
+function obsCtx(req: Request) {
+  const ctx = (req as any).context || {};
+  const u = (req as any).user ?? (req.session as any)?.user ?? null;
+  return { requestId: ctx.requestId, userId: u?.id ?? null, ip: req.ip };
 }
 
 /** ------------------------------ Session helpers --------------------------- */
@@ -50,6 +58,7 @@ function isAdult(ymd: string): boolean {
 export async function register(req: Request, res: Response): Promise<void> {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
+    logWarn('auth.register.invalid_input', { ...obsCtx(req) }); // ✅
     res.status(400).json({ error: 'Invalid input', details: zDetails(parsed.error) });
     return;
   }
@@ -59,6 +68,7 @@ export async function register(req: Request, res: Response): Promise<void> {
 
   const existing = await User.findOne({ where: { email: { [Op.iLike]: normEmail } } });
   if (existing) {
+    logWarn('auth.register.email_in_use', { ...obsCtx(req) }); // ✅ (avoid logging raw email)
     res.status(409).json({ error: 'Email in use' });
     return;
   }
@@ -75,6 +85,8 @@ export async function register(req: Request, res: Response): Promise<void> {
     updatedAt: now,
   } as any);
 
+  logInfo('auth.register.created', { ...obsCtx(req), newUserId: Number(user.id) }); // ✅
+
   rotateSession(req);
   setSessionUser(req, {
     id: Number(user.id),
@@ -89,6 +101,7 @@ export async function register(req: Request, res: Response): Promise<void> {
 export async function login(req: Request, res: Response): Promise<void> {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
+    logWarn('auth.login.invalid_input', { ...obsCtx(req) }); // ✅
     res.status(400).json({ error: 'Invalid input', details: zDetails(parsed.error) });
     return;
   }
@@ -108,6 +121,7 @@ export async function login(req: Request, res: Response): Promise<void> {
   });
 
   if (!user) {
+    logWarn('auth.login.user_not_found', { ...obsCtx(req) }); // ✅
     res.status(401).json({ error: 'Invalid credentials' });
     return;
   }
@@ -126,6 +140,7 @@ export async function login(req: Request, res: Response): Promise<void> {
   }
 
   if (!pass) {
+    logWarn('auth.login.bad_password', { ...obsCtx(req), userId: Number(user.id) }); // ✅
     res.status(401).json({ error: 'Invalid credentials' });
     return;
   }
@@ -138,6 +153,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     email: user.email,
   });
 
+  logInfo('auth.login.success', { ...obsCtx(req), userId: Number(user.id) }); // ✅
   res.status(200).json({ ok: true });
 }
 
@@ -148,6 +164,7 @@ export async function login(req: Request, res: Response): Promise<void> {
 export async function me(req: Request, res: Response): Promise<void> {
   const sess = (req.session as any)?.user;
   if (!sess?.id) {
+    logWarn('auth.me.unauthorized', { ...obsCtx(req) }); // ✅
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
@@ -157,6 +174,7 @@ export async function me(req: Request, res: Response): Promise<void> {
   });
 
   if (!user) {
+    logWarn('auth.me.stale_session', { ...obsCtx(req), sessUserId: Number(sess.id) }); // ✅
     (req.session as any) = null;
     req.user = null as any;
     res.status(401).json({ error: 'Unauthorized' });
@@ -188,22 +206,26 @@ export async function me(req: Request, res: Response): Promise<void> {
 export async function verify18(req: Request, res: Response): Promise<void> {
   const u = (req.session as any)?.user;
   if (!u?.id) {
+    logWarn('auth.verify18.unauthorized', { ...obsCtx(req) }); // ✅
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
 
   const parsed = verify18Schema.safeParse(req.body);
   if (!parsed.success) {
+    logWarn('auth.verify18.invalid_input', { ...obsCtx(req), userId: Number(u.id) }); // ✅
     res.status(400).json({ error: 'Invalid input', details: zDetails(parsed.error) });
     return;
   }
 
   const ymd = normalizeDob(parsed.data);
   if (!ymd) {
+    logWarn('auth.verify18.invalid_dob', { ...obsCtx(req), userId: Number(u.id) }); // ✅
     res.status(400).json({ error: 'INVALID_DOB' });
     return;
   }
   if (!isAdult(ymd)) {
+    logWarn('auth.verify18.age_restriction', { ...obsCtx(req), userId: Number(u.id) }); // ✅
     res.status(400).json({ error: 'AGE_RESTRICTION' });
     return;
   }
@@ -214,11 +236,14 @@ export async function verify18(req: Request, res: Response): Promise<void> {
   (req.session as any) = { user: u };
   req.user = u;
 
+  logInfo('auth.verify18.verified', { ...obsCtx(req), userId: Number(u.id) }); // ✅
   res.json({ ok: true });
 }
 
 export async function logout(req: Request, res: Response): Promise<void> {
+  const prevId = (req.session as any)?.user?.id ?? null; // capture before rotate
   (req.session as any) = null;
   req.user = null as any;
+  logInfo('auth.logout', { ...obsCtx(req), userId: prevId }); // ✅
   res.status(204).end();
 }

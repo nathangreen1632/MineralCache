@@ -4,7 +4,7 @@ import { validateBody } from '../middleware/validate.middleware.js';
 import { loginSchema, registerSchema, verify18Schema } from '../validation/auth.schema.js';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { loginBackoffGuard } from '../middleware/loginBackoff.middleware.js';
-import { loginRateLimit } from '../middleware/rateLimit.middleware.js';
+import { loginRateLimit, registerLimiter, burstLimiter } from '../middleware/rateLimit.middleware.js';
 import {
   register as handleRegister,
   login as handleLogin,
@@ -16,7 +16,8 @@ import {
 const router: Router = Router();
 
 // POST /api/auth/register
-router.post('/register', validateBody(registerSchema), handleRegister);
+// ✅ order: window limiter → burst limiter → validate → handler
+router.post('/register', registerLimiter, burstLimiter, validateBody(registerSchema), handleRegister);
 
 // POST /api/auth/login
 // ✅ order: validate → rate-limit → backoff → controller

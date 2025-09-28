@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { listProducts, type ListQuery, type Product } from '../../api/products';
+import { searchProducts } from '../../api/search'; // 🔎 NEW
 
 function centsToUsd(cents?: number | null): string {
   const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
@@ -18,6 +19,66 @@ function isSaleActive(p: Product, now = new Date()): boolean {
 function effectivePriceCents(p: Product): number {
   if (isSaleActive(p)) return p.salePriceCents as number;
   return p.priceCents;
+}
+
+/** Escape user text for safe RegExp use */
+function escapeRegExp(str: string) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Highlight all tokens from the query; case-insensitive.
+ * Uses substring start/end offsets for keys (no array index keys).
+ */
+function highlight(text: string, q: string): React.ReactNode {
+  if (!q?.trim()) return text;
+
+  const tokens = Array.from(new Set(q.trim().split(/\s+/g).filter(Boolean)));
+  if (tokens.length === 0) return text;
+
+  const re = new RegExp(tokens.map((t) => escapeRegExp(t)).join('|'), 'ig');
+
+  const out: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = re.exec(text)) != null) {
+    const start = match.index;
+    const end = start + match[0].length;
+
+    // plain chunk before match
+    if (start > lastIndex) {
+      out.push(
+        <span key={`t-${lastIndex}-${start}`}>{text.slice(lastIndex, start)}</span>
+      );
+    }
+
+    // highlighted match
+    out.push(
+      <mark
+        key={`h-${start}-${end}`}
+        style={{
+          background: 'var(--theme-pill-yellow)',
+          color: 'var(--theme-text)',
+          padding: '0 2px',
+          borderRadius: 3,
+        }}
+      >
+        {text.slice(start, end)}
+      </mark>
+    );
+
+    lastIndex = end;
+  }
+
+  // trailing plain chunk
+  if (lastIndex < text.length) {
+    out.push(
+      <span key={`t-${lastIndex}-${text.length}`}>{text.slice(lastIndex)}</span>
+    );
+  }
+
+  return out;
 }
 
 type LoadState =
@@ -46,13 +107,29 @@ export default function ProductList(): React.ReactElement {
   const [params, setParams] = useSearchParams();
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
 
-  // Parse URL → typed query (NEW keys: priceMinCents/priceMaxCents)
+  // 🔎 Debounced keyword search (persisted in query params)
+  const [inputQ, setInputQ] = useState<string>(params.get('q') ?? '');
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const next = new URLSearchParams(params);
+      if (inputQ.trim()) next.set('q', inputQ.trim());
+      else next.delete('q');
+      // reset paging when the query changes
+      next.set('page', '1');
+      setParams(next, { replace: true });
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputQ]);
+
+  // Parse URL → typed query (added `q`)
   const query: ListQuery = useMemo(() => {
     const pageRaw = Number(params.get('page') || 1);
     const pageSizeRaw = Number(params.get('pageSize') || 24);
     const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
     const pageSize = Number.isFinite(pageSizeRaw) && pageSizeRaw > 0 ? pageSizeRaw : 24;
 
+    const q = params.get('q') || undefined;
     const vendorSlug = params.get('vendorSlug') || undefined;
     const species = params.get('species') || undefined;
 
@@ -73,6 +150,7 @@ export default function ProductList(): React.ReactElement {
     return {
       page,
       pageSize,
+      q,
       vendorSlug,
       species,
       onSale,
@@ -106,20 +184,38 @@ export default function ProductList(): React.ReactElement {
       sort: (query.sort ?? 'newest') as SortValue,
       pageSize: String(query.pageSize ?? 24),
     });
-  }, [query]);
+    // keep search box in sync if URL changed externally
+    setInputQ(params.get('q') ?? '');
+  }, [query, params]);
 
-  // Fetch on query change
+  // Fetch on query change (route to search when q is present)
   useEffect(() => {
     let alive = true;
     (async () => {
       setState({ kind: 'loading' });
+
+      const qTerm = (params.get('q') ?? '').trim();
+
       try {
-        const { data, error, status } = await listProducts(query);
+        // If keyword present → /api/search/products; else → /api/products
+        const resp = qTerm
+          ? await searchProducts({
+            q: qTerm,
+            page: query.page,
+            pageSize: query.pageSize,
+            sort: query.sort,
+            vendorSlug: query.vendorSlug,
+          })
+          : await listProducts(query);
+
         if (!alive) return;
+
+        const { data, error, status } = resp;
         if (error || !data) {
           setState({ kind: 'error', message: error || `Failed (${status})` });
           return;
         }
+
         setState({
           kind: 'loaded',
           data: {
@@ -137,6 +233,7 @@ export default function ProductList(): React.ReactElement {
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
   function updateQuery(partial: Partial<ListQuery>) {
@@ -185,16 +282,27 @@ export default function ProductList(): React.ReactElement {
     color: 'var(--theme-text)',
   };
 
+  const qStr = params.get('q') ?? '';
+
   return (
     <section className="mx-auto max-w-6xl px-4 py-8 space-y-6">
       <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Catalog</h1>
 
-      {/* Filters */}
+      {/* Search + Filters */}
       <form
         onSubmit={submitFilters}
         className="rounded-xl border p-4 grid gap-3 md:grid-cols-12"
         style={card}
       >
+        {/* 🔎 Keyword search (debounced -> query param) */}
+        <input
+          className="md:col-span-4 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
+          placeholder="Search title/species/locality…"
+          value={inputQ}
+          onChange={(e) => setInputQ(e.target.value)}
+          aria-label="Search"
+        />
+
         <input
           className="md:col-span-3 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
           placeholder="Species"
@@ -208,14 +316,14 @@ export default function ProductList(): React.ReactElement {
           onChange={(e) => setForm((s) => ({ ...s, vendorSlug: e.target.value }))}
         />
         <input
-          className="md:col-span-2 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
+          className="md:col-span-1 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
           placeholder="Min ¢"
           inputMode="numeric"
           value={form.priceMinCents}
           onChange={(e) => setForm((s) => ({ ...s, priceMinCents: e.target.value }))}
         />
         <input
-          className="md:col-span-2 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
+          className="md:col-span-1 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
           placeholder="Max ¢"
           inputMode="numeric"
           value={form.priceMaxCents}
@@ -317,9 +425,13 @@ export default function ProductList(): React.ReactElement {
                   style={card}
                 >
                   <div className="h-36 w-full rounded bg-[var(--theme-card-alt)] mb-3" />
-                  <div className="truncate font-semibold">{p.title}</div>
+                  <div className="truncate font-semibold">
+                    {highlight(p.title, qStr)}
+                  </div>
                   {priceEl}
-                  <div className="text-xs opacity-70">{p.species}</div>
+                  <div className="text-xs opacity-70">
+                    {p.species ? highlight(p.species, qStr) : null}
+                  </div>
                 </Link>
               );
             })}

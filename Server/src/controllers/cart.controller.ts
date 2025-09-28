@@ -7,6 +7,7 @@ import { ensureAuthed, ensureAdult } from '../middleware/authz.middleware.js';
 import { Cart } from '../models/cart.model.js';
 import { Product } from '../models/product.model.js';
 import { updateCartSchema } from '../validation/cart.schema.js';
+import { computeVendorShippingByLines } from '../services/shipping.service.js';
 
 /** ---------------- Zod error helper (no deprecated APIs) ---------------- */
 function zDetails(err: ZodError) {
@@ -23,66 +24,140 @@ function zDetails(err: ZodError) {
 
 /** ---------------- Totals helper ----------------
  * Computes:
- * - subtotalCents = sum(priceCents * qty)
- * - shippingCents = flat per unique vendor (DEFAULT_SHIPPING_CENTS)
+ * - subtotalCents = sum(unitPrice * qty) (sale-aware if model exposes getEffectivePriceCents)
+ * - shippingCents = per-vendor via Shipping Rules (server-side, weight-aware)
  * - totalCents = subtotal + shipping
- * TODO(ship): allow per-vendor overrides from settings or vendor table
+ * - vendorShippingSnapshot = per-vendor snapshot suitable to persist on Order
  * ---------------------------------------------------------------------- */
-const DEFAULT_SHIPPING_CENTS = Number(process.env.DEFAULT_SHIPPING_CENTS ?? 0);
-
 async function computeTotals(items: Array<{ productId: number; quantity: number }>) {
   if (!items.length) {
+    return {
+      lines: [] as Array<{
+        productId: number;
+        vendorId: number;
+        title: string;
+        unitPriceCents: number;
+        quantity: number;
+        lineTotalCents: number;
+      }>,
+      vendors: [] as number[],
+      subtotalCents: 0,
+      shippingCents: 0,
+      totalCents: 0,
+      vendorShippingSnapshot: {} as Record<
+        string,
+        { cents: number; ruleId: number | null; label: string; params: any }
+      >,
+    };
+  }
+
+  const ids = [...new Set(items.map((i) => Number(i.productId)))].filter((n) =>
+    Number.isFinite(n)
+  );
+  if (ids.length === 0) {
     return {
       lines: [],
       vendors: [],
       subtotalCents: 0,
       shippingCents: 0,
       totalCents: 0,
+      vendorShippingSnapshot: {},
     };
   }
 
-  const ids = [...new Set(items.map((i) => i.productId))];
   const products = await Product.findAll({
     where: { id: { [Op.in]: ids }, archivedAt: { [Op.is]: null } as any },
-    attributes: ['id', 'vendorId', 'title', 'priceCents'],
+    attributes: ['id', 'vendorId', 'title', 'priceCents', 'salePriceCents'],
   });
 
   const byId = new Map(products.map((p) => [Number(p.id), p]));
+
   const lines: Array<{
     productId: number;
     vendorId: number;
     title: string;
-    priceCents: number;
+    unitPriceCents: number;
     quantity: number;
     lineTotalCents: number;
   }> = [];
 
-  const vendorSet = new Set<number>();
   let subtotalCents = 0;
 
+  // Group concrete Product instances per vendor for weight-aware shipping rules
+  const vendorGroups = new Map<number, Array<{ product: Product; quantity: number }>>();
+
   for (const row of items) {
-    const p = byId.get(row.productId);
+    const p = byId.get(Number(row.productId));
     if (!p) continue; // silently drop unknown/archived
-    const qty = row.quantity;
-    const price = (p as any).priceCents as number;
-    const line = price * qty;
-    subtotalCents += line;
-    vendorSet.add(Number((p as any).vendorId));
+
+    const qty = Math.max(0, Math.trunc(Number(row.quantity || 0)));
+    if (qty <= 0) continue;
+
+    // Prefer instance method if available; fall back to base price
+    let unitPrice = 0;
+    try {
+      // @ts-ignore optional instance method
+      unitPrice =
+        typeof (p as any).getEffectivePriceCents === 'function'
+          ? Number((p as any).getEffectivePriceCents())
+          : Number((p as any).priceCents || 0);
+    } catch {
+      unitPrice = Number((p as any).priceCents || 0);
+    }
+
+    const lineTotal = Math.round(unitPrice * qty);
+    subtotalCents += lineTotal;
+
+    const vendorId = Number((p as any).vendorId);
+    if (!vendorGroups.has(vendorId)) vendorGroups.set(vendorId, []);
+    vendorGroups.get(vendorId)!.push({ product: p, quantity: qty });
+
     lines.push({
-      productId: row.productId,
-      vendorId: Number((p as any).vendorId),
-      title: (p as any).title as string,
-      priceCents: price,
+      productId: Number(p.id),
+      vendorId,
+      title: String((p as any).title || ''),
+      unitPriceCents: unitPrice,
       quantity: qty,
-      lineTotalCents: line,
+      lineTotalCents: lineTotal,
     });
   }
 
-  const vendors = [...vendorSet];
-  const shippingCents = vendors.length * DEFAULT_SHIPPING_CENTS; // TODO(ship): per-vendor rates
-  const totalCents = subtotalCents + shippingCents;
+  // Per-vendor shipping via rules (vendor → global default → admin defaults → sane default)
+  const vendorShippingSnapshot: Record<
+    string,
+    { cents: number; ruleId: number | null; label: string; params: any }
+  > = {};
+  for (const [vendorId, groupItems] of vendorGroups.entries()) {
+    const { shippingCents, snapshot } = await computeVendorShippingByLines({
+      vendorId,
+      items: groupItems,
+    });
 
-  return { lines, vendors, subtotalCents, shippingCents, totalCents };
+    vendorShippingSnapshot[String(vendorId)] = {
+      cents: shippingCents,
+      ruleId: snapshot.ruleId,
+      label: snapshot.label,
+      params: {
+        baseCents: snapshot.baseCents,
+        perItemCents: snapshot.perItemCents,
+        perWeightCents: snapshot.perWeightCents,
+        minCents: snapshot.minCents,
+        maxCents: snapshot.maxCents,
+        freeThresholdCents: snapshot.freeThresholdCents,
+        source: snapshot.source,
+      },
+    };
+  }
+
+  const shippingCents = Object.values(vendorShippingSnapshot).reduce(
+    (sum, v) => sum + Number((v as any).cents || 0),
+    0
+  );
+
+  const totalCents = subtotalCents + shippingCents;
+  const vendors = [...vendorGroups.keys()];
+
+  return { lines, vendors, subtotalCents, shippingCents, totalCents, vendorShippingSnapshot };
 }
 
 /** ------------------------------------------------------------------------
@@ -104,6 +179,7 @@ export async function getCart(req: Request, res: Response): Promise<void> {
       shipping: totals.shippingCents,
       total: totals.totalCents,
     },
+    vendorShippingSnapshot: totals.vendorShippingSnapshot,
   });
 }
 
@@ -129,9 +205,9 @@ export async function putCart(req: Request, res: Response): Promise<void> {
   const now = new Date();
   const existing = await Cart.findOne({ where: { userId } });
   if (existing) {
-    existing.itemsJson = items;
-    existing.updatedAt = now;
-    await existing.save();
+    (existing as any).itemsJson = items;
+    (existing as any).updatedAt = now;
+    await (existing as any).save();
   } else {
     await Cart.create({
       userId,
@@ -149,6 +225,7 @@ export async function putCart(req: Request, res: Response): Promise<void> {
       shipping: totals.shippingCents,
       total: totals.totalCents,
     },
+    vendorShippingSnapshot: totals.vendorShippingSnapshot,
   });
 }
 
@@ -161,7 +238,7 @@ export async function checkout(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // TODO: compute real totals from the user’s cart — done here
+  // TODO: compute real totals from the user’s cart — done here (now rule-based)
   const userId = (req as any).user.id;
   const cart = await Cart.findOne({ where: { userId } });
   const items: Array<{ productId: number; quantity: number }> = (cart?.itemsJson as any) ?? [];
@@ -191,5 +268,6 @@ export async function checkout(req: Request, res: Response): Promise<void> {
       shipping: totals.shippingCents,
       total: totals.totalCents,
     },
+    vendorShippingSnapshot: totals.vendorShippingSnapshot,
   });
 }

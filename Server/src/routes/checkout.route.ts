@@ -1,11 +1,11 @@
 // Server/src/routes/checkout.route.ts
-import { Router } from 'express';
+import { Router, json } from 'express';
 import { require18Plus } from '../middleware/ageGate.middleware.js';
-import { createCheckout } from '../controllers/checkout.controller.js';
+import { createCheckoutIntent } from '../controllers/checkout.controller.js';
 
 const router: Router = Router();
 
-// POST /api/checkout
-router.post('/', require18Plus, createCheckout);
+// POST /api/checkout/intent
+router.post('/intent', require18Plus, json(), createCheckoutIntent);
 
 export default router;

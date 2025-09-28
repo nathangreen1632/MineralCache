@@ -10,13 +10,22 @@ import 'dotenv/config';
 import { buildSessionMiddleware } from './middleware/session.middleware.js';
 import { attachUser } from './middleware/authz.middleware.js';
 import { requestId } from './middleware/requestId.middleware.js';
+import { requestContext } from './middleware/requestContext.middleware.js'; // ✅ NEW
 import { jsonErrorHandler } from './middleware/error.middleware.js';
 import { getVersionInfo } from './utils/version.util.js'; // ✅ NEW
+import { assertStripeAtBoot, getStripeStatus } from './services/stripe.service.js'; // ✅ UPDATED: include getStripeStatus
+import webhooksRouter from "./routes/webhooks.route.js";
+
+// ✅ Fail fast if Stripe is enabled but not correctly configured
+assertStripeAtBoot();
 
 const app = express();
 
 // Trust proxy (Render)
 app.set('trust proxy', true);
+
+// 👇 Mount Stripe webhooks BEFORE any body parser so req.body is a Buffer
+app.use('/api/webhooks', webhooksRouter);
 
 // Security & perf
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'same-site' } }));
@@ -36,6 +45,9 @@ app.use(buildSessionMiddleware());
 // ✅ Make the user available on req.user for all downstream handlers
 app.use(attachUser);
 
+// ✅ Per-request context for observability (adds requestId + userId to req.context and X-Request-Id header)
+app.use(requestContext);
+
 // ----------------------
 // Health endpoints
 // ----------------------
@@ -44,7 +56,11 @@ const READY_PATH = '/api/ready';
 const VERSION_PATH = '/api/version'; // ✅ NEW
 
 app.get(HEALTH_PATH, (_req, res) =>
-  res.json({ ok: true, ts: new Date().toISOString() })
+  res.json({
+    ok: true,
+    ts: new Date().toISOString(),
+    stripe: getStripeStatus(), // ✅ include Stripe readiness details
+  })
 );
 
 app.get(READY_PATH, async (_req, res) => {

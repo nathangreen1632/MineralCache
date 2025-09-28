@@ -1,7 +1,7 @@
 // Server/src/routes/uploads.route.ts
 import { Router, raw } from 'express';
-import { requireAuth } from '../middleware/auth.middleware.js';
-import { uploadPhotos as handleUpload, signUploads, directUpload, finalizeUploads } from '../controllers/uploads.controller.js';
+import { requireAuth, requireAdmin } from '../middleware/auth.middleware.js';
+import { uploadPhotos as handleUpload, signUploads, directUpload, finalizeUploads, purgeStagingUploads } from '../controllers/uploads.controller.js';
 import { uploadPhotos as photosMulter, enforceTotalBatchBytes } from '../middleware/upload.middleware.js';
 import {uploadImagesLimiter, burstLimiter } from '../middleware/rateLimit.middleware.js';
 
@@ -22,5 +22,8 @@ router.put('/direct/:token', uploadImagesLimiter, burstLimiter, raw({ type: '*/*
 // Finalize staged uploads -> original + 320/800/1600
 // Order: auth → window limiter → burst limiter → handler
 router.post('/finalize', requireAuth, uploadImagesLimiter, burstLimiter, finalizeUploads);
+
+// Admin maintenance: purge staged uploads older than N hours (default 24h) with safety margin (default 1h)
+router.post('/staging/purge', requireAdmin, burstLimiter, purgeStagingUploads);
 
 export default router;

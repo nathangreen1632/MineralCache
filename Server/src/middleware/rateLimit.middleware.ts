@@ -1,4 +1,6 @@
+// Server/src/middleware/rateLimit.middleware.ts
 import type { NextFunction, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit'; // ✅ NEW
 import { requestId } from '../utils/reqid.util.js';
 
 type Bucket = { count: number; resetAt: number };
@@ -109,3 +111,40 @@ export const uploadImagesLimiter = fixedWindowLimiter(
   UPLOADS_MAX_REQUESTS,
   userOrIpKey
 );
+
+/** ✅ NEW: Dedicated limiter for registration endpoint (per IP) */
+export const registerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 20, // allow up to 20 registrations per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => ipKey(req),
+  handler: (req: Request, res: Response) => {
+    res.status(429).json({
+      ok: false,
+      code: 'RATE_LIMITED',
+      message: 'Too many registration attempts, please try again later.',
+      rid: requestId(req),
+    });
+  },
+});
+
+/** ✅ NEW: Bidding rate limit (auth-heavy, user-or-IP keyed)
+ * Defaults:
+ *  - Burst: 8 requests / 4s
+ *  - Sustained: 120 requests / 10m
+ * Override with:
+ *  BIDDING_RATE_BURST_MAX
+ *  BIDDING_RATE_BURST_WINDOW_MS
+ *  BIDDING_RATE_SUSTAIN_MAX
+ *  BIDDING_RATE_SUSTAIN_WINDOW_MS
+ */
+const BID_BURST_MAX = Number.parseInt(process.env.BIDDING_RATE_BURST_MAX ?? '8', 10);
+const BID_BURST_WIN = Number.parseInt(process.env.BIDDING_RATE_BURST_WINDOW_MS ?? '4000', 10);
+const BID_SUSTAIN_MAX = Number.parseInt(process.env.BIDDING_RATE_SUSTAIN_MAX ?? '120', 10);
+const BID_SUSTAIN_WIN = Number.parseInt(process.env.BIDDING_RATE_SUSTAIN_WINDOW_MS ?? '600000', 10); // 10 min
+
+export const biddingRateLimit = chainLimiters([
+  fixedWindowLimiter(BID_BURST_WIN, BID_BURST_MAX, userOrIpKey),
+  fixedWindowLimiter(BID_SUSTAIN_WIN, BID_SUSTAIN_MAX, userOrIpKey),
+]);

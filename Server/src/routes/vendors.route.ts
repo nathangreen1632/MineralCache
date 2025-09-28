@@ -10,6 +10,7 @@ import {
   getVendorOrders,
   linkStripeOnboarding,
 } from '../controllers/vendors.controller.js';
+import { vendorProductsRouter } from './vendor/vendorProducts.route.js'; // ✅ vendor products sub-routes
 
 const router: Router = Router();
 
@@ -22,6 +23,9 @@ router.post('/me/stripe/link', requireAuth, linkStripeOnboarding);
 
 // Vendor's own orders
 router.get('/me/orders', requireAuth, getVendorOrders);
+
+// Vendor Products (scoped to the authenticated vendor)
+router.use('/me/products', requireAuth, vendorProductsRouter);
 
 // Public vendor profile by slug — keep LAST to avoid swallowing other routes
 router.get('/:slug', getVendorBySlug);
