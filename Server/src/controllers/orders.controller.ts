@@ -294,7 +294,7 @@ export async function getReceiptHtml(req: Request, res: Response): Promise<void>
 
   const html = `
     <!doctype html>
-    <html>
+    <html lang="en">
       <head><meta charset="utf-8"><title>Receipt ${orderNumText}</title></head>
       <body style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
         <h1>Receipt ${orderNumText}</h1>
