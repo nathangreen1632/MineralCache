@@ -1,5 +1,5 @@
 // Client/src/pages/orders/OrderConfirmationPage.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { listMyOrders, type MyOrderListItem } from '../../api/orders';
 
@@ -15,8 +15,16 @@ function centsToUsd(cents: number) {
 
 export default function OrderConfirmationPage(): React.ReactElement {
   // amount passed from checkout (nice to show even if webhook hasn’t flipped status yet)
-  const location = useLocation() as { state?: { amountCents?: number } };
+  const location = useLocation() as { state?: { amountCents?: number; paid?: boolean } };
   const hintedAmount = location?.state?.amountCents;
+
+  // detect paid=1 query param or state.paid
+  const showPaidBanner = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = params.get('paid') === '1';
+    const fromState = location?.state?.paid === true;
+    return fromQuery || fromState;
+  }, [location?.state?.paid]);
 
   const [state, setState] = useState<Load>({ kind: 'idle' });
 
@@ -64,6 +72,21 @@ export default function OrderConfirmationPage(): React.ReactElement {
     <section className="mx-auto max-w-3xl px-6 py-14 space-y-6">
       <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Thank you!</h1>
 
+      {showPaidBanner ? (
+        <div
+          className="rounded-2xl border p-4"
+          style={{
+            background: 'var(--theme-surface)',
+            borderColor: 'var(--theme-border)',
+            color: 'var(--theme-text)',
+            boxShadow: '0 10px 30px var(--theme-shadow)',
+          }}
+        >
+          <div className="font-semibold">Payment received</div>
+          <div className="opacity-80">Your order is confirmed. We’ll email shipping updates.</div>
+        </div>
+      ) : null}
+
       <div className="rounded-2xl border p-6 grid gap-3" style={card}>
         <p>Your payment was submitted successfully.</p>
         {order ? (
@@ -72,7 +95,7 @@ export default function OrderConfirmationPage(): React.ReactElement {
             <p><strong>Status</strong> {order.status.replace('_', ' ')}</p>
             <p>
               <strong>Total</strong> {centsToUsd(order.totalCents)}
-              {hintedAmount && hintedAmount !== order.totalCents ? (
+              {typeof hintedAmount === 'number' && hintedAmount !== order.totalCents ? (
                 <span className="ml-2 opacity-70">(charged: {centsToUsd(hintedAmount)})</span>
               ) : null}
             </p>
@@ -81,13 +104,25 @@ export default function OrderConfirmationPage(): React.ReactElement {
           <>
             <p><strong>Order #</strong> pending…</p>
             {typeof hintedAmount === 'number' ? <p><strong>Total</strong> {centsToUsd(hintedAmount)}</p> : null}
-            <p className="text-sm opacity-80">We’re finalizing your order. It will appear in <Link to="/account/orders" className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]">My Orders</Link> shortly.</p>
+            <p className="text-sm opacity-80">
+              We’re finalizing your order. It will appear in{' '}
+              <Link
+                to="/account/orders"
+                className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
+              >
+                My Orders
+              </Link>{' '}
+              shortly.
+            </p>
           </>
         )}
       </div>
 
       <div>
-        <Link to="/products" className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]">
+        <Link
+          to="/products"
+          className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+        >
           Continue shopping
         </Link>
       </div>
