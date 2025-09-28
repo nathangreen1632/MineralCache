@@ -22,9 +22,15 @@ export class OrderItem extends Model<
   declare quantity: number;
   declare lineTotalCents: number;
 
-  // ✅ NEW: per-line commission snapshot
+  // ✅ Commission snapshot (per-line)
   declare commissionPct: number;      // e.g. 0.08 for 8%
   declare commissionCents: number;    // allocated cents from order fee
+
+  // ✅ NEW: Fulfillment tracking (per-line)
+  declare shipCarrier: string | null;
+  declare shipTracking: string | null;
+  declare shippedAt: Date | null;
+  declare deliveredAt: Date | null;
 
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
@@ -50,9 +56,15 @@ if (!sequelize) {
       quantity: { type: DataTypes.INTEGER, allowNull: false, validate: { min: 1 } },
       lineTotalCents: { type: DataTypes.INTEGER, allowNull: false, validate: { min: 0 } },
 
-      // ✅ NEW: commission snapshot
-      commissionPct: { type: DataTypes.DECIMAL(6, 5), allowNull: false, defaultValue: 0 }, // 0.00000 - 9.99999
+      // Commission snapshot
+      commissionPct: { type: DataTypes.DECIMAL(6, 5), allowNull: false, defaultValue: 0 }, // 0.00000–9.99999
       commissionCents: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+
+      // Fulfillment tracking (snake_case columns)
+      shipCarrier: { type: DataTypes.STRING, allowNull: true, field: 'ship_carrier' },
+      shipTracking: { type: DataTypes.STRING, allowNull: true, field: 'ship_tracking' },
+      shippedAt: { type: DataTypes.DATE, allowNull: true, field: 'shipped_at' },
+      deliveredAt: { type: DataTypes.DATE, allowNull: true, field: 'delivered_at' },
 
       createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
       updatedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
