@@ -1,99 +1,174 @@
-import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+// Client/src/pages/vendor/VendorOrdersPage.tsx
+import React, { useEffect, useMemo, useState } from 'react';
+import { listVendorOrders, type VendorOrderListItem, type OrderStatus } from '../../api/vendor';
 
-type VendorOrderItem = {
-  id: number;
-  title?: string;
-  qty?: number;
-  priceCents?: number;
-};
+type Tab = 'paid' | 'shipped' | 'refunded';
 
-type VendorOrder = {
-  id: number;
-  status: 'pending' | 'paid' | 'failed' | 'shipped' | 'refunded' | string;
-  totalCents: number;
-  items?: VendorOrderItem[];
-  createdAt?: string;
-  updatedAt?: string;
-};
-
-function centsToUsd(cents: number | null | undefined): string {
-  const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
-  return `$${(n / 100).toFixed(2)}`;
+function centsToUsd(cents: number) {
+  return `$${(cents / 100).toFixed(2)}`;
 }
 
 export default function VendorOrdersPage(): React.ReactElement {
-  const [orders, setOrders] = useState<VendorOrder[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>('paid');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [rows, setRows] = useState<VendorOrderListItem[]>([]);
+  const [page, setPage] = useState(1);
+
+  const statusParam: OrderStatus | 'shipped' =
+    tab === 'paid' ? 'paid' : tab === 'refunded' ? 'refunded' : 'shipped';
+
+  async function load() {
+    setBusy(true);
+    setMsg(null);
+    const { data, error } = await listVendorOrders({ status: statusParam, page, pageSize: 50 });
+    setBusy(false);
+    if (error || !data) {
+      setMsg(error || 'Failed to load');
+      return;
+    }
+    setRows(data.items || []);
+  }
 
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      setErr(null);
-      try {
-        const res = await fetch('/api/vendor/orders');
-        if (!res.ok) throw new Error(`Failed to load: ${res.status}`);
-        const data = await res.json();
-        const list = Array.isArray(data) ? data : (data.items ?? []);
-        if (mounted) setOrders(list as VendorOrder[]);
-      } catch (e: any) {
-        if (mounted) setErr(e?.message || 'Error loading orders');
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, page]);
+
+  function exportCsv() {
+    const headers = ['Order ID', 'Created', 'Status', 'Item Count', 'Total USD'];
+    const lines = rows.map((r) =>
+      [
+        r.id,
+        new Date(r.createdAt).toISOString(),
+        r.status,
+        r.itemCount,
+        (r.totalCents / 100).toFixed(2),
+      ].join(',')
+    );
+    const csv = [headers.join(','), ...lines].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vendor-orders-${tab}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  const tabs: Array<{ key: Tab; label: string }> = useMemo(
+    () => [
+      { key: 'paid', label: 'Paid' },
+      { key: 'shipped', label: 'Shipped' },
+      { key: 'refunded', label: 'Refunded' },
+    ],
+    []
+  );
 
   return (
-    <div className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)]">
-      <div className="mx-auto max-w-3xl px-6 py-14 grid gap-10">
-        <header className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">My Orders</h1>
-        </header>
-
-        <div className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-6 shadow-[0_10px_30px_var(--theme-shadow)]">
-          {loading && <p>Loading…</p>}
-          {!loading && err && <p role="alert">Error: {err}</p>}
-
-          {!loading && !err && orders.length === 0 && (
-            <p>No orders yet.</p>
-          )}
-
-          {!loading && !err && orders.length > 0 && (
-            <ul className="grid gap-4">
-              {orders.map(o => {
-                const itemCount = o.items?.reduce((n, it) => n + (it.qty || 0), 0) ?? 0;
-                return (
-                  <li key={o.id} className="grid gap-2 p-4 rounded-xl border border-[var(--theme-border)]">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="grid gap-1">
-                        <Link
-                          to={`/vendor/orders/${o.id}`}
-                          className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
-                        >
-                          Order #{o.id}
-                        </Link>
-                        <div className="text-sm opacity-80">Status: {o.status}</div>
-                        <div className="text-sm opacity-80">
-                          Total: {centsToUsd(o.totalCents)} · Items: {itemCount}
-                        </div>
-                        {o.createdAt ? (
-                          <div className="text-xs opacity-60">
-                            Placed {new Date(o.createdAt).toLocaleString()}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+    <section className="mx-auto max-w-5xl px-6 py-10 space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Vendor · Orders</h1>
+        <div className="flex gap-2">
+          <button
+            onClick={exportCsv}
+            disabled={busy || rows.length === 0}
+            className="rounded-xl px-4 py-2 font-semibold border border-[var(--theme-border)] hover:bg-[var(--theme-card)] disabled:opacity-50"
+          >
+            Export CSV
+          </button>
         </div>
       </div>
-    </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => {
+              setPage(1);
+              setTab(t.key);
+            }}
+            className={[
+              'rounded-xl px-3 py-1.5 text-sm font-semibold border',
+              tab === t.key
+                ? 'bg-[var(--theme-card)] border-[var(--theme-border)]'
+                : 'border-transparent hover:bg-[var(--theme-surface)]',
+            ].join(' ')}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="rounded-2xl border overflow-x-auto" style={{ borderColor: 'var(--theme-border)' }}>
+        <table className="w-full text-sm">
+          <thead>
+          <tr className="text-left border-b" style={{ borderColor: 'var(--theme-border)' }}>
+            <th className="px-4 py-3">Order</th>
+            <th className="px-4 py-3">Created</th>
+            <th className="px-4 py-3">Status</th>
+            <th className="px-4 py-3">Items</th>
+            <th className="px-4 py-3">Total</th>
+          </tr>
+          </thead>
+          <tbody>
+          {busy && rows.length === 0 && (
+            <tr>
+              <td className="px-4 py-3" colSpan={5}>
+                Loading…
+              </td>
+            </tr>
+          )}
+          {msg && (
+            <tr>
+              <td className="px-4 py-3 text-[var(--theme-error)]" colSpan={5}>
+                {msg}
+              </td>
+            </tr>
+          )}
+          {!busy &&
+            !msg &&
+            rows.map((r) => (
+              <tr key={r.id} className="border-b last:border-b-0" style={{ borderColor: 'var(--theme-border)' }}>
+                <td className="px-4 py-3 font-semibold">#{r.id}</td>
+                <td className="px-4 py-3">{new Date(r.createdAt).toLocaleString()}</td>
+                <td className="px-4 py-3 capitalize">{r.status.replace('_', ' ')}</td>
+                <td className="px-4 py-3">{r.itemCount}</td>
+                <td className="px-4 py-3">{centsToUsd(r.totalCents)}</td>
+              </tr>
+            ))}
+          {rows.length === 0 && !busy && !msg && (
+            <tr>
+              <td className="px-4 py-3 opacity-70" colSpan={5}>
+                No orders.
+              </td>
+            </tr>
+          )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Simple pager */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setPage((p) => Math.max(1, p - 1))}
+          disabled={page <= 1 || busy}
+          className="rounded-lg px-3 py-1 text-sm border border-[var(--theme-border)] disabled:opacity-50"
+        >
+          Prev
+        </button>
+        <div className="opacity-80 text-sm">Page {page}</div>
+        <button
+          onClick={() => setPage((p) => p + 1)}
+          disabled={busy}
+          className="rounded-lg px-3 py-1 text-sm border border-[var(--theme-border)] disabled:opacity-50"
+        >
+          Next
+        </button>
+      </div>
+    </section>
   );
 }

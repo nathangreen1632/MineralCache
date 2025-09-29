@@ -182,3 +182,47 @@ export async function retrieveChargeWithBalanceTx(chargeId: string) {
   // `expand` lets us include the balance_transaction inline
   return stripe.charges.retrieve(chargeId, { expand: ['balance_transaction'] });
 }
+
+// ---------- Refunds & cancellations (NEW)
+
+/** Create a full refund for a Payment Intent.
+ *  Returns { ok, refundId? } on success, or { ok: false, error } on failure.
+ */
+export async function createRefund(opts: {
+  paymentIntentId: string;
+  reason?: 'requested_by_customer' | 'duplicate' | 'fraudulent';
+}): Promise<{ ok: true; refundId: string } | { ok: false; error: string }> {
+  const status = getStripeStatus();
+  if (!status.enabled || !status.ready || !stripe) {
+    return { ok: false, error: 'Stripe not initialized' };
+  }
+  try {
+    const refund = await stripe.refunds.create({
+      payment_intent: opts.paymentIntentId,
+      // reason is optional; Stripe allows undefined
+      reason: opts.reason,
+    });
+    return { ok: true, refundId: refund.id };
+  } catch (err: any) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
+/** Best-effort cancel for a not-yet-completed Payment Intent.
+ *  Safe to call even if already succeeded — returns { ok: false, error } in that case.
+ */
+export async function cancelPaymentIntent(
+  paymentIntentId: string
+): Promise<{ ok: true; status: string } | { ok: false; error: string }> {
+  const status = getStripeStatus();
+  if (!status.enabled || !status.ready || !stripe) {
+    return { ok: false, error: 'Stripe not initialized' };
+  }
+  try {
+    const pi = await stripe.paymentIntents.cancel(paymentIntentId);
+    return { ok: true, status: pi.status };
+  } catch (err: any) {
+    // PI may already be succeeded or not cancellable; surface as non-fatal error to caller
+    return { ok: false, error: String(err?.message || err) };
+  }
+}

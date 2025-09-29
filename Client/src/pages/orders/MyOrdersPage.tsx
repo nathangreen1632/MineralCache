@@ -20,6 +20,23 @@ function fmtDate(iso: string) {
   }
 }
 
+// Local badge (keeps your tokenized theme; no external import)
+function Badge({ children }: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <span
+      className="inline-flex items-center rounded-xl px-2 py-0.5 text-xs font-medium border"
+      style={{
+        background: 'var(--theme-surface)',
+        borderColor: 'var(--theme-border)',
+        color: 'var(--theme-text)',
+        boxShadow: '0 10px 30px var(--theme-shadow)',
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
 export default function MyOrdersPage(): React.ReactElement {
   const [state, setState] = useState<Load>({ kind: 'idle' });
 
@@ -38,7 +55,11 @@ export default function MyOrdersPage(): React.ReactElement {
     return () => { alive = false; };
   }, []);
 
-  const card = { background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' } as const;
+  const card = {
+    background: 'var(--theme-surface)',
+    borderColor: 'var(--theme-border)',
+    color: 'var(--theme-text)',
+  } as const;
 
   if (state.kind === 'loading' || state.kind === 'idle') {
     return (
@@ -78,29 +99,40 @@ export default function MyOrdersPage(): React.ReactElement {
                 <th className="px-4 py-3">Order #</th>
                 <th className="px-4 py-3">Date</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Fulfillment</th>
                 <th className="px-4 py-3">Items</th>
                 <th className="px-4 py-3">Total</th>
                 <th className="px-4 py-3"></th>
               </tr>
               </thead>
               <tbody>
-              {items.map((o) => (
-                <tr key={o.id} className="border-b last:border-b-0" style={{ borderColor: 'var(--theme-border)' }}>
-                  <td className="px-4 py-3 font-medium">#{o.id}</td>
-                  <td className="px-4 py-3">{fmtDate(o.createdAt)}</td>
-                  <td className="px-4 py-3 capitalize">{o.status.replace('_', ' ')}</td>
-                  <td className="px-4 py-3">{o.itemCount}</td>
-                  <td className="px-4 py-3">{centsToUsd(o.totalCents)}</td>
-                  <td className="px-4 py-3">
-                    <Link
-                      to={`/account/orders/${o.id}`}
-                      className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
-                    >
-                      View
-                    </Link>
-                  </td>
-                </tr>
-              ))}
+              {items.map((o) => {
+                // Some clients may not have items expanded on the type; read defensively.
+                const shipped =
+                  Array.isArray((o as any).items) &&
+                  (o as any).items.some((it: any) => !!it?.shippedAt);
+
+                return (
+                  <tr key={o.id} className="border-b last:border-b-0" style={{ borderColor: 'var(--theme-border)' }}>
+                    <td className="px-4 py-3 font-medium">#{o.id}</td>
+                    <td className="px-4 py-3">{fmtDate(o.createdAt)}</td>
+                    <td className="px-4 py-3 capitalize">{o.status.replace('_', ' ')}</td>
+                    <td className="px-4 py-3">
+                      {shipped ? <Badge>Shipped</Badge> : <Badge>Processing</Badge>}
+                    </td>
+                    <td className="px-4 py-3">{o.itemCount}</td>
+                    <td className="px-4 py-3">{centsToUsd(o.totalCents)}</td>
+                    <td className="px-4 py-3">
+                      <Link
+                        to={`/account/orders/${o.id}`}
+                        className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
+                      >
+                        View
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
               </tbody>
             </table>
           </div>

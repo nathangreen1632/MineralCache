@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getAdminOrder } from '../../api/admin';
+import AdminRefundButton from '../../components/admin/AdminRefundButton'; // ✅ NEW
 
 function centsToUsd(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
@@ -13,7 +14,21 @@ export default function AdminOrderDetail(): React.ReactElement | null {
 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [item, setItem] = useState<NonNullable<Awaited<ReturnType<typeof getAdminOrder>>['data']>['item'] | null>(null);
+  const [item, setItem] = useState<
+    NonNullable<Awaited<ReturnType<typeof getAdminOrder>>['data']>['item'] | null
+  >(null);
+
+  async function reload() {
+    setBusy(true);
+    const { data, error, status } = await getAdminOrder(id);
+    setBusy(false);
+    if (error || !data) {
+      setMsg(error ?? `Failed (${status})`);
+      return;
+    }
+    setMsg(null);
+    setItem(data.item);
+  }
 
   useEffect(() => {
     let alive = true;
@@ -28,10 +43,16 @@ export default function AdminOrderDetail(): React.ReactElement | null {
       }
       setItem(data.item);
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [id]);
 
-  const card = { background: 'var(--theme-surface)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' } as const;
+  const card = {
+    background: 'var(--theme-surface)',
+    color: 'var(--theme-text)',
+    borderColor: 'var(--theme-border)',
+  } as const;
 
   if (busy && !item) {
     return (
@@ -55,21 +76,52 @@ export default function AdminOrderDetail(): React.ReactElement | null {
 
   return (
     <section className="mx-auto max-w-4xl px-6 py-10 space-y-4">
-      <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Order #{item.id}</h1>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Order #{item.id}</h1>
+
+        {/* ✅ Admin actions */}
+        <div className="flex items-center gap-3">
+          {item.status === 'paid' && (
+            <AdminRefundButton orderId={item.id} disabled={busy} />
+          )}
+          <button
+            onClick={reload}
+            disabled={busy}
+            className="rounded-lg px-3 py-2 text-sm font-semibold ring-1 ring-inset disabled:opacity-50"
+            style={{ borderColor: 'var(--theme-border)' }}
+          >
+            {busy ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
+      </div>
 
       <div className="rounded-2xl border p-4 grid gap-2" style={card}>
         <div className="text-sm opacity-80">Created: {new Date(item.createdAt).toLocaleString()}</div>
         <div className="text-sm">Buyer: {item.buyerName ? `${item.buyerName} (#${item.buyerId})` : `#${item.buyerId}`}</div>
         <div className="text-sm capitalize">Status: {item.status.replace('_', ' ')}</div>
         {typeof item.commissionPct === 'number' ? (
-          <div className="text-sm">Commission: {item.commissionPct}% ({centsToUsd(item.commissionCents ?? 0)})</div>
+          <div className="text-sm">
+            Commission: {item.commissionPct}% ({centsToUsd(item.commissionCents ?? 0)})
+          </div>
         ) : null}
         {item.paymentIntentId ? <div className="text-sm">PI: {item.paymentIntentId}</div> : null}
         <div className="border-t my-2" style={{ borderColor: 'var(--theme-border)' }} />
         <div className="grid gap-1">
-          <div>Subtotal: <strong>{centsToUsd(item.subtotalCents)}</strong></div>
-          <div>Shipping: <strong>{centsToUsd(item.shippingCents)}</strong></div>
-          <div>Total: <strong>{centsToUsd(item.totalCents)}</strong></div>
+          <div>
+            Subtotal: <strong>{centsToUsd(item.subtotalCents)}</strong>
+          </div>
+          <div>
+            Shipping: <strong>{centsToUsd(item.shippingCents)}</strong>
+          </div>
+          {/* ✅ NEW: show tax if present */}
+          {typeof (item as any).taxCents === 'number' && (item as any).taxCents > 0 && (
+            <div>
+              Tax: <strong>{centsToUsd((item as any).taxCents)}</strong>
+            </div>
+          )}
+          <div>
+            Total: <strong>{centsToUsd(item.totalCents)}</strong>
+          </div>
         </div>
       </div>
 
@@ -77,10 +129,12 @@ export default function AdminOrderDetail(): React.ReactElement | null {
         <div className="rounded-2xl border p-4" style={card}>
           <h2 className="font-semibold mb-2">Vendors</h2>
           <ul className="grid gap-1 text-sm">
-            {item.vendors.map(v => (
+            {item.vendors.map((v) => (
               <li key={v.vendorId} className="flex justify-between">
                 <span>{v.displayName ?? `Vendor #${v.vendorId}`}</span>
-                <span>{typeof v.shippingCents === 'number' ? centsToUsd(v.shippingCents) : '—'}</span>
+                <span>
+                  {typeof v.shippingCents === 'number' ? centsToUsd(v.shippingCents) : '—'}
+                </span>
               </li>
             ))}
           </ul>
@@ -100,7 +154,11 @@ export default function AdminOrderDetail(): React.ReactElement | null {
           </thead>
           <tbody>
           {item.items.map((it) => (
-            <tr key={`${it.productId}-${it.vendorId}`} className="border-b last:border-b-0" style={{ borderColor: 'var(--theme-border)' }}>
+            <tr
+              key={`${it.productId}-${it.vendorId}`}
+              className="border-b last:border-b-0"
+              style={{ borderColor: 'var(--theme-border)' }}
+            >
               <td className="px-4 py-3">{it.title}</td>
               <td className="px-4 py-3">{it.vendorName ?? `#${it.vendorId}`}</td>
               <td className="px-4 py-3">{centsToUsd(it.unitPriceCents)}</td>

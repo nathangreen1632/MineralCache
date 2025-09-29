@@ -1,4 +1,3 @@
-// Server/src/controllers/search.controller.ts
 import type { Request, Response } from 'express';
 import { Op, type Order } from 'sequelize';
 import { z, type ZodError } from 'zod';

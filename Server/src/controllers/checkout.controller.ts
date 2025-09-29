@@ -9,7 +9,11 @@ import { createPaymentIntent } from '../services/stripe.service.js';
 import { Commission } from '../config/fees.config.js';
 import { db } from '../models/sequelize.js';
 import { computeVendorShippingByLines } from '../services/shipping.service.js';
-import { obs } from '../services/observability.service.js'; // ✅ NEW
+import { obs } from '../services/observability.service.js';
+
+// ✅ NEW: tax + settings
+import { getAdminSettingsCached } from '../services/settings.service.js';
+import { calcTaxCents } from '../services/tax.service.js';
 
 // ✅ NEW: proportional allocator that preserves total cents exactly
 function allocateProRataCents(lineTotals: number[], totalFeeCents: number): number[] {
@@ -35,6 +39,34 @@ function allocateProRataCents(lineTotals: number[], totalFeeCents: number): numb
   return result;
 }
 
+/** ---------------- Availability guard (staleness) ----------------
+ * Checks a list of productIds and returns any that are unavailable.
+ * Unavailable currently means: archived (p.archivedAt != null).
+ * Respond with 409 if any are unavailable.
+ * ---------------------------------------------------------------- */
+async function validateAvailability(productIds: number[]) {
+  if (productIds.length === 0) {
+    return { ok: true as const, unavailable: [] as Array<{ productId: number; reason: string }> };
+  }
+
+  const rows = await Product.findAll({
+    where: { id: { [Op.in]: productIds } },
+    attributes: ['id', 'archivedAt'],
+  });
+
+  const unavailable: Array<{ productId: number; reason: string }> = [];
+  for (const p of rows) {
+    if ((p as any).archivedAt != null) {
+      unavailable.push({ productId: Number(p.id), reason: 'archived' });
+    }
+  }
+
+  if (unavailable.length > 0) {
+    return { ok: false as const, unavailable };
+  }
+  return { ok: true as const, unavailable: [] as Array<{ productId: number; reason: string }> };
+}
+
 /** Server-side cart → totals + per-vendor shipping (rule-based) */
 async function computeCartTotals(userId: number) {
   const cart = await Cart.findOne({ where: { userId } });
@@ -43,6 +75,7 @@ async function computeCartTotals(userId: number) {
       empty: true as const,
       subtotalCents: 0,
       shippingCents: 0,
+      taxCents: 0, // ✅ NEW
       totalCents: 0,
       itemCount: 0,
       lines: [] as any[],
@@ -61,6 +94,7 @@ async function computeCartTotals(userId: number) {
       empty: true as const,
       subtotalCents: 0,
       shippingCents: 0,
+      taxCents: 0, // ✅ NEW
       totalCents: 0,
       itemCount: 0,
       lines: [] as any[],
@@ -76,6 +110,7 @@ async function computeCartTotals(userId: number) {
       empty: true as const,
       subtotalCents: 0,
       shippingCents: 0,
+      taxCents: 0, // ✅ NEW
       totalCents: 0,
       itemCount: 0,
       lines: [] as any[],
@@ -176,12 +211,18 @@ async function computeCartTotals(userId: number) {
     0
   );
 
-  const totalCents = subtotalCents + shippingCents;
+  // ✅ NEW: sales tax (subtotal-only)
+  const settings = await getAdminSettingsCached();
+  const taxRateBps = Number(settings?.tax_rate_bps ?? 0);
+  const taxCents = calcTaxCents(subtotalCents, taxRateBps);
+
+  const totalCents = subtotalCents + shippingCents + taxCents;
 
   return {
     empty: totalCents <= 0 ? (true as const) : (false as const),
     subtotalCents,
     shippingCents,
+    taxCents, // ✅ NEW
     totalCents,
     itemCount,
     lines,
@@ -206,6 +247,28 @@ export async function createCheckoutIntent(
     return;
   }
 
+  // ✅ Staleness guard — check cart items against archived products BEFORE totals/PI
+  const cartForGuard = await Cart.findOne({ where: { userId: Number(u.id) } });
+  const cartItemsForGuard: Array<{ productId: number; quantity: number }> = Array.isArray(
+    (cartForGuard as any)?.itemsJson
+  )
+    ? ((cartForGuard as any).itemsJson as Array<{ productId: number; quantity: number }>)
+    : [];
+
+  const productIds = cartItemsForGuard
+    .map((x) => Number((x as any)?.productId))
+    .filter((n) => Number.isFinite(n));
+
+  const availability = await validateAvailability(productIds);
+  if (!availability.ok) {
+    res.status(409).json({
+      error: 'Some items are no longer available',
+      code: 'PRODUCT_UNAVAILABLE',
+      unavailable: availability.unavailable, // [{ productId, reason }]
+    });
+    return;
+  }
+
   const totals = await computeCartTotals(Number(u.id));
   if (totals.empty || totals.totalCents <= 0) {
     res.status(400).json({ error: 'Cart is empty' });
@@ -227,6 +290,7 @@ export async function createCheckoutIntent(
     itemCount: String(totals.itemCount),
     subtotalCents: String(totals.subtotalCents),
     shippingCents: String(totals.shippingCents),
+    taxCents: String(totals.taxCents), // ✅ NEW
     platformFeeCents: String(platformFeeCents),
     shippingVendors: Object.keys(totals.vendorShippingSnapshot).join(','), // quick debug
   };
@@ -287,6 +351,7 @@ export async function createCheckoutIntent(
         paymentIntentId: intentId ?? null,
         subtotalCents: totals.subtotalCents,
         shippingCents: totals.shippingCents,
+        taxCents: totals.taxCents,   // ✅ NEW
         totalCents: totals.totalCents,
         commissionPct: pct,
         commissionCents: platformFeeCents,
@@ -320,5 +385,15 @@ export async function createCheckoutIntent(
     }
   });
 
-  res.json({ clientSecret });
+  res.json({
+    clientSecret,
+    amountCents: totals.totalCents,
+    totals: {
+      subtotal: totals.subtotalCents,
+      shipping: totals.shippingCents,
+      tax: totals.taxCents, // ✅ NEW
+      total: totals.totalCents,
+    },
+    vendorShippingSnapshot: totals.vendorShippingSnapshot,
+  });
 }

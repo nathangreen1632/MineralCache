@@ -9,6 +9,10 @@ import { Product } from '../models/product.model.js';
 import { updateCartSchema } from '../validation/cart.schema.js';
 import { computeVendorShippingByLines } from '../services/shipping.service.js';
 
+// ✅ NEW: admin settings + tax helpers
+import { getAdminSettingsCached } from '../services/settings.service.js';
+import { calcTaxCents, taxFeatureEnabled } from '../services/tax.service.js';
+
 /** ---------------- Zod error helper (no deprecated APIs) ---------------- */
 function zDetails(err: ZodError) {
   const treeify = (z as any).treeifyError;
@@ -22,11 +26,41 @@ function zDetails(err: ZodError) {
   };
 }
 
+/** ---------------- Availability guard (staleness) ----------------
+ * Checks a list of productIds and returns any that are unavailable.
+ * Unavailable currently means: archived (p.archivedAt != null).
+ * Respond with 409 if any are unavailable.
+ * ---------------------------------------------------------------- */
+async function validateAvailability(productIds: number[]) {
+  if (productIds.length === 0) {
+    return { ok: true as const, unavailable: [] as Array<{ productId: number; reason: string }> };
+  }
+
+  const rows = await Product.findAll({
+    where: { id: { [Op.in]: productIds } },
+    attributes: ['id', 'archivedAt'],
+  });
+
+  const unavailable: Array<{ productId: number; reason: string }> = [];
+  for (const p of rows) {
+    const archived = (p as any).archivedAt != null;
+    if (archived) {
+      unavailable.push({ productId: Number(p.id), reason: 'archived' });
+    }
+  }
+
+  if (unavailable.length > 0) {
+    return { ok: false as const, unavailable };
+  }
+  return { ok: true as const, unavailable: [] as Array<{ productId: number; reason: string }> };
+}
+
 /** ---------------- Totals helper ----------------
  * Computes:
  * - subtotalCents = sum(unitPrice * qty) (sale-aware if model exposes getEffectivePriceCents)
  * - shippingCents = per-vendor via Shipping Rules (server-side, weight-aware)
- * - totalCents = subtotal + shipping
+ * - taxCents = subtotal * taxRateBps (if TAX_ENABLED), rounded to cents
+ * - totalCents = subtotal + shipping + tax
  * - vendorShippingSnapshot = per-vendor snapshot suitable to persist on Order
  * ---------------------------------------------------------------------- */
 async function computeTotals(items: Array<{ productId: number; quantity: number }>) {
@@ -43,6 +77,8 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
       vendors: [] as number[],
       subtotalCents: 0,
       shippingCents: 0,
+      taxCents: 0,            // ✅ NEW
+      taxLabel: null as string | null, // ✅ NEW
       totalCents: 0,
       vendorShippingSnapshot: {} as Record<
         string,
@@ -60,6 +96,8 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
       vendors: [],
       subtotalCents: 0,
       shippingCents: 0,
+      taxCents: 0,            // ✅ NEW
+      taxLabel: null as string | null, // ✅ NEW
       totalCents: 0,
       vendorShippingSnapshot: {},
     };
@@ -154,10 +192,25 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
     0
   );
 
-  const totalCents = subtotalCents + shippingCents;
+  // ✅ NEW: tax from admin settings (subtotal-only)
+  const settings = await getAdminSettingsCached();
+  const taxRateBps = Number(settings?.tax_rate_bps ?? 0);
+  const taxLabel: string | null = settings?.tax_label ?? null;
+  const taxCents = calcTaxCents(subtotalCents, taxRateBps);
+
+  const totalCents = subtotalCents + shippingCents + taxCents;
   const vendors = [...vendorGroups.keys()];
 
-  return { lines, vendors, subtotalCents, shippingCents, totalCents, vendorShippingSnapshot };
+  return {
+    lines,
+    vendors,
+    subtotalCents,
+    shippingCents,
+    taxCents,           // ✅ NEW
+    taxLabel,           // ✅ NEW
+    totalCents,
+    vendorShippingSnapshot,
+  };
 }
 
 /** ------------------------------------------------------------------------
@@ -177,7 +230,13 @@ export async function getCart(req: Request, res: Response): Promise<void> {
     totals: {
       subtotal: totals.subtotalCents,
       shipping: totals.shippingCents,
+      tax: totals.taxCents,        // ✅ NEW
       total: totals.totalCents,
+    },
+    tax: {                         // ✅ NEW
+      enabled: taxFeatureEnabled,
+      label: totals.taxLabel ?? null,
+      rateBps: Number((await getAdminSettingsCached())?.tax_rate_bps ?? 0),
     },
     vendorShippingSnapshot: totals.vendorShippingSnapshot,
   });
@@ -196,12 +255,21 @@ export async function putCart(req: Request, res: Response): Promise<void> {
   const userId = (req as any).user.id;
   const items = parsed.data.items;
 
-  // Optional: enforce ownership or availability here
-  // TODO(stock): verify products are available / not archived beyond our basic filter
+  // ✅ Staleness guard: block archived/unavailable items before persisting
+  const productIds = items.map((x) => Number(x.productId)).filter((n) => Number.isFinite(n));
+  const avail = await validateAvailability(productIds);
+  if (!avail.ok) {
+    res.status(409).json({
+      error: 'Some items are no longer available',
+      code: 'PRODUCT_UNAVAILABLE',
+      unavailable: avail.unavailable, // [{ productId, reason }]
+    });
+    return;
+  }
 
   const totals = await computeTotals(items);
 
-  // TODO: upsert items for req.user.id from req.body — done here
+  // Upsert items for req.user.id
   const now = new Date();
   const existing = await Cart.findOne({ where: { userId } });
   if (existing) {
@@ -223,7 +291,13 @@ export async function putCart(req: Request, res: Response): Promise<void> {
     totals: {
       subtotal: totals.subtotalCents,
       shipping: totals.shippingCents,
+      tax: totals.taxCents,        // ✅ NEW
       total: totals.totalCents,
+    },
+    tax: {                         // ✅ NEW
+      enabled: taxFeatureEnabled,
+      label: totals.taxLabel ?? null,
+      rateBps: Number((await getAdminSettingsCached())?.tax_rate_bps ?? 0),
     },
     vendorShippingSnapshot: totals.vendorShippingSnapshot,
   });
@@ -238,10 +312,23 @@ export async function checkout(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // TODO: compute real totals from the user’s cart — done here (now rule-based)
+  // Compute real totals from the user’s cart — rule-based
   const userId = (req as any).user.id;
   const cart = await Cart.findOne({ where: { userId } });
   const items: Array<{ productId: number; quantity: number }> = (cart?.itemsJson as any) ?? [];
+
+  // ✅ Staleness guard before totals/PI
+  const productIds = items.map((x) => Number(x.productId)).filter((n) => Number.isFinite(n));
+  const avail = await validateAvailability(productIds);
+  if (!avail.ok) {
+    res.status(409).json({
+      error: 'Some items are no longer available',
+      code: 'PRODUCT_UNAVAILABLE',
+      unavailable: avail.unavailable,
+    });
+    return;
+  }
+
   const totals = await computeTotals(items);
 
   if (!totals.totalCents || totals.totalCents < 50) {
@@ -266,7 +353,13 @@ export async function checkout(req: Request, res: Response): Promise<void> {
     totals: {
       subtotal: totals.subtotalCents,
       shipping: totals.shippingCents,
+      tax: totals.taxCents,        // ✅ NEW
       total: totals.totalCents,
+    },
+    tax: {                         // ✅ NEW (handy for UI)
+      enabled: taxFeatureEnabled,
+      label: totals.taxLabel ?? null,
+      rateBps: Number((await getAdminSettingsCached())?.tax_rate_bps ?? 0),
     },
     vendorShippingSnapshot: totals.vendorShippingSnapshot,
   });

@@ -1,4 +1,3 @@
-// Client/src/components/Navbar.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import {
@@ -14,6 +13,7 @@ import {
   LogIn, // ✅ added
   Package, // ✅ My Orders + Vendor Orders icon
   Settings, // ✅ Admin Settings icon
+  Banknote, // ✅ NEW: Vendor Payouts icon
 } from 'lucide-react';
 import { useAuthStore } from '../stores/useAuthStore'; // ✅ added
 
@@ -129,10 +129,11 @@ export default function Navbar(): React.ReactElement {
           <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
         </NavGroup>
 
-        {/* Vendor tools (temporary direct links for quick access) */}
+        {/* Vendor tools */}
         <SideNavLink to="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard} />
         <SideNavLink to="/vendor/products" label="Vendor · Products" Icon={Store} />
         <SideNavLink to="/vendor/orders" label="Vendor · Orders" Icon={Package} />
+        <SideNavLink to="/vendor/payouts" label="Vendor · Payouts" Icon={Banknote} /> {/* ✅ NEW */}
         <SideNavLink to="/vendor/apply" label="Apply as Vendor" Icon={UserPlus} />
 
         {/* Admin */}

@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { listProducts, type ListQuery, type Product } from '../../api/products';
-import { searchProducts } from '../../api/search'; // 🔎 NEW
+import { searchProducts } from '../../api/search';
 
 function centsToUsd(cents?: number | null): string {
   const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
@@ -17,8 +17,7 @@ function isSaleActive(p: Product, now = new Date()): boolean {
 }
 
 function effectivePriceCents(p: Product): number {
-  if (isSaleActive(p)) return p.salePriceCents as number;
-  return p.priceCents;
+  return isSaleActive(p) ? (p.salePriceCents as number) : p.priceCents;
 }
 
 /** Escape user text for safe RegExp use */
@@ -26,17 +25,14 @@ function escapeRegExp(str: string) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/**
- * Highlight all tokens from the query; case-insensitive.
- * Uses substring start/end offsets for keys (no array index keys).
- */
+/** Highlight all tokens from the query; case-insensitive. */
 function highlight(text: string, q: string): React.ReactNode {
   if (!q?.trim()) return text;
 
   const tokens = Array.from(new Set(q.trim().split(/\s+/g).filter(Boolean)));
   if (tokens.length === 0) return text;
 
-  const re = new RegExp(tokens.map((t) => escapeRegExp(t)).join('|'), 'ig');
+  const re = new RegExp(tokens.map(escapeRegExp).join('|'), 'ig');
 
   const out: React.ReactNode[] = [];
   let lastIndex = 0;
@@ -46,14 +42,10 @@ function highlight(text: string, q: string): React.ReactNode {
     const start = match.index;
     const end = start + match[0].length;
 
-    // plain chunk before match
     if (start > lastIndex) {
-      out.push(
-        <span key={`t-${lastIndex}-${start}`}>{text.slice(lastIndex, start)}</span>
-      );
+      out.push(<span key={`t-${lastIndex}-${start}`}>{text.slice(lastIndex, start)}</span>);
     }
 
-    // highlighted match
     out.push(
       <mark
         key={`h-${start}-${end}`}
@@ -71,11 +63,8 @@ function highlight(text: string, q: string): React.ReactNode {
     lastIndex = end;
   }
 
-  // trailing plain chunk
   if (lastIndex < text.length) {
-    out.push(
-      <span key={`t-${lastIndex}-${text.length}`}>{text.slice(lastIndex)}</span>
-    );
+    out.push(<span key={`t-${lastIndex}-${text.length}`}>{text.slice(lastIndex)}</span>);
   }
 
   return out;
@@ -84,10 +73,7 @@ function highlight(text: string, q: string): React.ReactNode {
 type LoadState =
   | { kind: 'idle' }
   | { kind: 'loading' }
-  | {
-  kind: 'loaded';
-  data: { items: Product[]; total: number; page: number; totalPages: number };
-}
+  | { kind: 'loaded'; data: { items: Product[]; total: number; page: number; totalPages: number } }
   | { kind: 'error'; message: string };
 
 type SortValue = 'newest' | 'price_asc' | 'price_desc';
@@ -114,8 +100,7 @@ export default function ProductList(): React.ReactElement {
       const next = new URLSearchParams(params);
       if (inputQ.trim()) next.set('q', inputQ.trim());
       else next.delete('q');
-      // reset paging when the query changes
-      next.set('page', '1');
+      next.set('page', '1'); // reset paging when query changes
       setParams(next, { replace: true });
     }, 300);
     return () => clearTimeout(t);
@@ -184,7 +169,6 @@ export default function ProductList(): React.ReactElement {
       sort: (query.sort ?? 'newest') as SortValue,
       pageSize: String(query.pageSize ?? 24),
     });
-    // keep search box in sync if URL changed externally
     setInputQ(params.get('q') ?? '');
   }, [query, params]);
 
@@ -193,11 +177,9 @@ export default function ProductList(): React.ReactElement {
     let alive = true;
     (async () => {
       setState({ kind: 'loading' });
-
       const qTerm = (params.get('q') ?? '').trim();
 
       try {
-        // If keyword present → /api/search/products; else → /api/products
         const resp = qTerm
           ? await searchProducts({
             q: qTerm,
@@ -245,10 +227,7 @@ export default function ProductList(): React.ReactElement {
         next.set(k, String(v));
       }
     }
-    // Whenever filters change, reset to page 1 (unless caller explicitly set a page)
-    if (!('page' in partial)) {
-      next.set('page', '1');
-    }
+    if (!('page' in partial)) next.set('page', '1'); // reset when filters change
     setParams(next, { replace: true });
   }
 
@@ -272,10 +251,8 @@ export default function ProductList(): React.ReactElement {
     setParams(next, { replace: true });
   }
 
-  // Stable keys for skeletons
   const skeletonKeys = useMemo(() => Array.from({ length: 9 }, (_, i) => `sk-${i}`), []);
 
-  // styles
   const card: React.CSSProperties = {
     background: 'var(--theme-card)',
     borderColor: 'var(--theme-border)',
@@ -289,11 +266,7 @@ export default function ProductList(): React.ReactElement {
       <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Catalog</h1>
 
       {/* Search + Filters */}
-      <form
-        onSubmit={submitFilters}
-        className="rounded-xl border p-4 grid gap-3 md:grid-cols-12"
-        style={card}
-      >
+      <form onSubmit={submitFilters} className="rounded-xl border p-4 grid gap-3 md:grid-cols-12" style={card}>
         {/* 🔎 Keyword search (debounced -> query param) */}
         <input
           className="md:col-span-4 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
@@ -383,11 +356,7 @@ export default function ProductList(): React.ReactElement {
       {state.kind === 'loading' && (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
           {skeletonKeys.map((k) => (
-            <div
-              key={k}
-              className="h-44 rounded-lg animate-pulse"
-              style={{ background: 'var(--theme-card)' }}
-            />
+            <div key={k} className="h-44 rounded-lg animate-pulse" style={{ background: 'var(--theme-card)' }} />
           ))}
         </div>
       )}
@@ -409,29 +378,18 @@ export default function ProductList(): React.ReactElement {
               if (onSaleNow) {
                 priceEl = (
                   <div className="text-sm">
-                    <span className="line-through opacity-60 mr-1">
-                      {centsToUsd(p.priceCents)}
-                    </span>
+                    <span className="line-through opacity-60 mr-1">{centsToUsd(p.priceCents)}</span>
                     <span>{centsToUsd(eff)}</span>
                   </div>
                 );
               }
 
               return (
-                <Link
-                  key={p.id}
-                  to={`/products/${p.id}`}
-                  className="rounded-xl border p-3 hover:shadow"
-                  style={card}
-                >
+                <Link key={p.id} to={`/products/${p.id}`} className="rounded-xl border p-3 hover:shadow" style={card}>
                   <div className="h-36 w-full rounded bg-[var(--theme-card-alt)] mb-3" />
-                  <div className="truncate font-semibold">
-                    {highlight(p.title, qStr)}
-                  </div>
+                  <div className="truncate font-semibold">{highlight(p.title, qStr)}</div>
                   {priceEl}
-                  <div className="text-xs opacity-70">
-                    {p.species ? highlight(p.species, qStr) : null}
-                  </div>
+                  <div className="text-xs opacity-70">{p.species ? highlight(p.species, qStr) : null}</div>
                 </Link>
               );
             })}
