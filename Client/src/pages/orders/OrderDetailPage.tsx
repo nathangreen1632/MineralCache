@@ -53,7 +53,6 @@ export default function OrderDetailPage(): React.ReactElement {
       return;
     }
     setActMsg('Order canceled.');
-    // reflect UI immediately
     setState({
       kind: 'loaded',
       order: { ...state.order, status: 'cancelled' },
@@ -125,6 +124,12 @@ export default function OrderDetailPage(): React.ReactElement {
           <strong>Shipping:</strong> {centsToUsd(o.shippingCents)}{' '}
           {o.shippingRuleName ? <span className="opacity-70">({o.shippingRuleName})</span> : null}
         </p>
+        {/* ✅ NEW: show tax when present */}
+        {typeof (o as any).taxCents === 'number' && (o as any).taxCents > 0 && (
+          <p>
+            <strong>Tax:</strong> {centsToUsd((o as any).taxCents)}
+          </p>
+        )}
         <p>
           <strong>Total:</strong> {centsToUsd(o.totalCents)}
         </p>
