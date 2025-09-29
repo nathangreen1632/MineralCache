@@ -21,10 +21,12 @@ export const updateAdminSettingsSchema = z
     // shipping defaults
     shipFlatCents: z.coerce.number().int().min(0).optional(),
     shipPerItemCents: z.coerce.number().int().min(0).optional(),
-    shipFreeThresholdCents: z
-      .union([z.coerce.number().int().min(0), z.null()])
-      .optional(),
+    shipFreeThresholdCents: z.union([z.coerce.number().int().min(0), z.null()]).optional(),
     shipHandlingCents: z.union([z.coerce.number().int().min(0), z.null()]).optional(),
+
+    // ✅ NEW: tax settings
+    taxRateBps: z.coerce.number().int().min(0).max(100_000).optional(), // up to 1000%
+    taxLabel: z.string().max(64).nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, {
     message: 'No changes provided',
