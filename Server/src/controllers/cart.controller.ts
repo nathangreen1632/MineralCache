@@ -9,6 +9,10 @@ import { Product } from '../models/product.model.js';
 import { updateCartSchema } from '../validation/cart.schema.js';
 import { computeVendorShippingByLines } from '../services/shipping.service.js';
 
+// ✅ NEW: admin settings + tax helpers
+import { getAdminSettingsCached } from '../services/settings.service.js';
+import { calcTaxCents, taxFeatureEnabled } from '../services/tax.service.js';
+
 /** ---------------- Zod error helper (no deprecated APIs) ---------------- */
 function zDetails(err: ZodError) {
   const treeify = (z as any).treeifyError;
@@ -55,7 +59,8 @@ async function validateAvailability(productIds: number[]) {
  * Computes:
  * - subtotalCents = sum(unitPrice * qty) (sale-aware if model exposes getEffectivePriceCents)
  * - shippingCents = per-vendor via Shipping Rules (server-side, weight-aware)
- * - totalCents = subtotal + shipping
+ * - taxCents = subtotal * taxRateBps (if TAX_ENABLED), rounded to cents
+ * - totalCents = subtotal + shipping + tax
  * - vendorShippingSnapshot = per-vendor snapshot suitable to persist on Order
  * ---------------------------------------------------------------------- */
 async function computeTotals(items: Array<{ productId: number; quantity: number }>) {
@@ -72,6 +77,8 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
       vendors: [] as number[],
       subtotalCents: 0,
       shippingCents: 0,
+      taxCents: 0,            // ✅ NEW
+      taxLabel: null as string | null, // ✅ NEW
       totalCents: 0,
       vendorShippingSnapshot: {} as Record<
         string,
@@ -89,6 +96,8 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
       vendors: [],
       subtotalCents: 0,
       shippingCents: 0,
+      taxCents: 0,            // ✅ NEW
+      taxLabel: null as string | null, // ✅ NEW
       totalCents: 0,
       vendorShippingSnapshot: {},
     };
@@ -183,10 +192,25 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
     0
   );
 
-  const totalCents = subtotalCents + shippingCents;
+  // ✅ NEW: tax from admin settings (subtotal-only)
+  const settings = await getAdminSettingsCached();
+  const taxRateBps = Number(settings?.tax_rate_bps ?? 0);
+  const taxLabel: string | null = settings?.tax_label ?? null;
+  const taxCents = calcTaxCents(subtotalCents, taxRateBps);
+
+  const totalCents = subtotalCents + shippingCents + taxCents;
   const vendors = [...vendorGroups.keys()];
 
-  return { lines, vendors, subtotalCents, shippingCents, totalCents, vendorShippingSnapshot };
+  return {
+    lines,
+    vendors,
+    subtotalCents,
+    shippingCents,
+    taxCents,           // ✅ NEW
+    taxLabel,           // ✅ NEW
+    totalCents,
+    vendorShippingSnapshot,
+  };
 }
 
 /** ------------------------------------------------------------------------
@@ -206,7 +230,13 @@ export async function getCart(req: Request, res: Response): Promise<void> {
     totals: {
       subtotal: totals.subtotalCents,
       shipping: totals.shippingCents,
+      tax: totals.taxCents,        // ✅ NEW
       total: totals.totalCents,
+    },
+    tax: {                         // ✅ NEW
+      enabled: taxFeatureEnabled,
+      label: totals.taxLabel ?? null,
+      rateBps: Number((await getAdminSettingsCached())?.tax_rate_bps ?? 0),
     },
     vendorShippingSnapshot: totals.vendorShippingSnapshot,
   });
@@ -261,7 +291,13 @@ export async function putCart(req: Request, res: Response): Promise<void> {
     totals: {
       subtotal: totals.subtotalCents,
       shipping: totals.shippingCents,
+      tax: totals.taxCents,        // ✅ NEW
       total: totals.totalCents,
+    },
+    tax: {                         // ✅ NEW
+      enabled: taxFeatureEnabled,
+      label: totals.taxLabel ?? null,
+      rateBps: Number((await getAdminSettingsCached())?.tax_rate_bps ?? 0),
     },
     vendorShippingSnapshot: totals.vendorShippingSnapshot,
   });
@@ -317,7 +353,13 @@ export async function checkout(req: Request, res: Response): Promise<void> {
     totals: {
       subtotal: totals.subtotalCents,
       shipping: totals.shippingCents,
+      tax: totals.taxCents,        // ✅ NEW
       total: totals.totalCents,
+    },
+    tax: {                         // ✅ NEW (handy for UI)
+      enabled: taxFeatureEnabled,
+      label: totals.taxLabel ?? null,
+      rateBps: Number((await getAdminSettingsCached())?.tax_rate_bps ?? 0),
     },
     vendorShippingSnapshot: totals.vendorShippingSnapshot,
   });
