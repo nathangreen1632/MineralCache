@@ -13,6 +13,9 @@ import ProductDetail from './pages/products/ProductDetail';
 // Vendor
 import VendorApply from './pages/VendorApply';
 import VendorDashboard from './pages/vendor/VendorDashboard';
+import VendorProductsPage from './pages/vendor/VendorProductsPage';
+import VendorOrdersPage from './pages/vendor/VendorOrdersPage';
+import PayoutsPage from './pages/vendor/PayoutsPage';
 
 // Admin
 import AdminVendorApps from './pages/admin/AdminVendorApps';
@@ -23,9 +26,6 @@ import AdminSettings from './pages/admin/AdminSettings';
 // Vendor product CRUD
 import ProductCreate from './pages/products/ProductCreate';
 import ProductEdit from './pages/products/ProductEdit';
-import VendorProductsPage from './pages/vendor/VendorProductsPage';
-import VendorOrdersPage from './pages/vendor/VendorOrdersPage';
-import PayoutsPage from "./pages/vendor/PayoutsPage.tsx";
 
 // Cart & Checkout
 import CartPage from './pages/cart/CartPage';
