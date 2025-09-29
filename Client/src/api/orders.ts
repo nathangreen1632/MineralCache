@@ -9,6 +9,7 @@ export type MyOrderListItem = {
   createdAt: string;
   subtotalCents: number;
   shippingCents: number;
+  taxCents: number;          // ✅ NEW
   totalCents: number;
   itemCount: number;
 };
@@ -40,6 +41,7 @@ export type GetOrderRes = {
     createdAt: string;
     subtotalCents: number;
     shippingCents: number;
+    taxCents: number;        // ✅ NEW
     totalCents: number;
     items: OrderDetailItem[];
     shippingRuleName?: string | null;
