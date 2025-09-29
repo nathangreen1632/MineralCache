@@ -8,6 +8,9 @@ import { OrderItem } from '../models/orderItem.model.js';
 import { User } from '../models/user.model.js';
 import { sendOrderEmail } from '../services/email.service.js';
 
+// ✅ NEW: cancel PI helper for buyer-initiated cancellations
+import { cancelPaymentIntent } from '../services/stripe.service.js';
+
 function parsePage(v: unknown, def = 1) {
   const n = Number(v);
   if (!Number.isFinite(n) || n <= 0) return def;
@@ -322,4 +325,54 @@ export async function getReceiptHtml(req: Request, res: Response): Promise<void>
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.status(200).send(html);
+}
+
+// ✅ NEW: Buyer cancel (pre-payment)
+// PATCH /api/orders/:id/cancel
+export async function cancelPendingOrder(req: Request, res: Response): Promise<void> {
+  const u = (req as any).user ?? (req.session as any)?.user ?? null;
+  if (!u?.id) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ error: 'Bad id' });
+    return;
+  }
+
+  const order = await Order.findOne({ where: { id, buyerUserId: Number(u.id) } });
+  if (!order) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  if ((order as any).status !== 'pending_payment') {
+    res.status(400).json({ error: 'Only pending orders can be canceled' });
+    return;
+  }
+
+  const piId: string | null =
+    (order as any).paymentIntentId ??
+    (typeof (order as any).get === 'function' ? (order as any).get('paymentIntentId') : null);
+
+  // Best-effort cancel the PI if possible; ignore failure (e.g., already succeeded)
+  if (piId) {
+    await cancelPaymentIntent(piId);
+  }
+
+  (order as any).status = 'cancelled';
+  (order as any).failedAt = new Date();
+  await order.save();
+
+  try {
+    const { obs } = await import('../services/observability.service.js');
+    if (typeof (obs as any)?.orderCanceled === 'function') {
+      (obs as any).orderCanceled(req, Number(order.id));
+    }
+  } catch {
+    // ignore
+  }
+
+  res.json({ ok: true });
 }
