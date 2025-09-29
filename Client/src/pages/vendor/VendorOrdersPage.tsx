@@ -1,3 +1,4 @@
+// Client/src/pages/vendor/VendorOrdersPage.tsx
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -85,6 +86,26 @@ export default function VendorOrdersPage(): React.ReactElement {
                             Placed {new Date(o.createdAt).toLocaleString()}
                           </div>
                         ) : null}
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex flex-col items-end gap-2">
+                        <Link
+                          to={`/vendor/orders/${o.id}`}
+                          className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
+                        >
+                          View details
+                        </Link>
+
+                        {/* ✅ NEW: Packing slip (opens server HTML in a new tab) */}
+                        <a
+                          href={`/api/vendor/orders/${o.id}/pack`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
+                        >
+                          Packing slip
+                        </a>
                       </div>
                     </div>
                   </li>
