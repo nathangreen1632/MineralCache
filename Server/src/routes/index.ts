@@ -12,6 +12,7 @@ import healthRouter from './health.route.js';
 import uploadsRouter from './uploads.route.js';
 import checkoutRouter from './checkout.route.js';
 import searchRouter from './search.route.js';
+import vendorOrdersRoute from "./vendor/vendorOrders.route.js";
 
 const router: Router = Router();
 
@@ -19,6 +20,7 @@ router.use('/admin', adminRouter);
 router.use('/auth', authRouter);
 router.use('/payments', paymentsRouter);
 router.use('/vendors', vendorsRouter);
+router.use('/vendor', vendorOrdersRoute)
 router.use('/products', productsRouter);
 router.use('/auctions', auctionsRouter);
 router.use('/cart', cartRouter);
