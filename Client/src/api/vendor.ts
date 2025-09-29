@@ -1,4 +1,3 @@
-// Client/src/api/vendor.ts
 import { get, put, post, del } from '../lib/api';
 
 /* =========================
@@ -12,7 +11,7 @@ export type VendorMe = {
   status?: 'pending' | 'approved' | 'rejected';
 };
 
-// NOTE: Kept the original signature & shape so existing callers (e.g. VendorDashboard) keep working.
+// NOTE: Kept the original signature & shape so existing callers (e.g., VendorDashboard) keep working.
 // Server route was previously mounted at /me/vendor.
 export function getMyVendor() {
   return get<{ vendor: VendorMe | null }>('/me/vendor');
@@ -263,4 +262,39 @@ export function softDeleteProductPhoto(productId: number, photoId: number) {
 /** Restore a previously soft-deleted photo */
 export function restoreProductPhoto(productId: number, photoId: number) {
   return post<{ ok: true }, {}>(`/products/${productId}/images/${photoId}/restore`, {});
+}
+
+/* =========================
+   PAYOUTS (NEW)
+   ========================= */
+
+export type VendorPayoutRow = {
+  orderId: number;
+  vendorId: number;
+  paidAt: string;
+  grossCents: number;
+  feeCents: number;
+  netCents: number;
+};
+
+export async function getMyPayouts(params?: { start?: string; end?: string }) {
+  const qs = new URLSearchParams();
+  if (params?.start) qs.set('start', params.start);
+  if (params?.end) qs.set('end', params.end);
+
+  const r = await fetch(`/api/vendors/me/payouts${qs.toString() ? `?${qs}` : ''}`, {
+    credentials: 'include',
+  });
+
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    return {
+      ok: false as const,
+      status: r.status,
+      error: (body)?.error || 'Request failed',
+    };
+  }
+
+  const data = await r.json();
+  return { ok: true as const, data };
 }
