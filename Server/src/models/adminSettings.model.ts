@@ -1,3 +1,4 @@
+// Server/src/models/adminSettings.model.ts
 import {
   DataTypes,
   Model,
@@ -25,6 +26,10 @@ export class AdminSettings extends Model<
   // NEW: outbound email + branding
   declare emailFrom: string | null;
   declare brandName: string | null;
+
+  // NEW: simple sales tax settings
+  declare tax_rate_bps: number;              // e.g., 825 = 8.25%
+  declare tax_label: string | null;          // e.g., 'State sales tax'
 
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
@@ -54,6 +59,10 @@ if (!sequelize) {
       // NEW fields (stored as snake_case columns)
       emailFrom: { type: DataTypes.STRING, allowNull: true, field: 'email_from' },
       brandName: { type: DataTypes.STRING, allowNull: true, field: 'brand_name' },
+
+      // NEW: tax fields
+      tax_rate_bps: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      tax_label: { type: DataTypes.STRING(64), allowNull: true, defaultValue: null },
 
       createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
       updatedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
