@@ -1,94 +1,118 @@
-// Server/src/controllers/search.controller.ts
 import type { Request, Response } from 'express';
-import { Op, type Order } from 'sequelize';
-import { z, type ZodError } from 'zod';
-import { Product } from '../models/product.model.js';
-import { Vendor } from '../models/vendor.model.js';
-import { productSearchQuerySchema } from '../validation/search.schema.js';
+import { QueryTypes } from 'sequelize';
+import { db } from '../models/sequelize.js';
 
-/** minimal, non-deprecated zod error serializer */
-function zDetails(err: ZodError) {
-  const treeify = (z as any).treeifyError;
-  if (typeof treeify === 'function') return treeify(err);
-  return {
-    issues: err.issues.map((i) => ({
-      path: Array.isArray(i.path) ? i.path.join('.') : String(i.path ?? ''),
-      message: i.message,
-      code: i.code,
-    })),
-  };
+function parsePage(v: unknown, def = 1) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return def;
+  return Math.floor(n);
+}
+function parsePageSize(v: unknown, def = 20) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0 || n > 100) return def;
+  return Math.floor(n);
 }
 
+/**
+ * GET /api/search?q=...&page=1&pageSize=20&onSale=true
+ * - Uses ILIKE against title/species/locality (trigram-backed)
+ * - Orders by similarity when q is long enough; otherwise by createdAt DESC
+ * - Returns { items, total, page, pageSize }
+ */
 export async function searchProducts(req: Request, res: Response): Promise<void> {
-  const parsed = productSearchQuerySchema.safeParse(req.query);
-  if (!parsed.success) {
-    res.status(400).json({ error: 'Invalid query', details: zDetails(parsed.error) });
+  const qRaw = String((req.query as any)?.q ?? '').trim();
+  const page = parsePage((req.query as any)?.page, 1);
+  const pageSize = parsePageSize((req.query as any)?.pageSize, 20);
+  const onSale = (req.query as any)?.onSale;
+  const wantOnSale =
+    typeof onSale === 'string' ? onSale.toLowerCase() === 'true' : Boolean(onSale);
+
+  const sequelize = db.instance();
+  if (!sequelize) {
+    res.status(500).json({ error: 'DB not initialized' });
     return;
   }
 
-  const {
-    q,
-    page: pageIn,
-    pageSize: pageSizeIn,
-    vendorId,
-    vendorSlug,
-    sort,
-  } = parsed.data;
+  // Base filters
+  const whereParts: string[] = [`"archivedAt" IS NULL`];
+  const binds: Record<string, any> = {};
 
-  const page = pageIn ?? 1;
-  const pageSize = pageSizeIn ?? 20;
-
-  // Tokenize query; require all terms (AND), each term can match any field (OR).
-  const tokens = q.split(/\s+/).map((t) => t.trim()).filter(Boolean).slice(0, 5);
-  const where: any = { archivedAt: { [Op.is]: null } };
-
-  if (tokens.length) {
-    where[Op.and] = tokens.map((t) => ({
-      [Op.or]: [
-        { title: { [Op.iLike]: `%${t}%` } },
-        { species: { [Op.iLike]: `%${t}%` } },
-        { locality: { [Op.iLike]: `%${t}%` } },
-      ],
-    }));
+  // Filter onSale if requested
+  if (wantOnSale) {
+    whereParts.push(`"onSale" = TRUE`);
   }
 
-  // Optional vendor scoping
-  if (vendorId || vendorSlug) {
-    const v = vendorId
-      ? await Vendor.findByPk(vendorId, { attributes: ['id'] })
-      : await Vendor.findOne({ where: { slug: vendorSlug }, attributes: ['id'] });
+  // Search predicate
+  let orderClause = `ORDER BY "createdAt" DESC`;
+  if (qRaw.length > 0) {
+    // ILIKE with wildcards; trigram index will accelerate this
+    whereParts.push(`(
+      title ILIKE :q
+      OR COALESCE(species, '') ILIKE :q
+      OR COALESCE(locality, '') ILIKE :q
+    )`);
+    binds.q = `%${qRaw}%`;
 
-    if (!v) {
-      res.json({ items: [], page, pageSize, total: 0, totalPages: 0 });
-      return;
+    // If query is reasonably long, rank by similarity()
+    if (qRaw.length >= 2) {
+      orderClause = `
+        ORDER BY GREATEST(
+          similarity(title, :qraw),
+          similarity(COALESCE(species, ''), :qraw),
+          similarity(COALESCE(locality, ''), :qraw)
+        ) DESC, "createdAt" DESC
+      `;
+      binds.qraw = qRaw;
     }
-    where.vendorId = v.id;
   }
 
-  // Sorting (keep parity with products list)
-  let order: Order;
-  if (sort === 'price_asc') order = [['priceCents', 'ASC']];
-  else if (sort === 'price_desc') order = [['priceCents', 'DESC']];
-  else order = [['createdAt', 'DESC']];
+  const whereSql = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
 
+  // Count first
+  const countSql = `
+    SELECT COUNT(*)::bigint AS cnt
+    FROM products
+    ${whereSql}
+  `;
+  const [{ cnt }] = await sequelize.query<{ cnt: string }>(countSql, {
+    type: QueryTypes.SELECT,
+    replacements: binds,
+  });
+
+  // Page
   const offset = (page - 1) * pageSize;
+  const listSql = `
+    SELECT
+      id,
+      title,
+      "priceCents",
+      "salePriceCents",
+      "onSale",
+      "createdAt",
+      COALESCE(primary_photo_url, NULL) AS "primaryPhotoUrl"
+    FROM products
+    ${whereSql}
+    ${orderClause}
+    LIMIT :limit OFFSET :offset
+  `;
 
-  try {
-    const { rows, count } = await Product.findAndCountAll({
-      where,
-      order,
-      offset,
-      limit: pageSize,
-    });
+  const items = await sequelize.query<any>(listSql, {
+    type: QueryTypes.SELECT,
+    replacements: { ...binds, limit: pageSize, offset },
+  });
 
-    res.json({
-      items: rows,
-      page,
-      pageSize,
-      total: count,
-      totalPages: Math.ceil(count / pageSize),
-    });
-  } catch (e: any) {
-    res.status(500).json({ error: 'Search failed', detail: e?.message });
-  }
+  res.json({
+    page,
+    pageSize,
+    total: Number(cnt || 0),
+    items: items.map((p: any) => ({
+      id: Number(p.id),
+      title: String(p.title),
+      priceCents: Number(p.priceCents ?? p.pricecents ?? p.price_cents ?? 0),
+      salePriceCents: p.salePriceCents == null ? null : Number(p.salePriceCents),
+      onSale: Boolean(p.onSale),
+      createdAt: p.createdAt,
+      primaryPhotoUrl: p.primaryPhotoUrl ?? null,
+    })),
+  });
 }
