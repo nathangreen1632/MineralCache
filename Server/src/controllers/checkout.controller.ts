@@ -9,7 +9,11 @@ import { createPaymentIntent } from '../services/stripe.service.js';
 import { Commission } from '../config/fees.config.js';
 import { db } from '../models/sequelize.js';
 import { computeVendorShippingByLines } from '../services/shipping.service.js';
-import { obs } from '../services/observability.service.js'; // ✅ NEW
+import { obs } from '../services/observability.service.js';
+
+// ✅ NEW: tax + settings
+import { getAdminSettingsCached } from '../services/settings.service.js';
+import { calcTaxCents } from '../services/tax.service.js';
 
 // ✅ NEW: proportional allocator that preserves total cents exactly
 function allocateProRataCents(lineTotals: number[], totalFeeCents: number): number[] {
@@ -71,6 +75,7 @@ async function computeCartTotals(userId: number) {
       empty: true as const,
       subtotalCents: 0,
       shippingCents: 0,
+      taxCents: 0, // ✅ NEW
       totalCents: 0,
       itemCount: 0,
       lines: [] as any[],
@@ -89,6 +94,7 @@ async function computeCartTotals(userId: number) {
       empty: true as const,
       subtotalCents: 0,
       shippingCents: 0,
+      taxCents: 0, // ✅ NEW
       totalCents: 0,
       itemCount: 0,
       lines: [] as any[],
@@ -104,6 +110,7 @@ async function computeCartTotals(userId: number) {
       empty: true as const,
       subtotalCents: 0,
       shippingCents: 0,
+      taxCents: 0, // ✅ NEW
       totalCents: 0,
       itemCount: 0,
       lines: [] as any[],
@@ -204,12 +211,18 @@ async function computeCartTotals(userId: number) {
     0
   );
 
-  const totalCents = subtotalCents + shippingCents;
+  // ✅ NEW: sales tax (subtotal-only)
+  const settings = await getAdminSettingsCached();
+  const taxRateBps = Number(settings?.tax_rate_bps ?? 0);
+  const taxCents = calcTaxCents(subtotalCents, taxRateBps);
+
+  const totalCents = subtotalCents + shippingCents + taxCents;
 
   return {
     empty: totalCents <= 0 ? (true as const) : (false as const),
     subtotalCents,
     shippingCents,
+    taxCents, // ✅ NEW
     totalCents,
     itemCount,
     lines,
@@ -277,6 +290,7 @@ export async function createCheckoutIntent(
     itemCount: String(totals.itemCount),
     subtotalCents: String(totals.subtotalCents),
     shippingCents: String(totals.shippingCents),
+    taxCents: String(totals.taxCents), // ✅ NEW
     platformFeeCents: String(platformFeeCents),
     shippingVendors: Object.keys(totals.vendorShippingSnapshot).join(','), // quick debug
   };
@@ -337,6 +351,7 @@ export async function createCheckoutIntent(
         paymentIntentId: intentId ?? null,
         subtotalCents: totals.subtotalCents,
         shippingCents: totals.shippingCents,
+        taxCents: totals.taxCents,   // ✅ NEW
         totalCents: totals.totalCents,
         commissionPct: pct,
         commissionCents: platformFeeCents,
@@ -370,5 +385,15 @@ export async function createCheckoutIntent(
     }
   });
 
-  res.json({ clientSecret });
+  res.json({
+    clientSecret,
+    amountCents: totals.totalCents,
+    totals: {
+      subtotal: totals.subtotalCents,
+      shipping: totals.shippingCents,
+      tax: totals.taxCents, // ✅ NEW
+      total: totals.totalCents,
+    },
+    vendorShippingSnapshot: totals.vendorShippingSnapshot,
+  });
 }
