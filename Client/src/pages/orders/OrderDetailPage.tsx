@@ -1,6 +1,7 @@
+// Client/src/pages/orders/OrderDetailPage.tsx
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getMyOrder, type GetOrderRes } from '../../api/orders';
+import { getMyOrder, type GetOrderRes, cancelMyOrder } from '../../api/orders';
 
 type Load =
   | { kind: 'idle' }
@@ -17,6 +18,8 @@ export default function OrderDetailPage(): React.ReactElement {
   const id = Number(params.id);
 
   const [state, setState] = useState<Load>({ kind: 'idle' });
+  const [actMsg, setActMsg] = useState<string | null>(null);
+  const [actBusy, setActBusy] = useState(false);
 
   useEffect(() => {
     if (!Number.isFinite(id)) {
@@ -34,10 +37,34 @@ export default function OrderDetailPage(): React.ReactElement {
       }
       setState({ kind: 'loaded', order: data.item });
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [id]);
 
-  const card = { background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' } as const;
+  async function onCancel() {
+    if (state.kind !== 'loaded') return;
+    setActMsg(null);
+    setActBusy(true);
+    const r = await cancelMyOrder(Number(state.order.id));
+    setActBusy(false);
+    if (!r.ok) {
+      setActMsg(r.error || 'Failed to cancel');
+      return;
+    }
+    setActMsg('Order canceled.');
+    // reflect UI immediately
+    setState({
+      kind: 'loaded',
+      order: { ...state.order, status: 'cancelled' },
+    });
+  }
+
+  const card = {
+    background: 'var(--theme-surface)',
+    borderColor: 'var(--theme-border)',
+    color: 'var(--theme-text)',
+  } as const;
 
   if (state.kind === 'loading' || state.kind === 'idle') {
     return (
@@ -63,21 +90,44 @@ export default function OrderDetailPage(): React.ReactElement {
 
   return (
     <section className="mx-auto max-w-4xl px-6 py-14 space-y-6">
-      <div className="flex items-baseline justify-between">
+      <div className="flex items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Order #{o.id}</h1>
-        <Link
-          to="/account/orders"
-          className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
-        >
-          Back to orders
-        </Link>
+        <div className="flex items-center gap-3">
+          {o.status === 'pending_payment' && (
+            <>
+              <button
+                onClick={onCancel}
+                disabled={actBusy}
+                className="rounded-xl px-4 py-2 font-semibold border border-[var(--theme-border)] hover:bg-[var(--theme-card)] disabled:opacity-50"
+              >
+                {actBusy ? 'Cancelling…' : 'Cancel order'}
+              </button>
+              {actMsg && <div className="text-sm opacity-80">{actMsg}</div>}
+            </>
+          )}
+          <Link
+            to="/account/orders"
+            className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
+          >
+            Back to orders
+          </Link>
+        </div>
       </div>
 
       <div className="rounded-2xl border p-6 grid gap-3" style={card}>
-        <p><strong>Status:</strong> <span className="capitalize">{o.status.replace('_', ' ')}</span></p>
-        <p><strong>Subtotal:</strong> {centsToUsd(o.subtotalCents)}</p>
-        <p><strong>Shipping:</strong> {centsToUsd(o.shippingCents)} {o.shippingRuleName ? <span className="opacity-70">({o.shippingRuleName})</span> : null}</p>
-        <p><strong>Total:</strong> {centsToUsd(o.totalCents)}</p>
+        <p>
+          <strong>Status:</strong> <span className="capitalize">{o.status.replace('_', ' ')}</span>
+        </p>
+        <p>
+          <strong>Subtotal:</strong> {centsToUsd(o.subtotalCents)}
+        </p>
+        <p>
+          <strong>Shipping:</strong> {centsToUsd(o.shippingCents)}{' '}
+          {o.shippingRuleName ? <span className="opacity-70">({o.shippingRuleName})</span> : null}
+        </p>
+        <p>
+          <strong>Total:</strong> {centsToUsd(o.totalCents)}
+        </p>
         {Array.isArray(o.shippingBreakdown) && o.shippingBreakdown.length > 0 ? (
           <div className="mt-1 text-sm opacity-80">
             {o.shippingBreakdown.map((row, idx) => (
@@ -103,7 +153,11 @@ export default function OrderDetailPage(): React.ReactElement {
             </thead>
             <tbody>
             {o.items.map((it, idx) => (
-              <tr key={`${it.productId}-${idx}`} className="border-b last:border-b-0" style={{ borderColor: 'var(--theme-border)' }}>
+              <tr
+                key={`${it.productId}-${idx}`}
+                className="border-b last:border-b-0"
+                style={{ borderColor: 'var(--theme-border)' }}
+              >
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     {it.primaryPhotoUrl ? (
