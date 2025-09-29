@@ -7,6 +7,6 @@ import { searchProducts } from '../controllers/search.controller.js';
 const router: Router = Router();
 
 // GET /api/search/products?q=term+here&vendorSlug=...&page=1&pageSize=20&sort=newest|price_asc|price_desc
-router.get('/products', validateQuery(productSearchQuerySchema), searchProducts);
+router.get('/', validateQuery(productSearchQuerySchema), searchProducts);
 
 export default router;
