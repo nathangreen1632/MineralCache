@@ -50,3 +50,34 @@ export type GetOrderRes = {
 export function getMyOrder(id: number) {
   return get<GetOrderRes>(`/orders/${id}`);
 }
+
+/* ==================== NEW HELPERS ==================== */
+
+/** Admin: full refund an order. Returns { ok, refundId? } or { ok:false, error }. */
+export async function adminRefundOrder(id: number) {
+  const r = await fetch(`/api/admin/orders/${id}/refund`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  });
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    return { ok: false as const, error: (body)?.error || `HTTP ${r.status}` };
+  }
+  const body = await r.json().catch(() => ({}));
+  return { ok: true as const, refundId: (body)?.refundId ?? null };
+}
+
+/** Buyer: cancel a pending order. Returns { ok } or { ok:false, error }. */
+export async function cancelMyOrder(id: number) {
+  const r = await fetch(`/api/orders/${id}/cancel`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  });
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    return { ok: false as const, error: (body)?.error || `HTTP ${r.status}` };
+  }
+  return { ok: true as const };
+}
