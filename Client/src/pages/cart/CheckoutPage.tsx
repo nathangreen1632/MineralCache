@@ -121,7 +121,7 @@ export default function CheckoutPage(): React.ReactElement {
           </div>
         ) : (
           <Elements
-            stripe={stripePromise!}
+            stripe={stripePromise}
             options={{
               appearance: {
                 variables: {
