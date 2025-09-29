@@ -1,3 +1,4 @@
+// Client/src/api/vendor.ts
 import { get, put, post, del } from '../lib/api';
 
 /* =========================
@@ -174,13 +175,16 @@ export type VendorOrderListItem = {
   totalCents: number;
 };
 
-export function listVendorOrders(params: {
-  status?: OrderStatus;
-  from?: string;
-  to?: string;
-  page?: number;
-  pageSize?: number;
-} = {}) {
+export function listVendorOrders(
+  params: {
+    /** Orders.status or special filter "shipped" (vendor-fulfilled). */
+    status?: OrderStatus | 'shipped';
+    from?: string;
+    to?: string;
+    page?: number;
+    pageSize?: number;
+  } = {}
+) {
   const search = new URLSearchParams();
   if (params.status) search.set('status', params.status);
   if (params.from) search.set('from', params.from);
