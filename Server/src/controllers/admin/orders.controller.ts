@@ -8,6 +8,10 @@ import {
   adminOrderIdParamSchema,
 } from '../../validation/adminOrders.schema.js';
 
+// ✅ NEW imports for refunds
+import { db } from '../../models/sequelize.js';
+import { createRefund } from '../../services/stripe.service.js';
+
 function toDateBound(s?: string, endOfDay = false): Date | null {
   if (!s) return null;
   const d = new Date(s);
@@ -142,6 +146,79 @@ export async function getAdminOrder(req: Request, res: Response, next: NextFunct
     }
 
     res.json(order);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ======================= NEW: Admin Refund =======================
+
+function hasFn(obj: any, key: string): obj is Record<string, any> {
+  return obj && typeof obj[key] === 'function';
+}
+
+/** POST /api/admin/orders/:id/refund  (full refunds only) */
+export async function refundOrder(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      res.status(400).json({ error: 'Bad id' });
+      return;
+    }
+
+    const sequelize = db.instance();
+    if (!sequelize) {
+      res.status(500).json({ error: 'DB not initialized' });
+      return;
+    }
+
+    const order = await Order.findByPk(id);
+    if (!order) {
+      res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+
+    // Only paid orders can be refunded (skip already-refunded)
+    if ((order as any).status !== 'paid') {
+      res.status(400).json({ error: 'Only paid orders can be refunded' });
+      return;
+    }
+
+    const intentId: string | null =
+      (order as any).paymentIntentId ??
+      (hasFn(order, 'get') ? (order as any).get('paymentIntentId') : null) ??
+      null;
+
+    if (!intentId) {
+      res.status(400).json({ error: 'Order missing paymentIntentId' });
+      return;
+    }
+
+    // Create full refund at Stripe
+    const r = await createRefund({ paymentIntentId: intentId, reason: 'requested_by_customer' });
+    if (!r.ok) {
+      res.status(502).json({ error: r.error || 'Failed to create refund' });
+      return;
+    }
+
+    // Persist refund status atomically
+    await sequelize.transaction(async (t) => {
+      (order as any).status = 'refunded';
+      (order as any).refundedAt = new Date();
+      await order.save({ transaction: t });
+    });
+
+    // Optional observability if present
+    try {
+      const { obs } = await import('../../services/observability.service.js');
+      if (typeof (obs as any)?.orderRefunded === 'function') {
+        (obs as any).orderRefunded(req, Number(order.id), { refundId: (r as any).refundId });
+      }
+    } catch {
+      // ignore
+    }
+
+    res.json({ ok: true, refundId: (r as any).refundId });
   } catch (err) {
     next(err);
   }
