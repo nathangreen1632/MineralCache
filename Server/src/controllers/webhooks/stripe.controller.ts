@@ -1,4 +1,3 @@
-// Server/src/controllers/webhooks/stripe.controller.ts
 import type { Request, Response } from 'express';
 import { verifyStripeWebhook, retrieveChargeWithBalanceTx } from '../../services/stripe.service.js';
 import { db } from '../../models/sequelize.js';
@@ -6,6 +5,9 @@ import { Order } from '../../models/order.model.js';
 import { OrderItem } from '../../models/orderItem.model.js';
 import { Product } from '../../models/product.model.js';
 import { obs } from '../../services/observability.service.js';
+
+// ✅ NEW: vendor payout snapshot model
+import { OrderVendor } from '../../models/orderVendor.model.js';
 
 // ✅ NEW: email + buyer fetch
 import { sendOrderEmail } from '../../services/email.service.js';
@@ -69,19 +71,73 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
             );
           }
 
+          // ✅ NEW: snapshot vendor payout rows (gross, fee, net) for this order
+          // Build per-vendor line totals and fees from items
+          const vendorLineTotals = new Map<number, number>();
+          const vendorFees = new Map<number, number>();
+          for (const it of items) {
+            const vId = Number(it.vendorId);
+            vendorLineTotals.set(vId, (vendorLineTotals.get(vId) || 0) + Number(it.lineTotalCents || 0));
+            // commissionCents is on OrderItem
+            vendorFees.set(vId, (vendorFees.get(vId) || 0) + Number((it as any).commissionCents || 0));
+          }
+
+          // Add shipping cents per vendor from the order snapshot
+          const shippingSnap =
+            ((order as any).vendorShippingJson || {}) as Record<string, { cents?: number }>;
+          const vendorShipping = new Map<number, number>();
+          for (const [k, v] of Object.entries(shippingSnap)) {
+            const vId = Number(k);
+            vendorShipping.set(vId, Number((v as any)?.cents || 0));
+          }
+
+          const vendorIds = new Set<number>([
+            ...vendorLineTotals.keys(),
+            ...vendorShipping.keys(),
+          ]);
+
+          for (const vId of vendorIds) {
+            const gross = (vendorLineTotals.get(vId) || 0) + (vendorShipping.get(vId) || 0);
+            const fee = vendorFees.get(vId) || 0; // allocated platform fee
+            const net = Math.max(0, gross - fee);
+
+            // Upsert to keep idempotency if webhook retries
+            const [row, created] = await OrderVendor.findOrCreate({
+              where: { orderId: Number(order.id), vendorId: vId },
+              defaults: {
+                orderId: Number(order.id),
+                vendorId: vId,
+                vendorGrossCents: gross,
+                vendorFeeCents: fee,
+                vendorNetCents: net,
+              },
+              transaction: t,
+            });
+            if (!created) {
+              await row.update(
+                { vendorGrossCents: gross, vendorFeeCents: fee, vendorNetCents: net },
+                { transaction: t }
+              );
+            }
+          }
+
           // Stash for post-commit email
           paidOrderId = Number(order.id);
-
-// Safely read optional order number without requiring it on the TS model
+          // Safely read optional order number without requiring it on the TS model
           const rawOrderNumber =
             (order as any)?.orderNumber ??
-            (typeof (order as any)?.get === 'function' ? (order as any).get('orderNumber') : undefined) ??
-            (typeof (order as any)?.get === 'function' ? (order as any).get('order_number') : undefined) ??
+            (typeof (order as any)?.get === 'function'
+              ? (order as any).get('orderNumber')
+              : undefined) ??
+            (typeof (order as any)?.get === 'function'
+              ? (order as any).get('order_number')
+              : undefined) ??
             null;
 
-          paidOrderNumber = typeof rawOrderNumber === 'string' && rawOrderNumber.length > 0
-            ? rawOrderNumber
-            : null;
+          paidOrderNumber =
+            typeof rawOrderNumber === 'string' && rawOrderNumber.length > 0
+              ? rawOrderNumber
+              : null;
 
           buyerUserId = Number((order as any).buyerUserId ?? order.get?.('buyerUserId'));
 
