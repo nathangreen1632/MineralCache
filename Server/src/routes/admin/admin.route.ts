@@ -5,10 +5,20 @@ import { burstLimiter } from '../../middleware/rateLimit.middleware.js';
 import { validateBody, validateQuery } from '../../middleware/validate.middleware.js';
 import { adminListVendorsSchema, adminRejectSchema } from '../../validation/vendor.schema.js';
 import { updateAdminSettingsSchema } from '../../validation/adminSettings.schema.js';
-import { listVendorApps, approveVendor, rejectVendor, getAdminSettings, patchAdminSettings } from '../../controllers/admin/admin.controller.js';
+import {
+  listVendorApps,
+  approveVendor,
+  rejectVendor,
+  getAdminSettings,
+  patchAdminSettings,
+} from '../../controllers/admin/admin.controller.js';
 import { shippingRulesRouter } from './shippingRules.route.js';
 import { adminListOrdersQuerySchema } from '../../validation/adminOrders.schema.js'; // ✅ NEW (use the alias)
-import { listAdminOrders, getAdminOrder } from '../../controllers/admin/orders.controller.js'; // ✅ NEW
+import {
+  listAdminOrders,
+  getAdminOrder,
+  refundOrder, // ✅ NEW
+} from '../../controllers/admin/orders.controller.js'; // ✅ NEW
 
 const router: Router = Router();
 
@@ -25,8 +35,11 @@ router.patch('/settings', requireAdmin, burstLimiter, validateBody(updateAdminSe
 // Shipping rules (admin)
 router.use('/shipping-rules', requireAdmin, shippingRulesRouter);
 
-// Orders (admin) ✅ NEW
+// Orders (admin)
 router.get('/orders', requireAdmin, burstLimiter, validateQuery(adminListOrdersQuerySchema), listAdminOrders);
 router.get('/orders/:id', requireAdmin, burstLimiter, getAdminOrder);
+
+// ✅ NEW: Full refund endpoint (admin only)
+router.post('/orders/:id/refund', requireAdmin, burstLimiter, refundOrder);
 
 export default router;
