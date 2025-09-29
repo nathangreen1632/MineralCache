@@ -73,6 +73,7 @@ export async function listMyOrders(req: Request, res: Response): Promise<void> {
     createdAt: r.createdAt,
     subtotalCents: r.subtotalCents,
     shippingCents: r.shippingCents,
+    taxCents: Number((r as any).taxCents ?? 0), // ✅ NEW
     totalCents: r.totalCents,
     items: (byOrderId.get(Number(r.id)) ?? []).map((i) => ({
       productId: Number(i.productId),
@@ -130,6 +131,7 @@ export async function getOrder(req: Request, res: Response): Promise<void> {
       refundedAt: order.refundedAt,
       subtotalCents: order.subtotalCents,
       shippingCents: order.shippingCents,
+      taxCents: Number((order as any).taxCents ?? 0), // ✅ NEW
       totalCents: order.totalCents,
       commissionPct: Number((order as any).commissionPct ?? 0),
       commissionCents: Number((order as any).commissionCents ?? 0),
@@ -292,6 +294,18 @@ export async function getReceiptHtml(req: Request, res: Response): Promise<void>
 
   const totalCents = typeof (order as any).totalCents === 'number' ? (order as any).totalCents : 0;
   const total = totalCents / 100;
+
+  // ✅ NEW: tax row if present
+  const taxCents = Number((order as any).taxCents ?? 0);
+  const taxHtml =
+    taxCents > 0
+      ? `<tr>
+           <td></td>
+           <td style="padding:8px;text-align:right">Tax</td>
+           <td style="padding:8px;text-align:right">$${(taxCents / 100).toFixed(2)}</td>
+         </tr>`
+      : '';
+
   const orderNumber = readOrderNumberSafe(order);
   const orderNumText = orderNumber ? `#${orderNumber}` : `ID ${order.id}`;
 
@@ -312,6 +326,7 @@ export async function getReceiptHtml(req: Request, res: Response): Promise<void>
           </thead>
           <tbody>${rows}</tbody>
           <tfoot>
+            ${taxHtml}
             <tr>
               <td></td>
               <td style="padding:8px;text-align:right"><strong>Total</strong></td>
