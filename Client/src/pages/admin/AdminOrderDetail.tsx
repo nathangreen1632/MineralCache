@@ -79,13 +79,10 @@ export default function AdminOrderDetail(): React.ReactElement | null {
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Order #{item.id}</h1>
 
-        {/* ✅ NEW: Admin actions */}
+        {/* ✅ Admin actions */}
         <div className="flex items-center gap-3">
           {item.status === 'paid' && (
-            <AdminRefundButton
-              orderId={item.id}
-              disabled={busy}
-            />
+            <AdminRefundButton orderId={item.id} disabled={busy} />
           )}
           <button
             onClick={reload}
@@ -116,6 +113,12 @@ export default function AdminOrderDetail(): React.ReactElement | null {
           <div>
             Shipping: <strong>{centsToUsd(item.shippingCents)}</strong>
           </div>
+          {/* ✅ NEW: show tax if present */}
+          {typeof (item as any).taxCents === 'number' && (item as any).taxCents > 0 && (
+            <div>
+              Tax: <strong>{centsToUsd((item as any).taxCents)}</strong>
+            </div>
+          )}
           <div>
             Total: <strong>{centsToUsd(item.totalCents)}</strong>
           </div>
