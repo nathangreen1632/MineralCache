@@ -8,7 +8,7 @@ import {
 } from 'sequelize';
 import { db } from './sequelize.js';
 
-export type OrderStatus = 'pending_payment' | 'paid' | 'failed' | 'refunded';
+export type OrderStatus = 'pending_payment' | 'paid' | 'failed' | 'refunded' | 'cancelled';
 
 export class Order extends Model<
   InferAttributes<Order>,
@@ -25,6 +25,7 @@ export class Order extends Model<
   // Money snapshots
   declare subtotalCents: number;
   declare shippingCents: number;
+  declare taxCents: number;      // ✅ NEW: sales tax snapshot (e.g., 8.25%)
   declare totalCents: number;
 
   // Commission snapshot (for platform reconciliation)
@@ -57,7 +58,7 @@ if (!sequelize) {
       buyerUserId: { type: DataTypes.BIGINT, allowNull: false },
 
       status: {
-        type: DataTypes.ENUM('pending_payment', 'paid', 'failed', 'refunded'),
+        type: DataTypes.ENUM('pending_payment', 'paid', 'failed', 'refunded', 'cancelled'), // ✅ include 'cancelled'
         allowNull: false,
         defaultValue: 'pending_payment',
       },
@@ -66,6 +67,7 @@ if (!sequelize) {
 
       subtotalCents: { type: DataTypes.INTEGER, allowNull: false, validate: { min: 0 } },
       shippingCents: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, validate: { min: 0 } },
+      taxCents:      { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 }, // ✅ NEW
       totalCents:    { type: DataTypes.INTEGER, allowNull: false, validate: { min: 0 } },
 
       commissionPct:   { type: DataTypes.DECIMAL(6, 4), allowNull: false, defaultValue: 0.08 },
