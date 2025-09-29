@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getMyOrder, type GetOrderRes, cancelMyOrder } from '../../api/orders';
+import { trackingUrl } from '../../utils/tracking.util';
 
 type Load =
   | { kind: 'idle' }
@@ -86,6 +87,7 @@ export default function OrderDetailPage(): React.ReactElement {
   }
 
   const o = state.order;
+  const hasTax = typeof (o as any).taxCents === 'number' && (o as any).taxCents > 0;
 
   return (
     <section className="mx-auto max-w-4xl px-6 py-14 space-y-6">
@@ -117,24 +119,45 @@ export default function OrderDetailPage(): React.ReactElement {
         <p>
           <strong>Status:</strong> <span className="capitalize">{o.status.replace('_', ' ')}</span>
         </p>
-        <p>
-          <strong>Subtotal:</strong> {centsToUsd(o.subtotalCents)}
-        </p>
-        <p>
-          <strong>Shipping:</strong> {centsToUsd(o.shippingCents)}{' '}
-          {o.shippingRuleName ? <span className="opacity-70">({o.shippingRuleName})</span> : null}
-        </p>
-        {/* ✅ NEW: show tax when present */}
-        {typeof (o as any).taxCents === 'number' && (o as any).taxCents > 0 && (
-          <p>
-            <strong>Tax:</strong> {centsToUsd((o as any).taxCents)}
-          </p>
-        )}
-        <p>
-          <strong>Total:</strong> {centsToUsd(o.totalCents)}
-        </p>
+
+        {/* Totals breakdown */}
+        <div className="grid gap-1 text-[15px]">
+          <div><strong>Subtotal:</strong> {centsToUsd(o.subtotalCents)}</div>
+
+          {/* Per-vendor shipping lines (if provided) */}
+          {Array.isArray((o as any).shippingVendors) && (o as any).shippingVendors.length > 0 && (
+            <div className="opacity-90">
+              {(o as any).shippingVendors.map(
+                (v: { vendorId: number; vendorName?: string | null; label?: string | null; amountCents: number }, i: number) => (
+                  <div key={`${v.vendorId}-${i}`} className="flex gap-2">
+                    <span>
+                      Shipping
+                      {v.vendorName ? ` · ${v.vendorName}` : v.label ? ` · ${v.label}` : ''}:
+                    </span>
+                    <span>{centsToUsd(v.amountCents)}</span>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+
+          {/* Legacy single-line shipping (fallback) */}
+          {(!(o as any).shippingVendors || (o as any).shippingVendors.length === 0) && (
+            <div>
+              <strong>Shipping:</strong> {centsToUsd(o.shippingCents)}{' '}
+              {o.shippingRuleName ? <span className="opacity-70">({o.shippingRuleName})</span> : null}
+            </div>
+          )}
+
+          {/* Optional tax */}
+          {hasTax && <div><strong>Tax:</strong> {centsToUsd((o as any).taxCents)}</div>}
+
+          <div><strong>Total:</strong> {centsToUsd(o.totalCents)}</div>
+        </div>
+
+        {/* Any shipping breakdown rows (kept) */}
         {Array.isArray(o.shippingBreakdown) && o.shippingBreakdown.length > 0 ? (
-          <div className="mt-1 text-sm opacity-80">
+          <div className="mt-2 text-sm opacity-80">
             {o.shippingBreakdown.map((row, idx) => (
               <div key={idx} className="flex gap-2">
                 <span>{row.label}:</span>
@@ -154,33 +177,73 @@ export default function OrderDetailPage(): React.ReactElement {
               <th className="px-4 py-3">Qty</th>
               <th className="px-4 py-3">Price</th>
               <th className="px-4 py-3">Line Total</th>
+              <th className="px-4 py-3">Fulfillment</th>
             </tr>
             </thead>
             <tbody>
-            {o.items.map((it, idx) => (
-              <tr
-                key={`${it.productId}-${idx}`}
-                className="border-b last:border-b-0"
-                style={{ borderColor: 'var(--theme-border)' }}
-              >
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    {it.primaryPhotoUrl ? (
-                      <img
-                        src={it.primaryPhotoUrl}
-                        alt={it.title}
-                        className="h-10 w-10 rounded-md object-cover"
-                        style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
-                      />
-                    ) : null}
-                    <span className="font-medium">{it.title}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3">{it.quantity}</td>
-                <td className="px-4 py-3">{centsToUsd(it.unitPriceCents)}</td>
-                <td className="px-4 py-3">{centsToUsd(it.lineTotalCents)}</td>
-              </tr>
-            ))}
+            {o.items.map((it: any, idx: number) => {
+              const tUrl = trackingUrl(it.shipCarrier, it.shipTracking);
+              return (
+                <tr
+                  key={`${it.productId}-${idx}`}
+                  className="border-b last:border-b-0"
+                  style={{ borderColor: 'var(--theme-border)' }}
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      {it.primaryPhotoUrl ? (
+                        <img
+                          src={it.primaryPhotoUrl}
+                          alt={it.title}
+                          className="h-10 w-10 rounded-md object-cover"
+                          style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
+                        />
+                      ) : null}
+                      <span className="font-medium">{it.title}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">{it.quantity}</td>
+                  <td className="px-4 py-3">{centsToUsd(it.unitPriceCents)}</td>
+                  <td className="px-4 py-3">{centsToUsd(it.lineTotalCents)}</td>
+                  <td className="px-4 py-3">
+                    {it.shipTracking ? (
+                      <div className="flex flex-col gap-0.5">
+                        <div>
+                          <span className="opacity-80">Carrier:</span> {it.shipCarrier ?? '—'}
+                        </div>
+                        <div className="truncate">
+                          <span className="opacity-80">Tracking:</span>{' '}
+                          {tUrl ? (
+                            <a
+                              className="underline decoration-dotted"
+                              href={tUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {it.shipTracking}
+                            </a>
+                          ) : (
+                            it.shipTracking
+                          )}
+                        </div>
+                        {it.shippedAt && (
+                          <div className="opacity-80">
+                            Shipped: {new Date(it.shippedAt).toLocaleString()}
+                          </div>
+                        )}
+                        {it.deliveredAt && (
+                          <div className="opacity-80">
+                            Delivered: {new Date(it.deliveredAt).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="opacity-60">—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
             </tbody>
           </table>
         </div>
