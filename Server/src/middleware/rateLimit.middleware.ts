@@ -129,6 +129,26 @@ export const registerLimiter = rateLimit({
   },
 });
 
+/** ✅ NEW: Checkout intent limiter (user-or-IP keyed)
+ * Defaults: 10 attempts per minute
+ * Mount on: POST /api/checkout/intent (before handler)
+ */
+export const checkoutIntentLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => userOrIpKey(req),
+  handler: (req: Request, res: Response) => {
+    res.status(429).json({
+      ok: false,
+      code: 'RATE_LIMITED',
+      message: 'Too many checkout attempts, please slow down.',
+      rid: requestId(req),
+    });
+  },
+});
+
 /** ✅ NEW: Bidding rate limit (auth-heavy, user-or-IP keyed)
  * Defaults:
  *  - Burst: 8 requests / 4s
