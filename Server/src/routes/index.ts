@@ -13,6 +13,7 @@ import uploadsRouter from './uploads.route.js';
 import checkoutRouter from './checkout.route.js';
 import searchRouter from './search.route.js';
 import vendorOrdersRoute from "./vendor/vendorOrders.route.js";
+import vendorMePayouts from './vendorsPayouts.route.js';
 
 const router: Router = Router();
 
@@ -29,5 +30,6 @@ router.use('/health', healthRouter);
 router.use('/uploads', uploadsRouter);
 router.use('/checkout', checkoutRouter);
 router.use('/search', searchRouter);
+router.use('/vendors/me', vendorMePayouts);
 
 export default router;
