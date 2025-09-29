@@ -1,4 +1,3 @@
-// Server/src/app.ts
 import express from 'express';
 import path from 'node:path';
 import helmet from 'helmet';
@@ -6,14 +5,15 @@ import compression from 'compression';
 import morgan from 'morgan';
 import apiRouter from './routes/index.js';
 import { db } from './models/sequelize.js';
+import './models/associations.js';
 import 'dotenv/config';
 import { buildSessionMiddleware } from './middleware/session.middleware.js';
 import { attachUser } from './middleware/authz.middleware.js';
 import { requestId } from './middleware/requestId.middleware.js';
-import { requestContext } from './middleware/requestContext.middleware.js'; // ✅ NEW
+import { requestContext } from './middleware/requestContext.middleware.js';
 import { jsonErrorHandler } from './middleware/error.middleware.js';
-import { getVersionInfo } from './utils/version.util.js'; // ✅ NEW
-import { assertStripeAtBoot, getStripeStatus } from './services/stripe.service.js'; // ✅ UPDATED: include getStripeStatus
+import { getVersionInfo } from './utils/version.util.js';
+import { assertStripeAtBoot, getStripeStatus } from './services/stripe.service.js';
 import webhooksRouter from "./routes/webhooks.route.js";
 
 // ✅ Fail fast if Stripe is enabled but not correctly configured
