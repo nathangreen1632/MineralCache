@@ -22,6 +22,35 @@ function zDetails(err: ZodError) {
   };
 }
 
+/** ---------------- Availability guard (staleness) ----------------
+ * Checks a list of productIds and returns any that are unavailable.
+ * Unavailable currently means: archived (p.archivedAt != null).
+ * Respond with 409 if any are unavailable.
+ * ---------------------------------------------------------------- */
+async function validateAvailability(productIds: number[]) {
+  if (productIds.length === 0) {
+    return { ok: true as const, unavailable: [] as Array<{ productId: number; reason: string }> };
+  }
+
+  const rows = await Product.findAll({
+    where: { id: { [Op.in]: productIds } },
+    attributes: ['id', 'archivedAt'],
+  });
+
+  const unavailable: Array<{ productId: number; reason: string }> = [];
+  for (const p of rows) {
+    const archived = (p as any).archivedAt != null;
+    if (archived) {
+      unavailable.push({ productId: Number(p.id), reason: 'archived' });
+    }
+  }
+
+  if (unavailable.length > 0) {
+    return { ok: false as const, unavailable };
+  }
+  return { ok: true as const, unavailable: [] as Array<{ productId: number; reason: string }> };
+}
+
 /** ---------------- Totals helper ----------------
  * Computes:
  * - subtotalCents = sum(unitPrice * qty) (sale-aware if model exposes getEffectivePriceCents)
@@ -196,12 +225,21 @@ export async function putCart(req: Request, res: Response): Promise<void> {
   const userId = (req as any).user.id;
   const items = parsed.data.items;
 
-  // Optional: enforce ownership or availability here
-  // TODO(stock): verify products are available / not archived beyond our basic filter
+  // ✅ Staleness guard: block archived/unavailable items before persisting
+  const productIds = items.map((x) => Number(x.productId)).filter((n) => Number.isFinite(n));
+  const avail = await validateAvailability(productIds);
+  if (!avail.ok) {
+    res.status(409).json({
+      error: 'Some items are no longer available',
+      code: 'PRODUCT_UNAVAILABLE',
+      unavailable: avail.unavailable, // [{ productId, reason }]
+    });
+    return;
+  }
 
   const totals = await computeTotals(items);
 
-  // TODO: upsert items for req.user.id from req.body — done here
+  // Upsert items for req.user.id
   const now = new Date();
   const existing = await Cart.findOne({ where: { userId } });
   if (existing) {
@@ -238,10 +276,23 @@ export async function checkout(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // TODO: compute real totals from the user’s cart — done here (now rule-based)
+  // Compute real totals from the user’s cart — rule-based
   const userId = (req as any).user.id;
   const cart = await Cart.findOne({ where: { userId } });
   const items: Array<{ productId: number; quantity: number }> = (cart?.itemsJson as any) ?? [];
+
+  // ✅ Staleness guard before totals/PI
+  const productIds = items.map((x) => Number(x.productId)).filter((n) => Number.isFinite(n));
+  const avail = await validateAvailability(productIds);
+  if (!avail.ok) {
+    res.status(409).json({
+      error: 'Some items are no longer available',
+      code: 'PRODUCT_UNAVAILABLE',
+      unavailable: avail.unavailable,
+    });
+    return;
+  }
+
   const totals = await computeTotals(items);
 
   if (!totals.totalCents || totals.totalCents < 50) {
