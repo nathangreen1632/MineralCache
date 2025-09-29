@@ -35,6 +35,34 @@ function allocateProRataCents(lineTotals: number[], totalFeeCents: number): numb
   return result;
 }
 
+/** ---------------- Availability guard (staleness) ----------------
+ * Checks a list of productIds and returns any that are unavailable.
+ * Unavailable currently means: archived (p.archivedAt != null).
+ * Respond with 409 if any are unavailable.
+ * ---------------------------------------------------------------- */
+async function validateAvailability(productIds: number[]) {
+  if (productIds.length === 0) {
+    return { ok: true as const, unavailable: [] as Array<{ productId: number; reason: string }> };
+  }
+
+  const rows = await Product.findAll({
+    where: { id: { [Op.in]: productIds } },
+    attributes: ['id', 'archivedAt'],
+  });
+
+  const unavailable: Array<{ productId: number; reason: string }> = [];
+  for (const p of rows) {
+    if ((p as any).archivedAt != null) {
+      unavailable.push({ productId: Number(p.id), reason: 'archived' });
+    }
+  }
+
+  if (unavailable.length > 0) {
+    return { ok: false as const, unavailable };
+  }
+  return { ok: true as const, unavailable: [] as Array<{ productId: number; reason: string }> };
+}
+
 /** Server-side cart → totals + per-vendor shipping (rule-based) */
 async function computeCartTotals(userId: number) {
   const cart = await Cart.findOne({ where: { userId } });
@@ -203,6 +231,28 @@ export async function createCheckoutIntent(
     res
       .status(403)
       .json({ error: 'Age verification required', code: 'AGE_VERIFICATION_REQUIRED' });
+    return;
+  }
+
+  // ✅ Staleness guard — check cart items against archived products BEFORE totals/PI
+  const cartForGuard = await Cart.findOne({ where: { userId: Number(u.id) } });
+  const cartItemsForGuard: Array<{ productId: number; quantity: number }> = Array.isArray(
+    (cartForGuard as any)?.itemsJson
+  )
+    ? ((cartForGuard as any).itemsJson as Array<{ productId: number; quantity: number }>)
+    : [];
+
+  const productIds = cartItemsForGuard
+    .map((x) => Number((x as any)?.productId))
+    .filter((n) => Number.isFinite(n));
+
+  const availability = await validateAvailability(productIds);
+  if (!availability.ok) {
+    res.status(409).json({
+      error: 'Some items are no longer available',
+      code: 'PRODUCT_UNAVAILABLE',
+      unavailable: availability.unavailable, // [{ productId, reason }]
+    });
     return;
   }
 
