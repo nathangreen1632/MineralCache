@@ -44,6 +44,10 @@ function toDto(s: AdminSettings) {
       bps: Number(s.commission_bps),
       minFeeCents: Number(s.min_fee_cents),
     },
+    tax: {
+      bps: Number((s as any).tax_rate_bps ?? 0),               // ✅ include tax in DTO
+      label: ((s as any).tax_label ?? null) as string | null,
+    },
     shippingDefaults: {
       flatCents: Number(s.ship_flat_cents),
       perItemCents: Number(s.ship_per_item_cents),
@@ -64,6 +68,8 @@ export async function getAdminSettings(_req: Request, res: Response): Promise<vo
   try {
     // unified currency fallback (CURRENCY preferred, then STRIPE_CURRENCY, then 'usd')
     const envCurrency = (process.env.CURRENCY || process.env.STRIPE_CURRENCY || 'usd').toLowerCase();
+    const defaultTaxBps = Number(process.env.TAX_RATE_BPS ?? 825);   // ✅ 8.25% default
+    const defaultTaxLabel = process.env.TAX_LABEL ?? null;
 
     let s = await AdminSettings.findByPk(1);
     // Fallback row in case migration wasn’t run yet — uses env defaults
@@ -81,7 +87,11 @@ export async function getAdminSettings(_req: Request, res: Response): Promise<vo
       ship_handling_cents: process.env.SHIP_HANDLING_CENTS
         ? Number(process.env.SHIP_HANDLING_CENTS)
         : null,
-    });
+
+      // ✅ satisfy model typing
+      tax_rate_bps: defaultTaxBps,
+      tax_label: defaultTaxLabel,
+    } as any);
     res.json(toDto(s));
   } catch (e: any) {
     res.status(500).json({ error: 'Failed to load settings', detail: e?.message });
@@ -99,8 +109,9 @@ export async function patchAdminSettings(req: Request, res: Response): Promise<v
       return;
     }
 
-    // unified currency fallback (CURRENCY preferred, then STRIPE_CURRENCY, then 'usd')
     const envCurrency = (process.env.CURRENCY || process.env.STRIPE_CURRENCY || 'usd').toLowerCase();
+    const defaultTaxBps = Number(process.env.TAX_RATE_BPS ?? 825);
+    const defaultTaxLabel = process.env.TAX_LABEL ?? null;
 
     // Ensure singleton row exists
     let s = await AdminSettings.findByPk(1);
@@ -109,7 +120,7 @@ export async function patchAdminSettings(req: Request, res: Response): Promise<v
       commission_bps: 800,
       min_fee_cents: 75,
       stripe_enabled: String(process.env.STRIPE_ENABLED ?? '').toLowerCase() === 'true',
-      currency: envCurrency, // ← unified fallback
+      currency: envCurrency,
       ship_flat_cents: Number(process.env.SHIP_FLAT_CENTS ?? 0),
       ship_per_item_cents: Number(process.env.SHIP_PER_ITEM_CENTS ?? 0),
       ship_free_threshold_cents: process.env.SHIP_FREE_THRESHOLD_CENTS
@@ -118,7 +129,11 @@ export async function patchAdminSettings(req: Request, res: Response): Promise<v
       ship_handling_cents: process.env.SHIP_HANDLING_CENTS
         ? Number(process.env.SHIP_HANDLING_CENTS)
         : null,
-    });
+
+      // ✅ satisfy model typing
+      tax_rate_bps: defaultTaxBps,
+      tax_label: defaultTaxLabel,
+    } as any);
 
     const v = parsed.data;
 
@@ -165,8 +180,6 @@ export async function approveVendor(req: Request, res: Response): Promise<void> 
   try {
     const id = Number(req.params.id || 0);
 
-    // Pull current admin user id from the request (populated by your auth middleware).
-    // Keep typing light to match repo style.
     const adminUserId = Number((req as any)?.user?.id ?? 0);
     if (!Number.isFinite(adminUserId) || adminUserId <= 0) {
       res.status(401).json({ error: 'Auth required' });
