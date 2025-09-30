@@ -28,11 +28,11 @@ export default function OrderConfirmationPage(): React.ReactElement {
 
   const [state, setState] = useState<Load>({ kind: 'idle' });
 
+  // Initial fetch: latest order (server creates the Order when /checkout/intent is called)
   useEffect(() => {
     let alive = true;
     (async () => {
       setState({ kind: 'loading' });
-      // Best-effort: grab latest order (server creates the Order when /checkout/intent is called)
       const { data, error } = await listMyOrders(1, 1);
       if (!alive) return;
       if (error) {
@@ -45,7 +45,44 @@ export default function OrderConfirmationPage(): React.ReactElement {
     return () => { alive = false; };
   }, []);
 
-  const card = { background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' } as const;
+  // Poll for ~60s if the newest order is still pending_payment
+  useEffect(() => {
+    if (state.kind !== 'loaded') return;             // <- narrow first
+    if (!state.order || state.order.status !== 'pending_payment') return;
+
+    let alive = true;
+    const startedAt = Date.now();
+    const maxMs = 60_000;     // ~1 minute
+    const intervalMs = 3_000; // every 3s
+
+    async function tick() {
+      if (!alive) return;
+      const { data } = await listMyOrders(1, 1);
+      if (!alive) return;
+      const latest = data?.items?.[0] ?? null;
+      if (latest) {
+        setState({ kind: 'loaded', order: latest });
+        if (latest.status !== 'pending_payment') {
+          clearInterval(timer);
+        }
+      }
+      if (Date.now() - startedAt > maxMs) {
+        clearInterval(timer);
+      }
+    }
+
+    const timer = window.setInterval(tick, intervalMs);
+    const kick = window.setTimeout(() => { void tick(); }, 1200);
+
+    return () => { alive = false; clearInterval(timer); clearTimeout(kick); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.kind]); // keep deps simple; internal guards read state.order safely
+
+  const card = {
+    background: 'var(--theme-surface)',
+    borderColor: 'var(--theme-border)',
+    color: 'var(--theme-text)',
+  } as const;
 
   if (state.kind === 'loading' || state.kind === 'idle') {
     return (
@@ -67,12 +104,15 @@ export default function OrderConfirmationPage(): React.ReactElement {
     );
   }
 
-  const order = state.order;
+  // Safe: explicitly narrow to loaded/null for render usage
+  const order: MyOrderListItem | null = state.kind === 'loaded' ? state.order : null;
+  const bannerPaid = showPaidBanner || (order?.status === 'paid');
+
   return (
     <section className="mx-auto max-w-3xl px-6 py-14 space-y-6">
       <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Thank you!</h1>
 
-      {showPaidBanner ? (
+      {bannerPaid ? (
         <div
           className="rounded-2xl border p-4"
           style={{
@@ -100,16 +140,16 @@ export default function OrderConfirmationPage(): React.ReactElement {
               ) : null}
             </p>
 
-            {/* NEW: Print receipt (only when we have the fresh id) */}
+            {/* Print receipt (server HTML) */}
             <div className="mt-4">
-              <Link
-                to={`/orders/${order.id}/receipt`}
+              <a
+                href={`/orders/${order.id}/receipt`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded-xl border border-[var(--theme-border)] px-4 py-2 text-sm hover:bg-[var(--theme-card)]"
               >
                 🖨️ Print receipt
-              </Link>
+              </a>
             </div>
           </>
         ) : (
@@ -138,16 +178,15 @@ export default function OrderConfirmationPage(): React.ReactElement {
           Continue shopping
         </Link>
 
-        {/* Also offer receipt link here when available (secondary action) */}
         {order ? (
-          <Link
-            to={`/orders/${order.id}/receipt`}
+          <a
+            href={`/orders/${order.id}/receipt`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex rounded-xl px-4 py-2 font-semibold border border-[var(--theme-border)] hover:bg-[var(--theme-card)]"
           >
             Print receipt
-          </Link>
+          </a>
         ) : null}
       </div>
     </section>
