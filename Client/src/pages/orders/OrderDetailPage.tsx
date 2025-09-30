@@ -108,6 +108,16 @@ export default function OrderDetailPage(): React.ReactElement {
       <div className="flex items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Order #{o.id}</h1>
         <div className="flex items-center gap-3">
+          {/* View Receipt (opens server-rendered HTML in new tab) */}
+          <a
+            href={`/api/orders/${o.id}/receipt`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-xl px-4 py-2 font-semibold border border-[var(--theme-border)] hover:bg-[var(--theme-card)]"
+          >
+            View receipt
+          </a>
+
           {o.status === 'pending_payment' && (
             <>
               <button
