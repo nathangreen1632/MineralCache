@@ -14,7 +14,8 @@ import { requestContext } from './middleware/requestContext.middleware.js';
 import { jsonErrorHandler } from './middleware/error.middleware.js';
 import { getVersionInfo } from './utils/version.util.js';
 import { assertStripeAtBoot, getStripeStatus } from './services/stripe.service.js';
-import webhooksRouter from "./routes/webhooks.route.js";
+import webhooksRouter from './routes/webhooks.route.js';
+import { registerUploadsStatic } from './middleware/uploadsStatic.js'; // ✅ NEW
 
 // ✅ Fail fast if Stripe is enabled but not correctly configured
 assertStripeAtBoot();
@@ -60,7 +61,7 @@ app.get(HEALTH_PATH, (_req, res) =>
     ok: true,
     ts: new Date().toISOString(),
     stripe: getStripeStatus(), // ✅ include Stripe readiness details
-  })
+  }),
 );
 
 app.get(READY_PATH, async (_req, res) => {
@@ -79,8 +80,8 @@ app.get(VERSION_PATH, (_req, res) => {
   const v = getVersionInfo();
   res.json({
     ok: true,
-    sha: v.short ?? null,   // short first for readability
-    fullSha: v.sha,         // full 40-char if available
+    sha: v.short ?? null, // short first for readability
+    fullSha: v.sha, // full 40-char if available
     source: v.source,
     buildTime: v.buildTime,
   });
@@ -98,20 +99,11 @@ if (process.env.NODE_ENV !== 'production') {
   console.log(`[version] GET ${VERSION_PATH}  →  ${url}${VERSION_PATH}`); // ✅ NEW
 }
 
+// ✅ Serve uploaded files (Render + local). Must come BEFORE routes that return HTML.
+await registerUploadsStatic(app);
+
 // Mount your API routers under /api
 app.use('/api', apiRouter);
-
-// Static uploads (Render disk)
-const uploadsDir = process.env.UPLOADS_DIR || '/var/data/uploads';
-app.use(
-  '/uploads',
-  express.static(uploadsDir, {
-    fallthrough: true,
-    setHeaders: (res) => {
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    },
-  })
-);
 
 // In production, serve the client build from the API server (same origin)
 if (process.env.NODE_ENV === 'production') {
