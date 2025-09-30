@@ -1,3 +1,5 @@
+// Server/src/migrations/20250929170100-catalog-perf-indexes.cjs
+
 'use strict';
 
 module.exports = {
