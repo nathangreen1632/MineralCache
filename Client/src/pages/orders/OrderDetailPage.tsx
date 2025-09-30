@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getMyOrder, type GetOrderRes, cancelMyOrder } from '../../api/orders';
 import { trackingUrl } from '../../utils/tracking.util';
+import ShippedBanner from '../../components/orders/ShippedBanner';
 
 type Load =
   | { kind: 'idle' }
@@ -89,6 +90,19 @@ export default function OrderDetailPage(): React.ReactElement {
   const o = state.order;
   const hasTax = typeof (o as any).taxCents === 'number' && (o as any).taxCents > 0;
 
+  // --- FIX (L97): provide a compare function for sort() ---
+  const firstShipped: string | null = (() => {
+    const dates = o.items
+      .map((it: any) => it.shippedAt as string | null | undefined)
+      .filter((d: string | null | undefined): d is string => Boolean(d));
+    if (dates.length === 0) return null;
+    dates.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    return dates[0] ?? null;
+  })();
+
+  const allDelivered = o.items.length > 0 && o.items.every((it: any) => Boolean(it.deliveredAt));
+  // --------------------------------------------------------
+
   return (
     <section className="mx-auto max-w-4xl px-6 py-14 space-y-6">
       <div className="flex items-baseline justify-between gap-4">
@@ -115,6 +129,8 @@ export default function OrderDetailPage(): React.ReactElement {
         </div>
       </div>
 
+      {!allDelivered && firstShipped ? <ShippedBanner shippedAt={firstShipped} orderId={o.id} /> : null}
+
       <div className="rounded-2xl border p-6 grid gap-3" style={card}>
         <p>
           <strong>Status:</strong> <span className="capitalize">{o.status.replace('_', ' ')}</span>
@@ -128,15 +144,20 @@ export default function OrderDetailPage(): React.ReactElement {
           {Array.isArray((o as any).shippingVendors) && (o as any).shippingVendors.length > 0 && (
             <div className="opacity-90">
               {(o as any).shippingVendors.map(
-                (v: { vendorId: number; vendorName?: string | null; label?: string | null; amountCents: number }, i: number) => (
-                  <div key={`${v.vendorId}-${i}`} className="flex gap-2">
-                    <span>
-                      Shipping
-                      {v.vendorName ? ` · ${v.vendorName}` : v.label ? ` · ${v.label}` : ''}:
-                    </span>
-                    <span>{centsToUsd(v.amountCents)}</span>
-                  </div>
-                )
+                (
+                  v: { vendorId: number; vendorName?: string | null; label?: string | null; amountCents: number }
+                ) => {
+                  // --- FIX (L152): remove nested ternary ---
+                  const name = v.vendorName ?? v.label ?? null;
+                  const caption = name ? ` · ${name}` : '';
+                  // ----------------------------------------
+                  return (
+                    <div key={`ship-${v.vendorId}`} className="flex gap-2">
+                      <span>Shipping{caption}:</span>
+                      <span>{centsToUsd(v.amountCents)}</span>
+                    </div>
+                  );
+                }
               )}
             </div>
           )}
@@ -158,8 +179,8 @@ export default function OrderDetailPage(): React.ReactElement {
         {/* Any shipping breakdown rows (kept) */}
         {Array.isArray(o.shippingBreakdown) && o.shippingBreakdown.length > 0 ? (
           <div className="mt-2 text-sm opacity-80">
-            {o.shippingBreakdown.map((row, idx) => (
-              <div key={idx} className="flex gap-2">
+            {o.shippingBreakdown.map((row) => (
+              <div key={`sbr-${row.label}-${row.amountCents}`} className="flex gap-2">
                 <span>{row.label}:</span>
                 <span>{centsToUsd(row.amountCents)}</span>
               </div>
@@ -181,11 +202,16 @@ export default function OrderDetailPage(): React.ReactElement {
             </tr>
             </thead>
             <tbody>
-            {o.items.map((it: any, idx: number) => {
+            {o.items.map((it: any) => {
               const tUrl = trackingUrl(it.shipCarrier, it.shipTracking);
+              // --- FIX (L179): use a stable key, never the array index ---
+              const rowKey: string =
+                (it.id as string | number | undefined)?.toString()
+                ?? `${it.productId ?? 'p'}-${it.vendorId ?? 'v'}-${it.title}`;
+              // -----------------------------------------------------------
               return (
                 <tr
-                  key={`${it.productId}-${idx}`}
+                  key={rowKey}
                   className="border-b last:border-b-0"
                   style={{ borderColor: 'var(--theme-border)' }}
                 >
