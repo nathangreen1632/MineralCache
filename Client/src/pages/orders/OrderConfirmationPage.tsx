@@ -99,6 +99,18 @@ export default function OrderConfirmationPage(): React.ReactElement {
                 <span className="ml-2 opacity-70">(charged: {centsToUsd(hintedAmount)})</span>
               ) : null}
             </p>
+
+            {/* NEW: Print receipt (only when we have the fresh id) */}
+            <div className="mt-4">
+              <Link
+                to={`/orders/${order.id}/receipt`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl border border-[var(--theme-border)] px-4 py-2 text-sm hover:bg-[var(--theme-card)]"
+              >
+                🖨️ Print receipt
+              </Link>
+            </div>
           </>
         ) : (
           <>
@@ -118,13 +130,25 @@ export default function OrderConfirmationPage(): React.ReactElement {
         )}
       </div>
 
-      <div>
+      <div className="flex items-center gap-3">
         <Link
           to="/products"
           className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
         >
           Continue shopping
         </Link>
+
+        {/* Also offer receipt link here when available (secondary action) */}
+        {order ? (
+          <Link
+            to={`/orders/${order.id}/receipt`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex rounded-xl px-4 py-2 font-semibold border border-[var(--theme-border)] hover:bg-[var(--theme-card)]"
+          >
+            Print receipt
+          </Link>
+        ) : null}
       </div>
     </section>
   );
