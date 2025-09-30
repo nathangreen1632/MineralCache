@@ -28,12 +28,28 @@ export async function requireVendor(req: Request, res: Response, next: NextFunct
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
+
   const vendor = await Vendor.findOne({ where: { userId: u.id } });
   if (!vendor) {
     res.status(403).json({ error: 'Vendor account required' });
     return;
   }
+
   (req as any).user = u;
   (req as any).vendor = vendor;
+
+  // Ensure downstream code that expects user.vendorId keeps working
+  const vId = Number((vendor as any).id);
+  if (Number.isFinite(vId) && vId > 0) {
+    try {
+      if ((req as any).user.vendorId == null) {
+        (req as any).user.vendorId = vId;
+      }
+    } catch {
+      // ignore if user object is frozen/readonly; req.vendor still covers us
+    }
+  }
+
   next();
 }
+
