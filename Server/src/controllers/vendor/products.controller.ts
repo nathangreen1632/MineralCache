@@ -1,3 +1,4 @@
+// Server/src/controllers/vendor/products.controller.ts
 import type { Request, Response, NextFunction } from 'express';
 import { Op, fn, col, literal, type WhereOptions } from 'sequelize';
 import { Product } from '../../models/product.model.js';
@@ -9,12 +10,19 @@ import {
 } from '../../validation/vendorProducts.schema.js';
 
 function getVendorId(req: Request): number {
-  const u: any = (req as any).user ?? (req.session as any)?.user ?? null;
-  const vId = Number(u?.vendorId);
-  if (!Number.isFinite(vId) || vId <= 0) {
-    throw Object.assign(new Error('Not a vendor'), { statusCode: 403 });
+  const v: any = (req as any).vendor;
+  const maybeVid = Number(v?.id);
+  if (Number.isFinite(maybeVid) && maybeVid > 0) {
+    return maybeVid;
   }
-  return vId;
+
+  const u: any = (req as any).user ?? (req.session as any)?.user ?? null;
+  const fromUser = Number(u?.vendorId);
+  if (Number.isFinite(fromUser) && fromUser > 0) {
+    return fromUser;
+  }
+
+  throw Object.assign(new Error('Not a vendor'), { statusCode: 403 });
 }
 
 function sortOrder(sort?: string) {
@@ -26,6 +34,27 @@ function sortOrder(sort?: string) {
     default:
       return [['createdAt', 'DESC']] as any[];
   }
+}
+
+/** ---------------------------------------------
+ * URL helpers for derivative images → public URLs
+ * --------------------------------------------*/
+function toPublicUrl(rel?: string | null): string | null {
+  if (!rel) return null;
+  const s = String(rel);
+  if (!s) return null;
+  if (s.startsWith('/')) return s;
+  return `/uploads/${s.replace(/^\/+/, '')}`;
+}
+
+function pickThumbUrl(img: any): string | null {
+  const p320 = toPublicUrl(img?.v320Path);
+  if (p320) return p320;
+  const p800 = toPublicUrl(img?.v800Path);
+  if (p800) return p800;
+  const p1600 = toPublicUrl(img?.v1600Path);
+  if (p1600) return p1600;
+  return toPublicUrl(img?.origPath);
 }
 
 /** GET /api/vendor/products */
@@ -70,7 +99,16 @@ export async function listVendorProducts(req: Request, res: Response, next: Next
       // primary image (isPrimary=true; fallback to first by sortOrder if none)
       const primaries = await ProductImage.findAll({
         where: { productId: { [Op.in]: ids }, isPrimary: true },
-        attributes: ['id', 'productId', 'isPrimary', 'sortOrder', 'url', 'sizesJson'],
+        attributes: [
+          'id',
+          'productId',
+          'isPrimary',
+          'sortOrder',
+          'origPath',
+          'v320Path',
+          'v800Path',
+          'v1600Path',
+        ],
         order: [['productId', 'ASC'], ['sortOrder', 'ASC'], ['id', 'ASC']],
       });
       primaryByProduct = new Map(primaries.map((p: any) => [Number(p.productId), p]));
@@ -79,7 +117,16 @@ export async function listVendorProducts(req: Request, res: Response, next: Next
       if (missing.length > 0) {
         const firsts = await ProductImage.findAll({
           where: { productId: { [Op.in]: missing } },
-          attributes: ['id', 'productId', 'isPrimary', 'sortOrder', 'url', 'sizesJson'],
+          attributes: [
+            'id',
+            'productId',
+            'isPrimary',
+            'sortOrder',
+            'origPath',
+            'v320Path',
+            'v800Path',
+            'v1600Path',
+          ],
           order: [['productId', 'ASC'], ['sortOrder', 'ASC'], ['id', 'ASC']],
         });
         for (const img of firsts as any[]) {
@@ -106,22 +153,14 @@ export async function listVendorProducts(req: Request, res: Response, next: Next
 
       return {
         id: pid,
-        vendorId: Number(p.vendorId),
         title: String(p.title ?? ''),
         priceCents: Number(p.priceCents ?? 0),
-        salePriceCents: p.salePriceCents != null ? Number(p.salePriceCents) : null,
         onSale,
-        archivedAt: p.archivedAt,
+        archived: !!p.archivedAt,
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
         photoCount: countsByProduct.get(pid) ?? 0,
-        primaryImage: primary
-          ? {
-            id: Number(primary.id),
-            url: primary.url ?? null,
-            sizes: (primary as any).sizesJson ?? null,
-          }
-          : null,
+        primaryPhotoUrl: primary ? pickThumbUrl(primary) : null,
       };
     });
 
@@ -176,7 +215,16 @@ export async function updateVendorProduct(req: Request, res: Response, next: Nex
     // enrich response with primary image + count
     const [primary] = await ProductImage.findAll({
       where: { productId: pid, isPrimary: true },
-      attributes: ['id', 'productId', 'isPrimary', 'sortOrder', 'url', 'sizesJson'],
+      attributes: [
+        'id',
+        'productId',
+        'isPrimary',
+        'sortOrder',
+        'origPath',
+        'v320Path',
+        'v800Path',
+        'v1600Path',
+      ],
       order: [['sortOrder', 'ASC'], ['id', 'ASC']],
       limit: 1,
     });
@@ -184,22 +232,14 @@ export async function updateVendorProduct(req: Request, res: Response, next: Nex
 
     res.json({
       id: Number(product.id),
-      vendorId: Number(product.vendorId),
       title: String((product as any).title ?? ''),
       priceCents: Number((product as any).priceCents ?? 0),
-      salePriceCents: (product as any).salePriceCents != null ? Number((product as any).salePriceCents) : null,
       onSale: (product as any).salePriceCents != null,
-      archivedAt: (product as any).archivedAt,
+      archived: !!(product as any).archivedAt,
       createdAt: (product as any).createdAt,
       updatedAt: (product as any).updatedAt,
       photoCount: count,
-      primaryImage: primary
-        ? {
-          id: Number((primary as any).id),
-          url: (primary as any).url ?? null,
-          sizes: (primary as any).sizesJson ?? null,
-        }
-        : null,
+      primaryPhotoUrl: primary ? pickThumbUrl(primary) : null,
     });
   } catch (err: any) {
     const code = Number((err as any).statusCode) || 500;
