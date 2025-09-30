@@ -107,7 +107,7 @@ export default function ProductList(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputQ]);
 
-  // Parse URL → typed query (added `q`)
+  // Parse URL → typed query (includes `q`)
   const query: ListQuery = useMemo(() => {
     const pageRaw = Number(params.get('page') || 1);
     const pageSizeRaw = Number(params.get('pageSize') || 24);
@@ -384,12 +384,32 @@ export default function ProductList(): React.ReactElement {
                 );
               }
 
+              const imgSrc =
+                (p as any).primaryPhotoUrl ||
+                (p as any).photoUrl ||
+                (p as any).coverUrl ||
+                null;
+
               return (
                 <Link key={p.id} to={`/products/${p.id}`} className="rounded-xl border p-3 hover:shadow" style={card}>
-                  <div className="h-36 w-full rounded bg-[var(--theme-card-alt)] mb-3" />
+                  {imgSrc ? (
+                    <img
+                      src={imgSrc}
+                      alt={p.title}
+                      className="h-36 w-full rounded object-cover mb-3"
+                      style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
+                    />
+                  ) : (
+                    <div className="h-36 w-full rounded bg-[var(--theme-card-alt)] mb-3" />
+                  )}
                   <div className="truncate font-semibold">{highlight(p.title, qStr)}</div>
                   {priceEl}
-                  <div className="text-xs opacity-70">{p.species ? highlight(p.species, qStr) : null}</div>
+                  {p.species ? (
+                    <div className="text-xs opacity-70">{highlight(p.species, qStr)}</div>
+                  ) : null}
+                  {(p as any).locality ? (
+                    <div className="text-xs opacity-70">{highlight((p as any).locality, qStr)}</div>
+                  ) : null}
                 </Link>
               );
             })}
