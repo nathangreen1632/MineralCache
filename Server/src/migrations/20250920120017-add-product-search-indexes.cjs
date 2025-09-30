@@ -1,3 +1,5 @@
+// Server/src/migrations/20250920120017-add-product-search-indexes.cjs
+
 'use strict';
 
 /** @type {import('sequelize-cli').Migration} */
