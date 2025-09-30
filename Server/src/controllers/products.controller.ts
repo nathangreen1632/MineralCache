@@ -3,6 +3,10 @@ import type { Request, Response } from 'express';
 import { db } from '../models/sequelize.js';
 import { Op, col, fn, literal, where, type Order, type Transaction } from 'sequelize';
 import { z, type ZodError } from 'zod';
+import path from 'node:path';
+import { promises as fs } from 'node:fs';
+import sharp from 'sharp';
+
 import { Product } from '../models/product.model.js';
 import { Vendor } from '../models/vendor.model.js';
 import { ProductImage } from '../models/productImage.model.js';
@@ -77,6 +81,52 @@ async function requireVendor(req: Request, res: Response) {
 }
 
 /** ---------------------------------------------
+ * Upload helpers (Render + local friendly)
+ * --------------------------------------------*/
+const DEFAULT_UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
+export const UPLOADS_PUBLIC_ROUTE = process.env.UPLOADS_PUBLIC_ROUTE ?? '/uploads';
+
+// Use env when present; if it isn’t writable (e.g., local dev), fall back.
+export let UPLOADS_DIR = process.env.UPLOADS_DIR
+  ? path.resolve(process.env.UPLOADS_DIR)
+  : DEFAULT_UPLOADS_DIR;
+
+export async function ensureUploadsReady() {
+  try {
+    await fs.mkdir(UPLOADS_DIR, { recursive: true });
+    const test = path.join(UPLOADS_DIR, '.writecheck');
+    await fs.writeFile(test, 'ok');
+    await fs.unlink(test);
+  } catch (e: any) {
+    if (e?.code === 'EACCES' || e?.code === 'EPERM') {
+      UPLOADS_DIR = DEFAULT_UPLOADS_DIR;
+      await fs.mkdir(UPLOADS_DIR, { recursive: true });
+      const test = path.join(UPLOADS_DIR, '.writecheck');
+      await fs.writeFile(test, 'ok');
+      await fs.unlink(test);
+    } else {
+      throw e;
+    }
+  }
+}
+
+async function ensureDir(p: string) { await fs.mkdir(p, { recursive: true }); }
+
+function toPublicUrl(rel?: string | null) {
+  if (!rel) return null;
+  const s = String(rel).replace(/^\/+/, '');
+  // Always mount uploads under UPLOADS_PUBLIC_ROUTE
+  return `${UPLOADS_PUBLIC_ROUTE}/${s}`;
+}
+
+function variantFilename(baseNoExt: string, sizeLabel: 'orig' | '320' | '800' | '1600') {
+  const suffix = sizeLabel === 'orig' ? '' : `_${sizeLabel}`;
+  return `${baseNoExt}${suffix}.jpg`;
+}
+
+const isSupportedImage = (m?: string) => !!m && /^image\/(jpe?g|png|webp|tiff|gif|heic|heif|avif)$/i.test(m);
+
+/** ---------------------------------------------
  * Vendor CRUD
  * --------------------------------------------*/
 export async function createProduct(req: Request, res: Response): Promise<void> {
@@ -130,8 +180,6 @@ export async function createProduct(req: Request, res: Response): Promise<void> 
         salePriceCents: p.salePriceCents ?? null,
         saleStartAt: p.saleStartAt ?? null,
         saleEndAt: p.saleEndAt ?? null,
-
-        // images TODO: attach when uploader saves records
 
         createdAt: now,
         updatedAt: now,
@@ -300,10 +348,19 @@ export async function getProduct(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // List images: primary first, then sort order, then id; hide soft-deleted (paranoid: true)
+    // Images: primary first, then sort order, then id; hide soft-deleted (paranoid: true)
     const images = await ProductImage.findAll({
       where: { productId: id },
       paranoid: true,
+      attributes: [
+        'id',
+        'isPrimary',
+        'sortOrder',
+        'origPath',
+        'v320Path',
+        'v800Path',
+        'v1600Path',
+      ],
       order: [
         ['isPrimary', 'DESC'],
         ['sortOrder', 'ASC'],
@@ -311,21 +368,28 @@ export async function getProduct(req: Request, res: Response): Promise<void> {
       ],
     });
 
-    const photos = images.map((img: any) => ({
-      id: Number(img.id),
-      isPrimary: Boolean(img.isPrimary),
-      url320: img.url320 ?? null,
-      url800: img.url800 ?? null,
-      url1600: img.url1600 ?? null,
-    }));
+    const photos = images.map((img: any) => {
+      const url320 = toPublicUrl(img.v320Path);
+      const url800 = toPublicUrl(img.v800Path);
+      const url1600 = toPublicUrl(img.v1600Path);
+      const urlOrig = toPublicUrl(img.origPath);
+      const best = url1600 ?? url800 ?? url320 ?? urlOrig ?? null;
+      return {
+        id: Number(img.id),
+        isPrimary: Boolean(img.isPrimary),
+        url320,
+        url800,
+        url1600,
+        url: best,
+      };
+    });
 
     const json = product.toJSON() as Record<string, unknown>;
     (json as any).photos = photos;
 
     // Convenience: a single hero image for UIs that want it
-    const primary = photos.find((p) => p.isPrimary);
-    (json as any).primaryImageUrl =
-      primary?.url1600 ?? primary?.url800 ?? primary?.url320 ?? null;
+    const primary = photos.find((p) => p.isPrimary) ?? photos[0] ?? null;
+    (json as any).primaryImageUrl = primary?.url ?? null;
 
     res.json({ product: json });
   } catch (e: any) {
@@ -485,13 +549,12 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
 }
 
 /** ---------------------------------------------
- * Images attach (placeholder for Week-2)
+ * Images attach — generates 320/800/1600 and stores DB rows
  * --------------------------------------------*/
 
 // One place to control the listing quota (env overridable)
 const MAX_IMAGES_PER_LISTING = Number(process.env.UPLOAD_MAX_IMAGES_PER_LISTING ?? 4);
 
-// NOTE: We now consume files from Multer (req.files). Keep TODOs for DB wiring.
 export async function attachImages(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
 
@@ -518,17 +581,8 @@ export async function attachImages(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // ✅ Real per-listing quota: count existing images for this product
-  let existingCount = 0;
-  try {
-    existingCount = await ProductImage.count({
-      where: { productId: Number(idParsed.data.id) },
-    });
-  } catch (e: any) {
-    res.status(500).json({ error: 'Failed to check image quota', detail: e?.message });
-    return;
-  }
-
+  // Per-listing quota
+  const existingCount = await ProductImage.count({ where: { productId: Number(idParsed.data.id) } });
   if (existingCount >= MAX_IMAGES_PER_LISTING) {
     res.status(400).json({
       error: 'Image limit reached for this listing',
@@ -539,7 +593,6 @@ export async function attachImages(req: Request, res: Response): Promise<void> {
     });
     return;
   }
-
   const remaining = MAX_IMAGES_PER_LISTING - existingCount;
   if (files.length > remaining) {
     res.status(400).json({
@@ -552,25 +605,107 @@ export async function attachImages(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // TODO(images): persist originals; generate 320/800/1600 with sharp; save records.
-  // For Week-2, return derived variant metadata so the UI can render immediately.
-  const responseFiles = files.map((f) => ({
-    name: f.originalname,
-    type: f.mimetype,
-    size: f.size,
-    variants: [
-      { key: 'orig' as const, bytes: f.size },
-      { key: '320' as const, width: 320, height: undefined, bytes: undefined },
-      { key: '800' as const, width: 800, height: undefined, bytes: undefined },
-      { key: '1600' as const, width: 1600, height: undefined, bytes: undefined },
-    ],
-  }));
+  await ensureUploadsReady();
+
+  // Storage layout: uploads/images/<productId>/
+  const productDirRel = `images/${idParsed.data.id}`;
+  const productDirAbs = path.join(UPLOADS_DIR, productDirRel);
+  await ensureDir(productDirAbs);
+
+  const createdResponses: Array<{
+    name: string;
+    type: string;
+    size: number;
+    variants: Array<{ key: 'orig' | '320' | '800' | '1600'; width?: number; height?: number; bytes?: number; url?: string }>;
+  }> = [];
+
+  // Determine if product already has a primary
+  const hasPrimary = (await ProductImage.count({
+    where: { productId: Number(idParsed.data.id), isPrimary: true },
+  })) > 0;
+
+  for (let index = 0; index < files.length; index += 1) {
+    const f = files[index];
+
+    if (!isSupportedImage(f.mimetype)) {
+      res.status(400).json({ ok: false, code: 'UNSUPPORTED_MEDIA_TYPE', message: `Unsupported file type: ${f.mimetype}` });
+      return;
+    }
+
+    // Multer may be memory or disk storage — handle both
+    const inputBuffer = (f as any).buffer ?? await fs.readFile((f as any).path);
+
+    const base = path.parse(f.originalname).name
+      .replace(/\s+/g, '_')
+      .replace(/[^a-zA-Z0-9_\-]/g, '');
+    const stamp = Date.now().toString(36);
+    const baseNoExt = `${base}_${stamp}`;
+
+    // Write original as JPG to normalize
+    const origFilename = variantFilename(baseNoExt, 'orig');
+    const origRel = `${productDirRel}/${origFilename}`;
+    const origAbs = path.join(UPLOADS_DIR, origRel);
+    await sharp(inputBuffer).jpeg({ quality: 90 }).toFile(origAbs);
+    const origStat = await fs.stat(origAbs);
+
+    // Derivatives
+    const sizes: Array<{ label: '320' | '800' | '1600'; width: number }> = [
+      { label: '320', width: 320 },
+      { label: '800', width: 800 },
+      { label: '1600', width: 1600 },
+    ];
+    const out: Record<'320' | '800' | '1600', { rel: string; abs: string; bytes: number }> = {} as any;
+
+    for (const s of sizes) {
+      const fn = variantFilename(baseNoExt, s.label);
+      const rel = `${productDirRel}/${fn}`;
+      const abs = path.join(UPLOADS_DIR, rel);
+
+      await sharp(inputBuffer)
+        .resize({ width: s.width, withoutEnlargement: true })
+        .jpeg({ quality: 88 })
+        .toFile(abs);
+
+      const st = await fs.stat(abs);
+      out[s.label] = { rel, abs, bytes: st.size };
+    }
+
+    // Create DB row (includes required non-null fields)
+    await ProductImage.create({
+      productId: Number(idParsed.data.id),
+      isPrimary: hasPrimary ? false : index === 0,
+      sortOrder: existingCount + index,
+
+      // required columns in your model
+      fileName: f.originalname,
+      mimeType: 'image/jpeg',     // normalized output
+      origBytes: origStat.size,
+
+      // stored paths for variants
+      origPath: origRel,
+      v320Path: out['320'].rel,
+      v800Path: out['800'].rel,
+      v1600Path: out['1600'].rel,
+    } as any);
+
+    createdResponses.push({
+      name: f.originalname,
+      type: f.mimetype,
+      size: f.size,
+      variants: [
+        { key: 'orig', bytes: origStat.size, url: toPublicUrl(origRel) ?? undefined },
+        { key: '320', width: 320, bytes: out['320'].bytes, url: toPublicUrl(out['320'].rel) ?? undefined },
+        { key: '800', width: 800, bytes: out['800'].bytes, url: toPublicUrl(out['800'].rel) ?? undefined },
+        { key: '1600', width: 1600, bytes: out['1600'].bytes, url: toPublicUrl(out['1600'].rel) ?? undefined },
+      ],
+    });
+  }
 
   res.json({
     ok: true,
     received: files.length,
     existingCount,
-    files: responseFiles,
+    files: createdResponses,
   });
 }
 
