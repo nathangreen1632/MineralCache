@@ -436,7 +436,6 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       species,
       synthetic,
       onSale,
-      // NEW unified names
       priceMinCents,
       priceMaxCents,
       sizeMinCm,
@@ -478,15 +477,11 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       if (conds.length) andClauses.push({ condition: { [Op.in]: conds } });
     }
 
-    // onSale (effective right now via schedule)
+    // onSale (effective now)
     if (typeof onSale !== 'undefined') {
       const expr = saleActiveExpr(nowIso);
       const isTrue = String(onSale).toLowerCase() === 'true';
-      if (isTrue) {
-        andClauses.push(where(expr, '=', true));
-      } else {
-        andClauses.push(where(expr, '=', false));
-      }
+      andClauses.push(where(expr, '=', isTrue));
     }
 
     // effective price range
@@ -529,15 +524,47 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
 
     const offset = (page - 1) * pageSize;
 
+    // ⬇️ include ONE image per product, ordered by primary → sortOrder → id
     const { rows, count } = await Product.findAndCountAll({
       where: { [Op.and]: andClauses },
       order,
       offset,
       limit: pageSize,
+      include: [
+        {
+          model: ProductImage,
+          as: 'images',
+          attributes: ['v320Path', 'v800Path', 'v1600Path', 'origPath', 'isPrimary', 'sortOrder'],
+          separate: true, // don't blow up row count
+          limit: 1,       // only the cover we need for the card
+          order: [
+            ['isPrimary', 'DESC'],
+            ['sortOrder', 'ASC'],
+            ['id', 'ASC'],
+          ],
+        },
+      ],
+    });
+
+    // Flatten a primaryImageUrl for the client (and keep images[0] if you want)
+    const items = rows.map((p) => {
+      const j = p.toJSON() as any;
+      const cover = Array.isArray(j.images) && j.images[0] ? j.images[0] : null;
+      const rel =
+        cover?.v800Path || cover?.v320Path || cover?.v1600Path || cover?.origPath || null;
+
+      const url = rel ? toPublicUrl(rel) : null;
+
+      return {
+        ...j,
+        primaryImageUrl: url,
+        // If you don’t want to send the images array at all, uncomment:
+        // images: undefined,
+      };
     });
 
     res.json({
-      items: rows,
+      items,
       page,
       pageSize,
       total: count,
@@ -547,6 +574,7 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
     res.status(500).json({ error: 'Failed to list products', detail: e?.message });
   }
 }
+
 
 /** ---------------------------------------------
  * Images attach — generates 320/800/1600 and stores DB rows
