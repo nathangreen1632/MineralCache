@@ -102,6 +102,7 @@ export default function AdminOrders(): React.ReactElement {
           className="rounded-md border px-3 py-2 text-sm"
           style={card}
           role="text"
+          aria-live="polite"
         >
           <span
             style={{
@@ -114,7 +115,7 @@ export default function AdminOrders(): React.ReactElement {
       )}
 
       {msg && (
-        <div className="rounded-md border px-3 py-2 text-sm" style={card}>
+        <div className="rounded-md border px-3 py-2 text-sm" style={card} role="alert">
           <span style={{ color: 'var(--theme-error)' }}>{msg}</span>
         </div>
       )}
@@ -122,8 +123,9 @@ export default function AdminOrders(): React.ReactElement {
       {/* Filters */}
       <div className="rounded-2xl border p-4 grid md:grid-cols-4 gap-3" style={card}>
         <div className="grid gap-1">
-          <label className="text-xs opacity-70">Status</label>
+          <label className="text-xs opacity-70" htmlFor="statusFilter">Status</label>
           <select
+            id="statusFilter"
             value={status}
             onChange={(e) => { setStatus(e.target.value as StatusFilter); setPage(1); }}
             className="rounded border px-2 py-1 bg-[var(--theme-textbox)]"
@@ -138,8 +140,9 @@ export default function AdminOrders(): React.ReactElement {
         </div>
 
         <div className="grid gap-1">
-          <label className="text-xs opacity-70">Vendor ID</label>
+          <label className="text-xs opacity-70" htmlFor="vendorIdFilter">Vendor ID</label>
           <input
+            id="vendorIdFilter"
             value={vendorId}
             onChange={(e) => setVendorId(e.target.value)}
             placeholder="e.g. 12"
@@ -149,8 +152,9 @@ export default function AdminOrders(): React.ReactElement {
         </div>
 
         <div className="grid gap-1">
-          <label className="text-xs opacity-70">From (UTC)</label>
+          <label className="text-xs opacity-70" htmlFor="fromDateFilter">From (UTC)</label>
           <input
+            id="fromDateFilter"
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
@@ -160,8 +164,9 @@ export default function AdminOrders(): React.ReactElement {
         </div>
 
         <div className="grid gap-1">
-          <label className="text-xs opacity-70">To (UTC)</label>
+          <label className="text-xs opacity-70" htmlFor="toDateFilter">To (UTC)</label>
           <input
+            id="toDateFilter"
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
@@ -275,12 +280,19 @@ export default function AdminOrders(): React.ReactElement {
       {/* Refund confirm modal */}
       {confirmRefundId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setConfirmRefundId(null)} />
+          <div
+            className="absolute inset-0 bg-black/40"
+            role="text"
+            aria-label="Close refund dialog"
+          />
           <div
             className="relative z-10 w-[min(92vw,440px)] rounded-2xl border p-5 grid gap-3"
             style={card}
+            role="text"
+            aria-modal="true"
+            aria-labelledby="refundDialogTitle"
           >
-            <div className="text-lg font-semibold">Issue refund?</div>
+            <div id="refundDialogTitle" className="text-lg font-semibold">Issue refund?</div>
             <div className="text-sm opacity-80">
               This will create a full refund for order #{confirmRefundId} and set the status to <em>refunded</em>.
             </div>
