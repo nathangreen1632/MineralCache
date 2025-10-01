@@ -4,20 +4,54 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { listProducts, type ListQuery, type Product } from '../../api/products';
 import { searchProducts } from '../../api/search';
 
+// Allow an optional runtime-injected API base (e.g., set on window at boot)
+declare global {
+  interface Window {
+    __API_BASE__?: string;
+  }
+}
+
+/** --- CONFIG: where the API is serving /uploads from (prod = same origin) --- */
+const API_BASE =
+  // env (Vite)
+  ((import.meta as any)?.env?.VITE_API_BASE as string | undefined) ??
+  // optionally injected at runtime
+  (typeof window !== 'undefined' ? window.__API_BASE__ : undefined) ??
+  // default: same origin
+  '';
+
+/** Join base + path without using regex (no S5852 risk). */
+function trimTrailingSlashes(s: string) {
+  while (s.endsWith('/')) s = s.slice(0, -1);
+  return s;
+}
+function trimLeadingSlashes(s: string) {
+  let i = 0;
+  while (i < s.length && s[i] === '/') i++;
+  return s.slice(i);
+}
+function joinUrl(base: string, path: string) {
+  if (!base) return path || '';
+  const b = trimTrailingSlashes(base);
+  const p = trimLeadingSlashes(path || '');
+  return p ? `${b}/${p}` : b;
+}
+
 function centsToUsd(cents?: number | null): string {
   const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
   return `$${(n / 100).toFixed(2)}`;
 }
 
 function isSaleActive(p: Product, now = new Date()): boolean {
-  if (p.salePriceCents == null) return false;
-  const startOk = !p.saleStartAt || new Date(p.saleStartAt) <= now;
-  const endOk = !p.saleEndAt || now <= new Date(p.saleEndAt);
+  if ((p as any).salePriceCents == null) return false;
+  const startOk = !(p as any).saleStartAt || new Date((p as any).saleStartAt) <= now;
+  const endOk = !(p as any).saleEndAt || now <= new Date((p as any).saleEndAt);
   return startOk && endOk;
 }
 
 function effectivePriceCents(p: Product): number {
-  return isSaleActive(p) ? (p.salePriceCents as number) : p.priceCents;
+  const sale = (p as any).salePriceCents;
+  return isSaleActive(p) && typeof sale === 'number' ? sale : (p as any).priceCents;
 }
 
 /** Escape user text for safe RegExp use */
@@ -25,28 +59,34 @@ function escapeRegExp(str: string) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Highlight all tokens from the query; case-insensitive. */
+/** Highlight tokens from the query safely (bounded → no catastrophic backtracking). */
 function highlight(text: string, q: string): React.ReactNode {
-  if (!q?.trim()) return text;
+  const t = (q || '').trim();
+  if (!t) return text;
 
-  const tokens = Array.from(new Set(q.trim().split(/\s+/g).filter(Boolean)));
+  // Bound number/size of tokens to keep regex simple & fast
+  const tokens = Array.from(new Set(t.split(/\s+/g).filter(Boolean)))
+    .slice(0, 8) // ≤ 8 tokens
+    .map((s) => s.slice(0, 40)); // each ≤ 40 chars
+
   if (tokens.length === 0) return text;
 
-  const re = new RegExp(tokens.map(escapeRegExp).join('|'), 'ig');
+  const pattern = tokens.map(escapeRegExp).join('|');
+  const re = new RegExp(`(?:${pattern})`, 'ig'); // non-capturing, case-insensitive
 
-  const out: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
 
-  while ((match = re.exec(text)) != null) {
-    const start = match.index;
-    const end = start + match[0].length;
+  while ((m = re.exec(text)) != null) {
+    const start = m.index;
+    const end = start + m[0].length;
 
-    if (start > lastIndex) {
-      out.push(<span key={`t-${lastIndex}-${start}`}>{text.slice(lastIndex, start)}</span>);
+    if (start > last) {
+      parts.push(<span key={`t-${last}-${start}`}>{text.slice(last, start)}</span>);
     }
 
-    out.push(
+    parts.push(
       <mark
         key={`h-${start}-${end}`}
         style={{
@@ -60,20 +100,72 @@ function highlight(text: string, q: string): React.ReactNode {
       </mark>
     );
 
-    lastIndex = end;
+    last = end;
   }
 
-  if (lastIndex < text.length) {
-    out.push(<span key={`t-${lastIndex}-${text.length}`}>{text.slice(lastIndex)}</span>);
+  if (last < text.length) {
+    parts.push(<span key={`t-${last}-${text.length}`}>{text.slice(last)}</span>);
   }
 
-  return out;
+  return parts;
 }
 
+/** ---------- Pick an image + make a public URL ---------- */
+type AnyImage = {
+  v320Path?: string | null;
+  v800Path?: string | null;
+  v1600Path?: string | null;
+  origPath?: string | null;
+  isPrimary?: boolean | null;
+  is_default_global?: boolean | null; // cover some schemas
+};
+
+function selectImageRecord(p: any): AnyImage | null {
+  // Explicit primary field
+  if (p.primaryImage) return p.primaryImage as AnyImage;
+
+  // Common arrays
+  const arrays: AnyImage[][] = [
+    p.images ?? [],
+    p.photos ?? [],
+    p.product_images ?? [],
+    p.productImages ?? [],
+  ];
+
+  for (const arr of arrays) {
+    if (Array.isArray(arr) && arr.length) {
+      // prefer primary-like flags
+      const pri =
+        arr.find((i: AnyImage) => i?.isPrimary) ??
+        arr.find((i: AnyImage) => i?.is_default_global) ??
+        null;
+      return pri ?? arr[0];
+    }
+  }
+  return null;
+}
+
+function imageUrlForCard(p: any): string | null {
+  const rec = selectImageRecord(p);
+  if (!rec) return null;
+
+  // prefer a medium size for cards
+  const rel = rec.v800Path || rec.v320Path || rec.v1600Path || rec.origPath || null;
+  if (!rel) return null;
+
+  // All paths in DB are relative to the /uploads mount
+  const withPrefix = rel.startsWith('/uploads/') ? rel : `/uploads/${rel}`;
+  return joinUrl(API_BASE, withPrefix);
+}
+
+/** ---------- Types/State ---------- */
 type LoadState =
   | { kind: 'idle' }
   | { kind: 'loading' }
-  | { kind: 'loaded'; data: { items: Product[]; total: number; page: number; totalPages: number } }
+  | {
+  kind: 'loaded';
+  data: { items: Product[]; total: number; page: number; totalPages: number };
+}
   | { kind: 'error'; message: string };
 
 type SortValue = 'newest' | 'price_asc' | 'price_desc';
@@ -252,13 +344,11 @@ export default function ProductList(): React.ReactElement {
   }
 
   const skeletonKeys = useMemo(() => Array.from({ length: 9 }, (_, i) => `sk-${i}`), []);
-
   const card: React.CSSProperties = {
     background: 'var(--theme-card)',
     borderColor: 'var(--theme-border)',
     color: 'var(--theme-text)',
   };
-
   const qStr = params.get('q') ?? '';
 
   return (
@@ -266,7 +356,11 @@ export default function ProductList(): React.ReactElement {
       <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Catalog</h1>
 
       {/* Search + Filters */}
-      <form onSubmit={submitFilters} className="rounded-xl border p-4 grid gap-3 md:grid-cols-12" style={card}>
+      <form
+        onSubmit={submitFilters}
+        className="rounded-xl border p-4 grid gap-3 md:grid-cols-12"
+        style={card}
+      >
         {/* 🔎 Keyword search (debounced -> query param) */}
         <input
           className="md:col-span-4 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
@@ -356,7 +450,11 @@ export default function ProductList(): React.ReactElement {
       {state.kind === 'loading' && (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
           {skeletonKeys.map((k) => (
-            <div key={k} className="h-44 rounded-lg animate-pulse" style={{ background: 'var(--theme-card)' }} />
+            <div
+              key={k}
+              className="h-44 rounded-lg animate-pulse"
+              style={{ background: 'var(--theme-card)' }}
+            />
           ))}
         </div>
       )}
@@ -374,41 +472,60 @@ export default function ProductList(): React.ReactElement {
               const onSaleNow = isSaleActive(p);
               const eff = effectivePriceCents(p);
 
-              let priceEl: React.ReactNode = <div className="text-sm">{centsToUsd(eff)}</div>;
-              if (onSaleNow) {
-                priceEl = (
-                  <div className="text-sm">
-                    <span className="line-through opacity-60 mr-1">{centsToUsd(p.priceCents)}</span>
-                    <span>{centsToUsd(eff)}</span>
-                  </div>
-                );
-              }
+              const priceEl = onSaleNow ? (
+                <div className="text-sm">
+                  <span className="line-through opacity-60 mr-1">
+                    {centsToUsd((p as any).priceCents)}
+                  </span>
+                  <span>{centsToUsd(eff)}</span>
+                </div>
+              ) : (
+                <div className="text-sm">{centsToUsd(eff)}</div>
+              );
 
-              const imgSrc =
-                (p as any).primaryPhotoUrl ||
-                (p as any).photoUrl ||
-                (p as any).coverUrl ||
-                null;
+              const imgSrc = imageUrlForCard(p);
 
               return (
-                <Link key={p.id} to={`/products/${p.id}`} className="rounded-xl border p-3 hover:shadow" style={card}>
+                <Link
+                  key={(p as any).id}
+                  to={`/products/${(p as any).id}`}
+                  className="rounded-xl border p-3 hover:shadow"
+                  style={card}
+                >
                   {imgSrc ? (
                     <img
                       src={imgSrc}
-                      alt={p.title}
-                      className="h-36 w-full rounded object-cover mb-3"
+                      alt={(p as any).title}
+                      className="h-72 w-full rounded object-cover mb-3"
                       style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
+                      onError={(ev) => {
+                        // If the URL 404s, hide the broken image and let the placeholder show
+                        const el = ev.currentTarget;
+                        el.style.display = 'none';
+                        const placeholder = el.nextElementSibling as HTMLElement | null;
+                        if (placeholder) placeholder.style.display = 'block';
+                      }}
                     />
-                  ) : (
-                    <div className="h-36 w-full rounded bg-[var(--theme-card-alt)] mb-3" />
-                  )}
-                  <div className="truncate font-semibold">{highlight(p.title, qStr)}</div>
+                  ) : null}
+                  {/* hidden placeholder that appears if img fails */}
+                  <div
+                    className="h-36 w-full rounded bg-[var(--theme-card-alt)] mb-3"
+                    style={{ display: imgSrc ? 'none' : 'block' }}
+                  />
+
+                  <div className="truncate font-semibold">
+                    {highlight((p as any).title, qStr)}
+                  </div>
                   {priceEl}
-                  {p.species ? (
-                    <div className="text-xs opacity-70">{highlight(p.species, qStr)}</div>
+                  {(p as any).species ? (
+                    <div className="text-xs opacity-70">
+                      {highlight((p as any).species, qStr)}
+                    </div>
                   ) : null}
                   {(p as any).locality ? (
-                    <div className="text-xs opacity-70">{highlight((p as any).locality, qStr)}</div>
+                    <div className="text-xs opacity-70">
+                      {highlight((p as any).locality, qStr)}
+                    </div>
                   ) : null}
                 </Link>
               );
