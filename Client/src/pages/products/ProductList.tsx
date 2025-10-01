@@ -378,7 +378,7 @@ export default function ProductList(): React.ReactElement {
         />
         <input
           className="md:col-span-3 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
-          placeholder="Vendor slug"
+          placeholder="Vendor name"
           value={form.vendorSlug}
           onChange={(e) => setForm((s) => ({ ...s, vendorSlug: e.target.value }))}
         />
