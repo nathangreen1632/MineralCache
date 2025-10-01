@@ -3,9 +3,9 @@ import React, { useEffect, useMemo, useState, useId } from 'react';
 import { z } from 'zod';
 import type { ProductInput } from '../../api/products';
 
-/** -------- Zod Schema matching new structured ProductInput -------- */
+/** -------- Relaxed, optional schema (used for hints only; does NOT block submit) -------- */
 const FluorSchema = z.object({
-  mode: z.enum(['none', 'SW', 'LW', 'both']),
+  mode: z.enum(['none', 'SW', 'LW', 'both']).optional().nullable(),
   colorNote: z.string().max(240).optional().nullable(),
   // Optional; if you later expose this, parse as comma-separated numbers
   wavelengthNm: z.array(z.number().int().positive()).max(4).optional().nullable(),
@@ -13,14 +13,14 @@ const FluorSchema = z.object({
 
 const Schema = z
   .object({
-    title: z.string().min(2, 'Required').max(160, 'Max 160 chars'),
+    title: z.string().max(160, 'Max 160 chars').optional().nullable(),
     description: z.string().max(8000, 'Max 8000 chars').optional().nullable(),
 
-    species: z.string().min(1, 'Required').max(120, 'Max 120 chars'),
+    species: z.string().max(120, 'Max 120 chars').optional().nullable(),
     locality: z.string().max(240).optional().nullable(),
-    synthetic: z.boolean().optional(),
+    synthetic: z.boolean().optional().nullable(),
 
-    // Dimensions + weight (structured)
+    // Dimensions + weight (all optional)
     lengthCm: z.number().nonnegative().optional().nullable(),
     widthCm: z.number().nonnegative().optional().nullable(),
     heightCm: z.number().nonnegative().optional().nullable(),
@@ -30,31 +30,37 @@ const Schema = z
     weightCt: z.number().nonnegative().optional().nullable(),
 
     // Structured fluorescence
-    fluorescence: FluorSchema,
+    fluorescence: FluorSchema.optional().nullable(),
 
-    // Condition + provenance (flat notes for now)
+    // Condition + provenance
     condition: z.string().max(240).optional().nullable(),
     conditionNote: z.string().max(240).optional().nullable(),
     provenanceNote: z.string().max(240).optional().nullable(),
-    // provenanceTrail omitted from form (will send null/initial value)
 
-    // Pricing (scheduled sale model)
-    priceCents: z.number().int().min(1, 'Must be ≥ 1'),
-    salePriceCents: z.number().int().min(0).nullable().optional(),
-    // Use string ISO at the API boundary
+    // Pricing (optional; no hard minimums)
+    priceCents: z.number().int().nonnegative().optional().nullable(),
+    salePriceCents: z.number().int().nonnegative().optional().nullable(),
+
+    // ISO strings (optional)
     saleStartAt: z.string().optional().nullable(),
     saleEndAt: z.string().optional().nullable(),
   })
   .superRefine((val, ctx) => {
-    // Sale price must be less than priceCents (if provided)
-    if (val.salePriceCents != null && val.salePriceCents >= val.priceCents) {
+    // Compare only when both are present
+    if (
+      val.priceCents != null &&
+      val.salePriceCents != null &&
+      Number.isFinite(val.priceCents) &&
+      Number.isFinite(val.salePriceCents) &&
+      val.salePriceCents >= val.priceCents
+    ) {
       ctx.addIssue({
         code: 'custom',
         path: ['salePriceCents'],
-        message: 'Sale price must be less than regular price.',
+        message: 'Sale price must be less than regular price when both are provided.',
       });
     }
-    // If both dates present, enforce start ≤ end
+    // Check order only when both dates present
     if (val.saleStartAt && val.saleEndAt) {
       const start = new Date(val.saleStartAt).getTime();
       const end = new Date(val.saleEndAt).getTime();
@@ -111,14 +117,14 @@ export default function ProductForm({
     photos: useId(),
   };
 
-  // keep cents as numbers; keep text fields nullable
+  // All fields optional; hydrate from initial without forcing edits later
   const [values, setValues] = useState<ProductFormValues>(() => ({
-    title: initial?.title ?? '',
+    title: initial?.title ?? null,
     description: initial?.description ?? null,
 
-    species: initial?.species ?? '',
+    species: initial?.species ?? null,
     locality: initial?.locality ?? null,
-    synthetic: Boolean(initial?.synthetic),
+    synthetic: (initial?.synthetic as boolean | null | undefined) ?? null,
 
     lengthCm: initial?.lengthCm ?? null,
     widthCm: initial?.widthCm ?? null,
@@ -128,72 +134,70 @@ export default function ProductForm({
     weightG: initial?.weightG ?? null,
     weightCt: initial?.weightCt ?? null,
 
-    fluorescence: initial?.fluorescence ?? DEFAULT_FLUOR,
+    fluorescence: (initial?.fluorescence as ProductFormValues['fluorescence']) ?? DEFAULT_FLUOR,
 
     condition: initial?.condition ?? null,
     conditionNote: initial?.conditionNote ?? null,
     provenanceNote: initial?.provenanceNote ?? null,
 
-    priceCents: Number.isFinite(initial?.priceCents) ? Number(initial?.priceCents) : 0,
+    priceCents: initial?.priceCents == null ? null : Math.trunc(Number(initial.priceCents)),
     salePriceCents:
       initial?.salePriceCents == null ? null : Math.trunc(Number(initial.salePriceCents)),
     saleStartAt: initial?.saleStartAt ?? null,
     saleEndAt: initial?.saleEndAt ?? null,
   }));
 
+  // Keep values in sync if initial changes, but never force re-edits
   useEffect(() => {
-    // when initial changes (edit page load), hydrate
-    if (initial) {
-      const next: ProductFormValues = {
-        ...values,
-        title: initial.title ?? values.title,
-        description: initial.description ?? values.description,
+    if (!initial) return;
+    setValues((prev) => ({
+      ...prev,
+      title: initial.title ?? prev.title,
+      description: initial.description ?? prev.description,
 
-        species: initial.species ?? values.species,
-        locality: initial.locality ?? values.locality,
-        synthetic: Boolean(initial.synthetic ?? values.synthetic),
+      species: initial.species ?? prev.species,
+      locality: initial.locality ?? prev.locality,
+      synthetic: (initial.synthetic as boolean | null | undefined) ?? prev.synthetic,
 
-        lengthCm: initial.lengthCm ?? values.lengthCm,
-        widthCm: initial.widthCm ?? values.widthCm,
-        heightCm: initial.heightCm ?? values.heightCm,
-        sizeNote: initial.sizeNote ?? values.sizeNote,
+      lengthCm: initial.lengthCm ?? prev.lengthCm,
+      widthCm: initial.widthCm ?? prev.widthCm,
+      heightCm: initial.heightCm ?? prev.heightCm,
+      sizeNote: initial.sizeNote ?? prev.sizeNote,
 
-        weightG: initial.weightG ?? values.weightG,
-        weightCt: initial.weightCt ?? values.weightCt,
+      weightG: initial.weightG ?? prev.weightG,
+      weightCt: initial.weightCt ?? prev.weightCt,
 
-        fluorescence: initial.fluorescence ?? values.fluorescence ?? DEFAULT_FLUOR,
+      fluorescence:
+        (initial.fluorescence as ProductFormValues['fluorescence']) ??
+        prev.fluorescence ??
+        DEFAULT_FLUOR,
 
-        condition: initial.condition ?? values.condition,
-        conditionNote: initial.conditionNote ?? values.conditionNote,
-        provenanceNote: initial.provenanceNote ?? values.provenanceNote,
+      condition: initial.condition ?? prev.condition,
+      conditionNote: initial.conditionNote ?? prev.conditionNote,
+      provenanceNote: initial.provenanceNote ?? prev.provenanceNote,
 
-        priceCents:
-          Number.isFinite(initial.priceCents) && Number(initial.priceCents) > 0
-            ? Number(initial.priceCents)
-            : values.priceCents,
-        salePriceCents:
-          initial.salePriceCents == null ? null : Math.trunc(Number(initial.salePriceCents)),
-        saleStartAt: initial.saleStartAt ?? values.saleStartAt,
-        saleEndAt: initial.saleEndAt ?? values.saleEndAt,
-      };
-      setValues(next);
-    }
-
+      priceCents:
+        initial.priceCents == null ? prev.priceCents : Math.trunc(Number(initial.priceCents)),
+      salePriceCents:
+        initial.salePriceCents == null
+          ? prev.salePriceCents
+          : Math.trunc(Number(initial.salePriceCents)),
+      saleStartAt: initial.saleStartAt ?? prev.saleStartAt,
+      saleEndAt: initial.saleEndAt ?? prev.saleEndAt,
+    }));
   }, [initial]);
 
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [images, setImages] = useState<File[]>([]);
 
-  const canSubmit = useMemo(() => {
-    const parsed = Schema.safeParse(values);
-    if (!parsed.success) return false;
-    return images.length <= 4;
-
-  }, [values, images.length]);
+  // Save is actionable regardless of form content; only block when busy or >4 images
+  const canSubmit = useMemo(() => !busy && images.length <= 4, [busy, images.length]);
 
   function setField<K extends keyof ProductFormValues>(key: K, value: ProductFormValues[K]) {
     const next = { ...values, [key]: value };
     setValues(next);
+
+    // Run relaxed schema for hints only; never disables Save
     const parsed = Schema.safeParse(next);
     if (parsed.success) {
       setErrs({});
@@ -207,12 +211,11 @@ export default function ProductForm({
     }
   }
 
-  function setFluorField<K extends keyof ProductFormValues['fluorescence']>(
-    key: K,
-    value: ProductFormValues['fluorescence'][K]
-  ) {
-    const current = values.fluorescence || DEFAULT_FLUOR;
-    setField('fluorescence', { ...current, [key]: value });
+  // ---- FIX: use NonNullable so keyof doesn't collapse to 'never'
+  type Fluor = NonNullable<ProductFormValues['fluorescence']>;
+  function setFluorField<K extends keyof Fluor>(key: K, value: Fluor[K]) {
+    const current = (values.fluorescence ?? DEFAULT_FLUOR) as Fluor;
+    setField('fluorescence', { ...current, [key]: value } as unknown as ProductFormValues['fluorescence']);
   }
 
   function onPickFiles(e: React.ChangeEvent<HTMLInputElement>) {
@@ -223,59 +226,57 @@ export default function ProductForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const parsed = Schema.safeParse(values);
-    if (!parsed.success) {
-      const fe: Record<string, string> = {};
-      for (const issue of parsed.error.issues) {
-        const p = String(issue.path[0] ?? '');
-        if (!fe[p]) fe[p] = issue.message;
-      }
-      setErrs(fe);
-      return;
-    }
 
     // Normalize optional strings to null for server parity
-    function normalize(s?: string | null) {
+    const normalize = (s?: string | null) => {
       if (s == null) return null;
       const t = s.trim();
-      if (t === '') return null;
-      return t;
-    }
+      return t === '' ? null : t;
+    };
 
+    // Build a payload with nulls for empties; keep types aligned with ProductInput
     const payload: ProductInput = {
-      title: parsed.data.title.trim(),
-      description: normalize(parsed.data.description ?? null),
-      species: parsed.data.species.trim(),
-      locality: normalize(parsed.data.locality ?? null),
-      synthetic: Boolean(parsed.data.synthetic ?? false),
+      title: normalize(values.title ?? null) ?? '',
+      description: normalize(values.description ?? null),
+      species: normalize(values.species ?? null) ?? '',
+      locality: normalize(values.locality ?? null),
+      synthetic: Boolean(values.synthetic ?? false),
 
-      lengthCm: parsed.data.lengthCm ?? null,
-      widthCm: parsed.data.widthCm ?? null,
-      heightCm: parsed.data.heightCm ?? null,
-      sizeNote: normalize(parsed.data.sizeNote ?? null),
+      lengthCm: values.lengthCm ?? null,
+      widthCm: values.widthCm ?? null,
+      heightCm: values.heightCm ?? null,
+      sizeNote: normalize(values.sizeNote ?? null),
 
-      weightG: parsed.data.weightG ?? null,
-      weightCt: parsed.data.weightCt ?? null,
+      weightG: values.weightG ?? null,
+      weightCt: values.weightCt ?? null,
 
       fluorescence: {
-        mode: parsed.data.fluorescence.mode,
-        colorNote: normalize(parsed.data.fluorescence.colorNote ?? null),
-        wavelengthNm: parsed.data.fluorescence.wavelengthNm ?? null,
+        mode: (values.fluorescence?.mode ?? 'none'),
+        colorNote: normalize(values.fluorescence?.colorNote ?? null),
+        wavelengthNm: values.fluorescence?.wavelengthNm ?? null,
       },
 
-      condition: normalize(parsed.data.condition ?? null),
-      conditionNote: normalize(parsed.data.conditionNote ?? null),
-      provenanceNote: normalize(parsed.data.provenanceNote ?? null),
+      condition: normalize(values.condition ?? null),
+      conditionNote: normalize(values.conditionNote ?? null),
+      provenanceNote: normalize(values.provenanceNote ?? null),
       provenanceTrail: null, // future: structured entries
 
-      priceCents: Math.trunc(parsed.data.priceCents),
+      // ProductInput.priceCents is number; send 0 when empty
+      priceCents:
+        values.priceCents == null || Number.isNaN(values.priceCents)
+          ? 0
+          : Math.trunc(Number(values.priceCents)),
 
+      // If your API allows null here, keep null; otherwise default like priceCents
       salePriceCents:
-        parsed.data.salePriceCents == null ? null : Math.trunc(parsed.data.salePriceCents),
-      saleStartAt: normalize(parsed.data.saleStartAt ?? null),
-      saleEndAt: normalize(parsed.data.saleEndAt ?? null),
+        values.salePriceCents == null || Number.isNaN(values.salePriceCents)
+          ? null
+          : Math.trunc(Number(values.salePriceCents)),
 
-      images: [], // not used by API submit; uploads handled separately
+      saleStartAt: normalize(values.saleStartAt ?? null),
+      saleEndAt: normalize(values.saleEndAt ?? null),
+
+      images: [], // uploads handled separately
     };
 
     await onSubmit(payload, images);
@@ -288,10 +289,11 @@ export default function ProductForm({
     return `${base} border-[var(--theme-border)] focus:border-[var(--theme-focus)]`;
   }
 
-  // submit label without nested ternaries
-  let submitLabel = 'Create';
-  if (mode === 'edit') submitLabel = 'Save';
-  if (busy) submitLabel = mode === 'edit' ? 'Saving…' : 'Creating…';
+  // ---- FIX: avoid nested ternary + unused variable
+  function submitLabel(): string {
+    if (busy) return mode === 'edit' ? 'Saving…' : 'Creating…';
+    return mode === 'edit' ? 'Save' : 'Create';
+  }
 
   return (
     <form onSubmit={submit} className="space-y-5">
@@ -310,16 +312,13 @@ export default function ProductForm({
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="md:col-span-2">
-          <label
-            htmlFor={ids.title}
-            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
-          >
+          <label htmlFor={ids.title} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Title
           </label>
           <input
             id={ids.title}
             className={fieldCls(Boolean(errs.title))}
-            value={values.title}
+            value={values.title ?? ''}
             onChange={(e) => setField('title', e.target.value)}
             maxLength={160}
           />
@@ -331,10 +330,7 @@ export default function ProductForm({
         </div>
 
         <div className="md:col-span-2">
-          <label
-            htmlFor={ids.description}
-            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
-          >
+          <label htmlFor={ids.description} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Description
           </label>
           <textarea
@@ -353,16 +349,13 @@ export default function ProductForm({
         </div>
 
         <div>
-          <label
-            htmlFor={ids.species}
-            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
-          >
+          <label htmlFor={ids.species} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Species
           </label>
           <input
             id={ids.species}
             className={fieldCls(Boolean(errs.species))}
-            value={values.species}
+            value={values.species ?? ''}
             onChange={(e) => setField('species', e.target.value)}
             maxLength={120}
           />
@@ -374,10 +367,7 @@ export default function ProductForm({
         </div>
 
         <div>
-          <label
-            htmlFor={ids.locality}
-            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
-          >
+          <label htmlFor={ids.locality} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Locality
           </label>
           <input
@@ -396,10 +386,7 @@ export default function ProductForm({
 
         {/* Dimensions */}
         <div>
-          <label
-            htmlFor={ids.lengthCm}
-            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
-          >
+          <label htmlFor={ids.lengthCm} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Length (cm)
           </label>
           <input
@@ -408,16 +395,11 @@ export default function ProductForm({
             type="number"
             step="0.01"
             value={values.lengthCm ?? ''}
-            onChange={(e) =>
-              setField('lengthCm', e.target.value === '' ? null : Number(e.target.value))
-            }
+            onChange={(e) => setField('lengthCm', e.target.value === '' ? null : Number(e.target.value))}
           />
         </div>
         <div>
-          <label
-            htmlFor={ids.widthCm}
-            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
-          >
+          <label htmlFor={ids.widthCm} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Width (cm)
           </label>
           <input
@@ -426,16 +408,11 @@ export default function ProductForm({
             type="number"
             step="0.01"
             value={values.widthCm ?? ''}
-            onChange={(e) =>
-              setField('widthCm', e.target.value === '' ? null : Number(e.target.value))
-            }
+            onChange={(e) => setField('widthCm', e.target.value === '' ? null : Number(e.target.value))}
           />
         </div>
         <div>
-          <label
-            htmlFor={ids.heightCm}
-            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
-          >
+          <label htmlFor={ids.heightCm} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Height (cm)
           </label>
           <input
@@ -444,17 +421,12 @@ export default function ProductForm({
             type="number"
             step="0.01"
             value={values.heightCm ?? ''}
-            onChange={(e) =>
-              setField('heightCm', e.target.value === '' ? null : Number(e.target.value))
-            }
+            onChange={(e) => setField('heightCm', e.target.value === '' ? null : Number(e.target.value))}
           />
         </div>
 
         <div className="md:col-span-2">
-          <label
-            htmlFor={ids.sizeNote}
-            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
-          >
+          <label htmlFor={ids.sizeNote} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Size note
           </label>
           <input
@@ -464,14 +436,16 @@ export default function ProductForm({
             onChange={(e) => setField('sizeNote', e.target.value)}
             maxLength={120}
           />
+          {errs.sizeNote && (
+            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
+              {errs.sizeNote}
+            </p>
+          )}
         </div>
 
         {/* Weights */}
         <div>
-          <label
-            htmlFor={ids.weightG}
-            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
-          >
+          <label htmlFor={ids.weightG} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Weight (g)
           </label>
           <input
@@ -480,16 +454,11 @@ export default function ProductForm({
             type="number"
             step="0.01"
             value={values.weightG ?? ''}
-            onChange={(e) =>
-              setField('weightG', e.target.value === '' ? null : Number(e.target.value))
-            }
+            onChange={(e) => setField('weightG', e.target.value === '' ? null : Number(e.target.value))}
           />
         </div>
         <div>
-          <label
-            htmlFor={ids.weightCt}
-            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
-          >
+          <label htmlFor={ids.weightCt} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Weight (ct)
           </label>
           <input
@@ -498,18 +467,13 @@ export default function ProductForm({
             type="number"
             step="0.01"
             value={values.weightCt ?? ''}
-            onChange={(e) =>
-              setField('weightCt', e.target.value === '' ? null : Number(e.target.value))
-            }
+            onChange={(e) => setField('weightCt', e.target.value === '' ? null : Number(e.target.value))}
           />
         </div>
 
         {/* Fluorescence */}
         <div>
-          <label
-            htmlFor={ids.fluorMode}
-            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
-          >
+          <label htmlFor={ids.fluorMode} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Fluorescence mode
           </label>
           <select
@@ -525,10 +489,7 @@ export default function ProductForm({
           </select>
         </div>
         <div className="md:col-span-2">
-          <label
-            htmlFor={ids.fluorColor}
-            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
-          >
+          <label htmlFor={ids.fluorColor} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Fluorescence color note
           </label>
           <input
@@ -541,21 +502,17 @@ export default function ProductForm({
 
         {/* Pricing */}
         <div>
-          <label
-            htmlFor={ids.priceCents}
-            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
-          >
+          <label htmlFor={ids.priceCents} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Price (¢)
           </label>
           <input
             id={ids.priceCents}
             inputMode="numeric"
             className={fieldCls(Boolean(errs.priceCents))}
-            value={String(values.priceCents ?? '')}
+            value={values.priceCents == null ? '' : String(values.priceCents)}
             onChange={(e) => {
-              const raw = e.target.value;
-              const n = Math.trunc(Number(raw) || 0);
-              setField('priceCents', n < 0 ? 0 : n);
+              const raw = e.target.value.trim();
+              setField('priceCents', raw === '' ? null : Math.trunc(Number(raw) || 0));
             }}
           />
           {errs.priceCents && (
@@ -566,10 +523,7 @@ export default function ProductForm({
         </div>
 
         <div>
-          <label
-            htmlFor={ids.salePriceCents}
-            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
-          >
+          <label htmlFor={ids.salePriceCents} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Sale price (¢) <span className="opacity-60">(optional)</span>
           </label>
           <input
@@ -579,11 +533,7 @@ export default function ProductForm({
             value={values.salePriceCents == null ? '' : String(values.salePriceCents)}
             onChange={(e) => {
               const raw = e.target.value.trim();
-              if (raw === '') setField('salePriceCents', null);
-              else {
-                const n = Math.trunc(Number(raw) || 0);
-                setField('salePriceCents', n < 0 ? 0 : n);
-              }
+              setField('salePriceCents', raw === '' ? null : Math.trunc(Number(raw) || 0));
             }}
           />
           {errs.salePriceCents && (
@@ -594,10 +544,7 @@ export default function ProductForm({
         </div>
 
         <div>
-          <label
-            htmlFor={ids.saleStartAt}
-            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
-          >
+          <label htmlFor={ids.saleStartAt} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Sale start (ISO) <span className="opacity-60">(optional)</span>
           </label>
           <input
@@ -615,10 +562,7 @@ export default function ProductForm({
         </div>
 
         <div>
-          <label
-            htmlFor={ids.saleEndAt}
-            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
-          >
+          <label htmlFor={ids.saleEndAt} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Sale end (ISO) <span className="opacity-60">(optional)</span>
           </label>
           <input
@@ -638,10 +582,7 @@ export default function ProductForm({
 
       {/* Photos (≤4) */}
       <div>
-        <label
-          htmlFor={ids.photos}
-          className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
-        >
+        <label htmlFor={ids.photos} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
           Photos (up to 4)
         </label>
         <input id={ids.photos} type="file" accept="image/*" multiple onChange={onPickFiles} />
@@ -677,11 +618,11 @@ export default function ProductForm({
       <div className="flex items-center gap-2">
         <button
           type="submit"
-          disabled={Boolean(busy) || !canSubmit}
+          disabled={!canSubmit}
           className="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-60"
           style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
         >
-          {submitLabel}
+          {submitLabel()}
         </button>
         <a
           href="/vendor/dashboard"

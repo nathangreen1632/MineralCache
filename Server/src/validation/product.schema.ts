@@ -9,7 +9,7 @@ const to2dp = (v: number) => Math.round(v * 100) / 100;
 const finite = (v: number) => Number.isFinite(v) || 'Must be a finite number';
 const cm = z.coerce.number().refine(finite).min(0).max(9999).transform(to2dp);
 const grams = z.coerce.number().min(0).max(999_999).transform(to2dp);
-const carats= z.coerce.number().min(0).max(999_999).transform(to2dp);
+const carats = z.coerce.number().min(0).max(999_999).transform(to2dp);
 
 const cents = z.coerce.number().int().min(0);
 const nonEmpty = z.string().trim().min(1);
@@ -27,11 +27,12 @@ const provenanceEntry = z.object({
   { message: 'yearStart must be ≤ yearEnd', path: ['yearEnd'] },
 );
 
+// ✅ Allow nulls for nullable DB columns
 const fluorescence = z.object({
   mode: fluorescenceMode,
-  colorNote: z.string().max(500).optional(),
+  colorNote: z.string().max(500).optional().nullable(),
   // Typical SW/LW bands ~254nm & ~365nm; keep flexible but bounded.
-  wavelengthNm: z.array(z.coerce.number().int().min(200).max(450)).max(4).optional(),
+  wavelengthNm: z.array(z.coerce.number().int().min(200).max(450)).max(4).optional().nullable(),
 });
 
 /** Create payload (vendor) — unified schema */
@@ -63,13 +64,13 @@ export const createProductSchema = z.object({
   // Provenance
   provenanceNote: z.string().trim().max(2000).optional().nullable(),
   // [{ owner, yearStart?, yearEnd?, note? }]
-  provenanceTrail: z.array(provenanceEntry).max(20).optional(),
+  provenanceTrail: z.array(provenanceEntry).max(20).optional().nullable(),
 
   // Pricing (scheduled sale model)
   priceCents: cents,
-  salePriceCents: cents.optional(),
-  saleStartAt: z.coerce.date().optional(),
-  saleEndAt: z.coerce.date().optional(),
+  salePriceCents: cents.optional().nullable(),
+  saleStartAt: z.coerce.date().optional().nullable(),
+  saleEndAt: z.coerce.date().optional().nullable(),
 
   // Images (keep your current placeholder contract)
   images: z.array(z.string().trim().max(500)).max(4).optional(),

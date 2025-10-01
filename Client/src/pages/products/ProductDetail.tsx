@@ -180,14 +180,14 @@ export default function ProductDetail(): React.ReactElement {
           <dd>{sizeLabel(p)}</dd>
           <dt className="opacity-80">Weight</dt>
           <dd>{weightLabel(p)}</dd>
-          <dt className="opacity-80">Fluorescence</dt>
-          <dd>{fluorescenceLabel(p)}</dd>
           <dt className="opacity-80">Condition</dt>
           <dd>{p.condition ?? '—'}</dd>
           <dt className="opacity-80">Provenance</dt>
           <dd>{p.provenanceNote ?? '—'}</dd>
           <dt className="opacity-80">Synthetic</dt>
           <dd>{p.synthetic ? 'Yes' : 'No'}</dd>
+          <dt className="opacity-80">Fluorescence</dt>
+          <dd>{fluorescenceLabel(p)}</dd>
         </dl>
 
         <div className="flex items-center gap-2">

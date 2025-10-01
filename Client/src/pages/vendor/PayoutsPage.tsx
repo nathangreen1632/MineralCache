@@ -1,34 +1,53 @@
+// Client/src/pages/vendor/PayoutsPage.tsx
 import React, { useEffect, useState } from 'react';
 import { getMyPayouts, type VendorPayoutRow } from '../../api/vendor';
 
-function cents(n: number) { return `$${(n / 100).toFixed(2)}`; }
+function cents(n: number) {
+  return `$${(n / 100).toFixed(2)}`;
+}
 
 export default function PayoutsPage(): React.ReactElement {
   const [rows, setRows] = useState<VendorPayoutRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [start, setStart] = useState<string>('');
-  const [end, setEnd] = useState<string>('');
+  const [from, setFrom] = useState<string>(''); // YYYY-MM-DD
+  const [to, setTo] = useState<string>('');     // YYYY-MM-DD
 
   async function load() {
-    setBusy(true); setMsg(null);
-    const { ok, data, error } = await getMyPayouts({ start: start || undefined, end: end || undefined }) as any;
+    setBusy(true);
+    setMsg(null);
+    const { data, error } = await getMyPayouts({
+      from: from || undefined,
+      to: to || undefined,
+    } as any);
     setBusy(false);
-    if (!ok || !data) { setMsg(error || 'Failed to load'); return; }
+    if (error || !data) {
+      setMsg(error || 'Failed to load');
+      return;
+    }
     setRows((data.items ?? []) as VendorPayoutRow[]);
   }
 
-  useEffect(() => { load(); /* initial */ }, []);
+  useEffect(() => { void load(); }, []);
 
-  const totals = rows.reduce((a, r) => {
-    a.gross += r.grossCents; a.fee += r.feeCents; a.net += r.netCents; return a;
-  }, { gross: 0, fee: 0, net: 0 });
+  const totals = rows.reduce(
+    (a, r) => {
+      a.gross += r.grossCents || 0;
+      a.fee += r.feeCents || 0;
+      a.net += r.netCents || 0;
+      return a;
+    },
+    { gross: 0, fee: 0, net: 0 }
+  );
 
+  // Export CSV via server endpoint (matches Server route)
   const csvHref = `/api/vendors/me/payouts?${[
-    start ? `start=${encodeURIComponent(start)}` : '',
-    end ? `end=${encodeURIComponent(end)}` : '',
     'format=csv',
-  ].filter(Boolean).join('&')}`;
+    from ? `from=${encodeURIComponent(from)}` : '',
+    to ? `to=${encodeURIComponent(to)}` : '',
+  ]
+    .filter(Boolean)
+    .join('&')}`;
 
   return (
     <section className="mx-auto max-w-4xl px-6 py-10 space-y-4">
@@ -36,17 +55,33 @@ export default function PayoutsPage(): React.ReactElement {
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="grid">
-          <span className="text-sm opacity-80">Start</span>
-          <input type="date" value={start} onChange={e => setStart(e.target.value)} className="rounded-lg px-3 py-2 ring-1 ring-inset" />
+          <span className="text-sm opacity-80">From</span>
+          <input
+            type="date"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            className="rounded-lg px-3 py-2 ring-1 ring-inset"
+          />
         </label>
         <label className="grid">
-          <span className="text-sm opacity-80">End</span>
-          <input type="date" value={end} onChange={e => setEnd(e.target.value)} className="rounded-lg px-3 py-2 ring-1 ring-inset" />
+          <span className="text-sm opacity-80">To</span>
+          <input
+            type="date"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            className="rounded-lg px-3 py-2 ring-1 ring-inset"
+          />
         </label>
-        <button onClick={load} disabled={busy} className="rounded-lg px-3 py-2 ring-1 ring-inset disabled:opacity-50">
+        <button
+          onClick={load}
+          disabled={busy}
+          className="rounded-lg px-3 py-2 ring-1 ring-inset disabled:opacity-50"
+        >
           {busy ? 'Loading…' : 'Apply'}
         </button>
-        <a href={csvHref} className="rounded-lg px-3 py-2 ring-1 ring-inset">Download CSV</a>
+        <a href={csvHref} className="rounded-lg px-3 py-2 ring-1 ring-inset">
+          Export CSV
+        </a>
       </div>
 
       {msg ? (
@@ -66,15 +101,29 @@ export default function PayoutsPage(): React.ReactElement {
             </tr>
             </thead>
             <tbody>
-            {rows.map((r) => (
-              <tr key={`${r.orderId}-${r.vendorId}`} className="border-b last:border-b-0" style={{ borderColor: 'var(--theme-border)' }}>
-                <td className="px-4 py-3">{new Date(r.paidAt).toLocaleString()}</td>
-                <td className="px-4 py-3">#{r.orderId}</td>
-                <td className="px-4 py-3">{cents(r.grossCents)}</td>
-                <td className="px-4 py-3">{cents(r.feeCents)}</td>
-                <td className="px-4 py-3 font-semibold">{cents(r.netCents)}</td>
+            {busy && rows.length === 0 ? (
+              <tr>
+                <td className="px-4 py-3" colSpan={5}>Loading…</td>
               </tr>
-            ))}
+            ) : rows.length === 0 ? (
+              <tr>
+                <td className="px-4 py-3 opacity-70" colSpan={5}>No payouts.</td>
+              </tr>
+            ) : (
+              rows.map((r) => (
+                <tr
+                  key={`${r.orderId}-${r.vendorId}`}
+                  className="border-b last:border-b-0"
+                  style={{ borderColor: 'var(--theme-border)' }}
+                >
+                  <td className="px-4 py-3">{new Date(r.paidAt).toLocaleString()}</td>
+                  <td className="px-4 py-3">#{r.orderId}</td>
+                  <td className="px-4 py-3">{cents(r.grossCents)}</td>
+                  <td className="px-4 py-3">{cents(r.feeCents)}</td>
+                  <td className="px-4 py-3 font-semibold">{cents(r.netCents)}</td>
+                </tr>
+              ))
+            )}
             </tbody>
             <tfoot>
             <tr>

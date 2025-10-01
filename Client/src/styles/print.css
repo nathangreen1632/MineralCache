@@ -1,0 +1,7 @@
+@media print {
+    .print\:hidden { display: none !important; }
+    body { background: #fff !important; }
+    * { color: #000 !important; }
+    a[href]:after { content: ""; } /* hide link URLs */
+    @page { margin: 12mm; }
+}

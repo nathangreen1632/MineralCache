@@ -112,19 +112,20 @@ export default function VendorOrdersPage(): React.ReactElement {
             <th className="px-4 py-3">Status</th>
             <th className="px-4 py-3">Items</th>
             <th className="px-4 py-3">Total</th>
+            <th className="px-4 py-3">Actions</th>
           </tr>
           </thead>
           <tbody>
           {busy && rows.length === 0 && (
             <tr>
-              <td className="px-4 py-3" colSpan={5}>
+              <td className="px-4 py-3" colSpan={6}>
                 Loading…
               </td>
             </tr>
           )}
           {msg && (
             <tr>
-              <td className="px-4 py-3 text-[var(--theme-error)]" colSpan={5}>
+              <td className="px-4 py-3 text-[var(--theme-error)]" colSpan={6}>
                 {msg}
               </td>
             </tr>
@@ -138,11 +139,26 @@ export default function VendorOrdersPage(): React.ReactElement {
                 <td className="px-4 py-3 capitalize">{r.status.replace('_', ' ')}</td>
                 <td className="px-4 py-3">{r.itemCount}</td>
                 <td className="px-4 py-3">{centsToUsd(r.totalCents)}</td>
+                <td className="px-4 py-3">
+                  {/* Packing slip — opens printable page in a new tab */}
+                  {tab !== 'refunded' ? (
+                    <a
+                      href={`/api/vendors/orders/${r.id}/pack`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
+                    >
+                      Packing slip
+                    </a>
+                  ) : (
+                    <span className="opacity-60">—</span>
+                  )}
+                </td>
               </tr>
             ))}
           {rows.length === 0 && !busy && !msg && (
             <tr>
-              <td className="px-4 py-3 opacity-70" colSpan={5}>
+              <td className="px-4 py-3 opacity-70" colSpan={6}>
                 No orders.
               </td>
             </tr>

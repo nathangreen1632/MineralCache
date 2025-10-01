@@ -1,3 +1,5 @@
+// Server/src/migrations/20250929170000-enable-pg-trgm.cjs
+
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
     async up(queryInterface) {

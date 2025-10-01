@@ -1,3 +1,4 @@
+// Client/src/pages/orders/MyOrdersPage.tsx
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { listMyOrders, type MyOrderListItem } from '../../api/orders';
@@ -12,11 +13,11 @@ function centsToUsd(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-function fmtDate(iso: string) {
+function fmtDate(iso: string | null | undefined) {
   try {
-    return new Date(iso).toLocaleString();
+    return iso ? new Date(iso).toLocaleString() : '';
   } catch {
-    return iso;
+    return String(iso ?? '');
   }
 }
 
@@ -107,19 +108,35 @@ export default function MyOrdersPage(): React.ReactElement {
               </thead>
               <tbody>
               {items.map((o) => {
-                // Some clients may not have items expanded on the type; read defensively.
-                const shipped =
-                  Array.isArray((o as any).items) &&
-                  (o as any).items.some((it: any) => !!it?.shippedAt);
+                // Read defensively: items may or may not be expanded on list type.
+                const itemsArr: any[] = Array.isArray((o as any).items) ? (o as any).items : [];
+                const shippedCount = itemsArr.filter((it) => !!it?.shippedAt).length;
+                const deliveredCount = itemsArr.filter((it) => !!it?.deliveredAt).length;
+                const totalCount = o.itemCount;
+
+                // Badge precedence: Delivered (all) > Partially shipped > Shipped (all shipped but not delivered) > Processing
+                let fulfillmentBadge: React.ReactNode = <Badge>Processing</Badge>;
+                if (totalCount > 0) {
+                  if (deliveredCount === totalCount && totalCount > 0) {
+                    fulfillmentBadge = <Badge>Delivered</Badge>;
+                  } else if (shippedCount > 0 && shippedCount < totalCount) {
+                    fulfillmentBadge = <Badge>Partially shipped</Badge>;
+                  } else if (shippedCount === totalCount && totalCount > 0) {
+                    fulfillmentBadge = <Badge>Shipped</Badge>;
+                  }
+                } else if (deliveredCount > 0) {
+                  // Fallback if itemCount missing but we saw delivered items
+                  fulfillmentBadge = <Badge>Delivered</Badge>;
+                } else if (shippedCount > 0) {
+                  fulfillmentBadge = <Badge>Shipped</Badge>;
+                }
 
                 return (
                   <tr key={o.id} className="border-b last:border-b-0" style={{ borderColor: 'var(--theme-border)' }}>
                     <td className="px-4 py-3 font-medium">#{o.id}</td>
-                    <td className="px-4 py-3">{fmtDate(o.createdAt)}</td>
+                    <td className="px-4 py-3">{fmtDate((o as any).createdAt)}</td>
                     <td className="px-4 py-3 capitalize">{o.status.replace('_', ' ')}</td>
-                    <td className="px-4 py-3">
-                      {shipped ? <Badge>Shipped</Badge> : <Badge>Processing</Badge>}
-                    </td>
+                    <td className="px-4 py-3">{fulfillmentBadge}</td>
                     <td className="px-4 py-3">{o.itemCount}</td>
                     <td className="px-4 py-3">{centsToUsd(o.totalCents)}</td>
                     <td className="px-4 py-3">

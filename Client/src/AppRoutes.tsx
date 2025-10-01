@@ -30,6 +30,7 @@ import ProductEdit from './pages/products/ProductEdit';
 // Cart & Checkout
 import CartPage from './pages/cart/CartPage';
 import CheckoutPage from './pages/cart/CheckoutPage';
+import Receipt from "./pages/orders/Receipt.tsx";
 
 // Orders
 import OrderConfirmationPage from './pages/orders/OrderConfirmationPage';
@@ -64,6 +65,7 @@ export default function AppRoutes(): React.ReactElement {
         <Route path="orders/confirmation" element={<OrderConfirmationPage />} />
         <Route path="account/orders" element={<MyOrdersPage />} />
         <Route path="account/orders/:id" element={<OrderDetailPage />} />
+        <Route path="/orders/:id/receipt" element={<Receipt />} />
 
         {/* Vendor */}
         <Route path="vendor/apply" element={<VendorApply />} />

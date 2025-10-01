@@ -6,47 +6,31 @@ import {
   rejectVendorSvc,
 } from '../../services/admin/admin.service.js';
 
-// 🆕 Admin settings model + validation
-import { z, type ZodError } from 'zod';
-import { AdminSettings } from '../../models/adminSettings.model.js';
-import { updateAdminSettingsSchema } from '../../validation/adminSettings.schema.js';
-
-// If you already had real settings handlers elsewhere, keep/export them here.
-// For now, keep the simple static settings used in Week-1:
-export async function getSettings(_req: Request, res: Response): Promise<void> {
-  res.json({ commissionPct: 0.08, minFeeCents: 75, holdHours: 48, holdCount: 3 });
-}
-export async function updateSettings(_req: Request, res: Response): Promise<void> {
-  res.json({ ok: true });
-}
+// ✅ Centralized settings logic (ENV+DB merge, cache)
+import {
+  getEffectiveSettings,
+  updateAdminSettings,
+  invalidateAdminSettingsCache,
+} from '../../services/settings.service.js';
+import {
+  updateAdminSettingsSchema,
+  type UpdateAdminSettingsDto,
+} from '../../validation/adminSettings.schema.js';
 
 /** ---------------------------------------------
- * 🆕 Zod error details helper (stable shape)
+ * Admin Settings DTO shaping for client (preserves your shape)
  * --------------------------------------------*/
-function zDetails(err: ZodError) {
-  const anyZ = z as any;
-  if (typeof anyZ.treeifyError === 'function') return anyZ.treeifyError(err);
-  return {
-    issues: err.issues.map((i) => ({
-      path: Array.isArray(i.path) ? i.path.join('.') : String(i.path ?? ''),
-      message: i.message,
-      code: i.code,
-    })),
-  };
-}
-
-/** ---------------------------------------------
- * 🆕 Admin Settings DTO shaping for client
- * --------------------------------------------*/
-function toDto(s: AdminSettings) {
+function toDtoFromEffective(s: Awaited<ReturnType<typeof getEffectiveSettings>>) {
   return {
     commission: {
       bps: Number(s.commission_bps),
       minFeeCents: Number(s.min_fee_cents),
     },
     tax: {
-      bps: Number((s as any).tax_rate_bps ?? 0),               // ✅ include tax in DTO
-      label: ((s as any).tax_label ?? null) as string | null,
+      bps: Number(s.tax_rate_bps ?? 0),
+      label: (s.tax_label ?? null),
+      // optional: show feature flag if your UI wants it
+      enabled: Boolean(s.tax_enabled),
     },
     shippingDefaults: {
       flatCents: Number(s.ship_flat_cents),
@@ -57,129 +41,62 @@ function toDto(s: AdminSettings) {
       currency: String(s.currency),
     },
     stripeEnabled: Boolean(s.stripe_enabled),
-    updatedAt: s.updatedAt?.toISOString?.() ?? new Date().toISOString(),
+    // keep an updatedAt for UI; effective settings are computed, so synthesize a timestamp
+    updatedAt: new Date().toISOString(),
   };
 }
 
 /** ---------------------------------------------
- * 🆕 GET /admin/settings — commission/min fee + shipping defaults + stripe flag
+ * GET /api/admin/settings
  * --------------------------------------------*/
 export async function getAdminSettings(_req: Request, res: Response): Promise<void> {
   try {
-    // unified currency fallback (CURRENCY preferred, then STRIPE_CURRENCY, then 'usd')
-    const envCurrency = (process.env.CURRENCY || process.env.STRIPE_CURRENCY || 'usd').toLowerCase();
-    const defaultTaxBps = Number(process.env.TAX_RATE_BPS ?? 825);   // ✅ 8.25% default
-    const defaultTaxLabel = process.env.TAX_LABEL ?? null;
-
-    let s = await AdminSettings.findByPk(1);
-    // Fallback row in case migration wasn’t run yet — uses env defaults
-    s ??= AdminSettings.build({
-      id: 1,
-      commission_bps: 800,
-      min_fee_cents: 75,
-      stripe_enabled: String(process.env.STRIPE_ENABLED ?? '').toLowerCase() === 'true',
-      currency: envCurrency, // ← unified fallback
-      ship_flat_cents: Number(process.env.SHIP_FLAT_CENTS ?? 0),
-      ship_per_item_cents: Number(process.env.SHIP_PER_ITEM_CENTS ?? 0),
-      ship_free_threshold_cents: process.env.SHIP_FREE_THRESHOLD_CENTS
-        ? Number(process.env.SHIP_FREE_THRESHOLD_CENTS)
-        : null,
-      ship_handling_cents: process.env.SHIP_HANDLING_CENTS
-        ? Number(process.env.SHIP_HANDLING_CENTS)
-        : null,
-
-      // ✅ satisfy model typing
-      tax_rate_bps: defaultTaxBps,
-      tax_label: defaultTaxLabel,
-    } as any);
-    res.json(toDto(s));
-  } catch (e: any) {
-    res.status(500).json({ error: 'Failed to load settings', detail: e?.message });
+    const effective = await getEffectiveSettings();
+    res.json(toDtoFromEffective(effective));
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    res.status(500).json({ error: 'Failed to load settings', detail: message });
   }
 }
 
 /** ---------------------------------------------
- * 🆕 PATCH /admin/settings — toggle flags & update shipping defaults
+ * PATCH /api/admin/settings
  * --------------------------------------------*/
 export async function patchAdminSettings(req: Request, res: Response): Promise<void> {
   try {
-    const parsed = updateAdminSettingsSchema.safeParse(req.body);
+    const parsed = updateAdminSettingsSchema.safeParse(req.body as UpdateAdminSettingsDto);
     if (!parsed.success) {
-      res.status(400).json({ error: 'Invalid input', details: zDetails(parsed.error) });
+      res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
       return;
     }
 
-    const envCurrency = (process.env.CURRENCY || process.env.STRIPE_CURRENCY || 'usd').toLowerCase();
-    const defaultTaxBps = Number(process.env.TAX_RATE_BPS ?? 825);
-    const defaultTaxLabel = process.env.TAX_LABEL ?? null;
-
-    // Ensure singleton row exists
-    let s = await AdminSettings.findByPk(1);
-    s ??= await AdminSettings.create({
-      id: 1,
-      commission_bps: 800,
-      min_fee_cents: 75,
-      stripe_enabled: String(process.env.STRIPE_ENABLED ?? '').toLowerCase() === 'true',
-      currency: envCurrency,
-      ship_flat_cents: Number(process.env.SHIP_FLAT_CENTS ?? 0),
-      ship_per_item_cents: Number(process.env.SHIP_PER_ITEM_CENTS ?? 0),
-      ship_free_threshold_cents: process.env.SHIP_FREE_THRESHOLD_CENTS
-        ? Number(process.env.SHIP_FREE_THRESHOLD_CENTS)
-        : null,
-      ship_handling_cents: process.env.SHIP_HANDLING_CENTS
-        ? Number(process.env.SHIP_HANDLING_CENTS)
-        : null,
-
-      // ✅ satisfy model typing
-      tax_rate_bps: defaultTaxBps,
-      tax_label: defaultTaxLabel,
-    } as any);
-
-    const v = parsed.data;
-
-    // commission
-    if (v.commissionBps !== undefined) s.commission_bps = Number(v.commissionBps);
-    if (v.minFeeCents !== undefined) s.min_fee_cents = Number(v.minFeeCents);
-
-    // stripe flag
-    if (v.stripeEnabled !== undefined) s.stripe_enabled = Boolean(v.stripeEnabled);
-
-    // currency
-    if (v.currency !== undefined) s.currency = String(v.currency);
-
-    // shipping
-    if (v.shipFlatCents !== undefined) s.ship_flat_cents = Number(v.shipFlatCents);
-    if (v.shipPerItemCents !== undefined) s.ship_per_item_cents = Number(v.shipPerItemCents);
-    if (v.shipFreeThresholdCents !== undefined) {
-      s.ship_free_threshold_cents =
-        v.shipFreeThresholdCents === null ? null : Number(v.shipFreeThresholdCents);
-    }
-    if (v.shipHandlingCents !== undefined) {
-      s.ship_handling_cents = v.shipHandlingCents === null ? null : Number(v.shipHandlingCents);
-    }
-
-    await s.save();
-    res.json(toDto(s));
-  } catch (e: any) {
-    res.status(500).json({ error: 'Failed to update settings', detail: e?.message });
+    const updatedEffective = await updateAdminSettings(parsed.data);
+    invalidateAdminSettingsCache(); // ensure subsequent reads are fresh
+    res.json(toDtoFromEffective(updatedEffective));
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    res.status(500).json({ error: 'Failed to update settings', detail: message });
   }
 }
 
+/** ---------------------------------------------
+ * Vendor applications (existing handlers)
+ * --------------------------------------------*/
 export async function listVendorApps(req: Request, res: Response): Promise<void> {
   try {
     const page = Number(req.query.page || 1);
     const pageSize = Number(req.query.pageSize || 20);
     const out = await listVendorAppsSvc(page, pageSize);
     res.json(out);
-  } catch (e: any) {
-    res.status(500).json({ error: 'Failed to load applications', detail: e?.message });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    res.status(500).json({ error: 'Failed to load applications', detail: message });
   }
 }
 
 export async function approveVendor(req: Request, res: Response): Promise<void> {
   try {
     const id = Number(req.params.id || 0);
-
     const adminUserId = Number((req as any)?.user?.id ?? 0);
     if (!Number.isFinite(adminUserId) || adminUserId <= 0) {
       res.status(401).json({ error: 'Auth required' });
@@ -192,8 +109,9 @@ export async function approveVendor(req: Request, res: Response): Promise<void> 
       return;
     }
     res.json(out);
-  } catch (e: any) {
-    res.status(500).json({ error: 'Failed to approve vendor', detail: e?.message });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    res.status(500).json({ error: 'Failed to approve vendor', detail: message });
   }
 }
 
@@ -209,7 +127,8 @@ export async function rejectVendor(req: Request, res: Response): Promise<void> {
       return;
     }
     res.json(out);
-  } catch (e: any) {
-    res.status(500).json({ error: 'Failed to reject vendor', detail: e?.message });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    res.status(500).json({ error: 'Failed to reject vendor', detail: message });
   }
 }
