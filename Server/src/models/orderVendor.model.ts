@@ -15,9 +15,9 @@ export class OrderVendor extends Model<
   declare orderId: number;
   declare vendorId: number;
 
-  declare vendorGrossCents: number; // items + vendor shipping
-  declare vendorFeeCents: number;   // proportion of platform fee (sum of item commissions for this vendor)
-  declare vendorNetCents: number;   // gross - fee
+  declare vendorGrossCents: number;
+  declare vendorFeeCents: number;
+  declare vendorNetCents: number;
 
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
@@ -33,24 +33,27 @@ if (!sequelize) {
   OrderVendor.init(
     {
       id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true },
-      orderId: { type: DataTypes.BIGINT, allowNull: false, field: 'order_id' },
-      vendorId: { type: DataTypes.BIGINT, allowNull: false, field: 'vendor_id' },
 
-      vendorGrossCents: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'vendor_gross_cents' },
-      vendorFeeCents:   { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'vendor_fee_cents' },
-      vendorNetCents:   { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'vendor_net_cents' },
+      // 👇 map to the ACTUAL column names in your DB (camelCase per your ERD)
+      orderId:           { type: DataTypes.BIGINT, allowNull: false, field: 'orderId' },
+      vendorId:          { type: DataTypes.BIGINT, allowNull: false, field: 'vendorId' },
+      vendorGrossCents:  { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'vendorGrossCents' },
+      vendorFeeCents:    { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'vendorFeeCents' },
+      vendorNetCents:    { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'vendorNetCents' },
 
-      createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW, field: 'created_at' },
-      updatedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW, field: 'updated_at' },
+      createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW, field: 'createdAt' },
+      updatedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW, field: 'updatedAt' },
     },
     {
       sequelize,
-      tableName: 'order_vendor',
+      tableName: 'order_vendor',   // keep your existing table name
       modelName: 'OrderVendor',
+      paranoid: false,
+      underscored: false,          // IMPORTANT: you’re not using snake_case columns
       indexes: [
-        { fields: ['order_id'] },
-        { fields: ['vendor_id'] },
-        { unique: true, fields: ['order_id', 'vendor_id'], name: 'order_vendor_order_vendor_uc' },
+        { fields: ['orderId'] },
+        { fields: ['vendorId'] },
+        { unique: true, fields: ['orderId', 'vendorId'], name: 'order_vendor_order_vendor_uc' },
       ],
     }
   );
