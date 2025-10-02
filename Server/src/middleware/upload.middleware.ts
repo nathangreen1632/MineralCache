@@ -3,10 +3,10 @@ import type { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
 
 // ---- limits (env-overridable) ----
-const MAX_FILES = Number(process.env.UPLOAD_MAX_FILES ?? 4);
-const MAX_FILE_BYTES = Number(process.env.UPLOAD_MAX_FILE_BYTES ?? 5 * 1024 * 1024); // 5MB/file
+const MAX_FILES = Number(process.env.UPLOAD_MAX_FILES ?? 6);
+const MAX_FILE_BYTES = Number(process.env.UPLOAD_MAX_FILE_BYTES ?? 10 * 1024 * 1024); // 10MB/file
 // Total batch size across all images in a single request (default 10MB)
-const MAX_BATCH_BYTES = Number(process.env.UPLOAD_MAX_BATCH_BYTES ?? 10 * 1024 * 1024);
+const MAX_BATCH_BYTES = Number(process.env.UPLOAD_MAX_BATCH_BYTES ?? 20 * 1024 * 1024);
 
 const ALLOWED_MIME = new Set([
   'image/jpeg',
