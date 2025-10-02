@@ -6,7 +6,7 @@ export async function registerUploadsStatic(app: express.Express) {
   await ensureUploadsReady();
   app.use(
     UPLOADS_PUBLIC_ROUTE,
-    express.static(UPLOADS_DIR, {
+    express.static(UPLOADS_DIR.current, {
       index: false,
       etag: true,
       maxAge: '1y',
