@@ -1,68 +1,107 @@
 // Server/src/validation/auth.schema.ts
 import { z } from 'zod';
 
-// Helpers (new-style Zod)
+// --------------------- Common fields ---------------------
 const email = z.email().min(3).max(254);
 const password = z.string().min(8).max(128);
 const name = z.string().trim().max(80);
 
-// Accept either ISO `dateOfBirth` or `dob` in DD-MM-YYYY; require at least one.
+// Legacy: DD-MM-YYYY (kept for compatibility)
 const dobDdMmYyyy = z
   .string()
   .regex(/^(0[1-9]|[12]\d|3[01])-(0[1-9]|1[0-2])-\d{4}$/, 'Expected DD-MM-YYYY');
 
-/** Normalize to YYYY-MM-DD, or null if invalid */
-export function normalizeDob(input: { dateOfBirth?: string; dob?: string }): string | null {
-  if (input?.dob) {
-    const [ddS, mmS, yyyyS] = input.dob.split('-');
-    const dd = Number(ddS);
-    const mm = Number(mmS);
-    const yyyy = Number(yyyyS);
-    if (!Number.isInteger(yyyy) || !Number.isInteger(mm) || !Number.isInteger(dd)) return null;
+// New: YYYY-MM-DD
+const dobYyyyMmDd = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 
-    // Calendar-accurate check
-    const dt = new Date(Date.UTC(yyyy, mm - 1, dd));
-    const ok =
-      dt.getUTCFullYear() === yyyy &&
-      dt.getUTCMonth() + 1 === mm &&
-      dt.getUTCDate() === dd;
-    if (!ok) return null;
+// --------------------- Helpers ---------------------
+function isCalendarValid(y: number, m: number, d: number): boolean {
+  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return false;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() + 1 === m && dt.getUTCDate() === d;
+}
 
-    const mm2 = String(mm).padStart(2, '0');
-    const dd2 = String(dd).padStart(2, '0');
-    return `${yyyy}-${mm2}-${dd2}`;
+function partsToYmd(y: number, m: number, d: number): string | null {
+  if (!isCalendarValid(y, m, d)) return null;
+  const mm = String(m).padStart(2, '0');
+  const dd = String(d).padStart(2, '0');
+  return `${y}-${mm}-${dd}`;
+}
+
+/** Normalize any accepted input to YYYY-MM-DD, or null if invalid. */
+export function normalizeDob(input: any): string | null {
+  if (!input || typeof input !== 'object') return null;
+
+  // 1) New: year/month/day (numbers or numeric strings)
+  if (
+    Object.prototype.hasOwnProperty.call(input, 'year') &&
+    Object.prototype.hasOwnProperty.call(input, 'month') &&
+    Object.prototype.hasOwnProperty.call(input, 'day')
+  ) {
+    const y = Number(input.year);
+    const m = Number(input.month);
+    const d = Number(input.day);
+    return partsToYmd(y, m, d);
   }
-  if (input?.dateOfBirth) {
+
+  // 2) dob: 'YYYY-MM-DD'
+  if (typeof input.dob === 'string' && dobYyyyMmDd.safeParse(input.dob).success) {
+    const [yS, mS, dS] = input.dob.split('-');
+    return partsToYmd(Number(yS), Number(mS), Number(dS));
+  }
+
+  // 3) Legacy: dob: 'DD-MM-YYYY'
+  if (typeof input.dob === 'string' && dobDdMmYyyy.safeParse(input.dob).success) {
+    const [ddS, mmS, yyyyS] = input.dob.split('-');
+    return partsToYmd(Number(yyyyS), Number(mmS), Number(ddS));
+  }
+
+  // 4) Legacy: dateOfBirth: ISO/RFC3339
+  if (typeof input.dateOfBirth === 'string') {
     const dt = new Date(input.dateOfBirth);
     if (Number.isNaN(dt.getTime())) return null;
-    const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
-    const dd = String(dt.getUTCDate()).padStart(2, '0');
-    return `${dt.getUTCFullYear()}-${mm}-${dd}`;
+    const y = dt.getUTCFullYear();
+    const m = dt.getUTCMonth() + 1;
+    const d = dt.getUTCDate();
+    return partsToYmd(y, m, d);
   }
+
   return null;
 }
 
+// --------------------- Schemas ---------------------
 export const verify18Schema = z
-  .object({
-    // Non-deprecated: z.iso.datetime()
-    dateOfBirth: z.iso.datetime().optional(), // RFC 3339
-    dob: dobDdMmYyyy.optional(),              // DD-MM-YYYY
-  })
-  .refine((v) => Boolean(v.dateOfBirth ?? v.dob), {
-    message: 'Provide either `dateOfBirth` (ISO) or `dob` (DD-MM-YYYY)',
-    path: ['dob'],
-  })
+  .union([
+    z.object({
+      year: z.coerce.number().int().gte(1900).lte(3000),
+      month: z.coerce.number().int().gte(1).lte(12),
+      day: z.coerce.number().int().gte(1).lte(31),
+    }),
+    z.object({ dob: dobYyyyMmDd }),
+    z.object({ dateOfBirth: z.string().min(4) }), // validated in superRefine via normalizeDob
+    z.object({ dob: dobDdMmYyyy }),
+  ])
   .superRefine((v, ctx) => {
-    // If provided, the value must normalize to a valid calendar date.
-    if (v.dateOfBirth || v.dob) {
-      const ymd = normalizeDob(v);
-      if (!ymd) {
-        ctx.addIssue({
-          code: 'custom', // raw string (no ZodIssueCode)
-          path: v.dob ? ['dob'] : ['dateOfBirth'],
-          message: v.dob ? 'Invalid calendar date (DD-MM-YYYY)' : 'Invalid ISO date',
-        });
+    const ymd = normalizeDob(v);
+    if (!ymd) {
+      // ✅ no nested ternary; follow project rule
+      let path: (string | number)[];
+      if ('year' in v) {
+        path = ['year'];
+      } else if ('dob' in v) {
+        path = ['dob'];
+      } else {
+        path = ['dateOfBirth'];
       }
+
+      // ✅ use raw string code to avoid deprecation
+      ctx.addIssue({
+        code: 'custom',
+        path,
+        message: 'Invalid date of birth',
+      });
     }
   });
 
@@ -77,5 +116,3 @@ export const registerSchema = z.object({
   name: name.optional(),
 });
 
-// Type used by controllers
-export type Verify18Body = z.infer<typeof verify18Schema>;

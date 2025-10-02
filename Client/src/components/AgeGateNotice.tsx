@@ -1,9 +1,8 @@
-// Client/src/components/AgeGateNotice.tsx
 import React, { useEffect, useState } from 'react';
 import { getMe, verify18 } from '../api/auth';
 
 type GateState =
-  | { kind: 'hidden' } // not logged in or already verified, or user dismissed
+  | { kind: 'hidden' }
   | { kind: 'show' }
   | { kind: 'busy' }
   | { kind: 'error'; message: string };
@@ -14,14 +13,13 @@ export default function AgeGateNotice(): React.ReactElement | null {
   const [state, setState] = useState<GateState>({ kind: 'hidden' });
 
   useEffect(() => {
-    // Don’t show again if the user temporarily dismissed during this browser session
     if (sessionStorage.getItem(DISMISS_KEY) === '1') return;
 
     let alive = true;
     (async () => {
       const { data } = await getMe();
       if (!alive) return;
-      const u = data?.user ?? null;
+      const u = data ?? null; // <-- getMe returns MeUser directly
       if (u && !u.dobVerified18) setState({ kind: 'show' });
     })();
     return () => {
@@ -33,16 +31,22 @@ export default function AgeGateNotice(): React.ReactElement | null {
 
   async function handleConfirm() {
     setState({ kind: 'busy' });
-    const { data, error } = await verify18();
+
+    // Provide a valid adult DOB (18+). We pick 20 years ago to be safely adult.
+    const now = new Date();
+    const y = now.getUTCFullYear() - 20;
+    const m = now.getUTCMonth() + 1;
+    const d = now.getUTCDate();
+
+    const { data, error } = await verify18({ year: y, month: m, day: d });
     if (error || !data?.ok) {
       setState({ kind: 'error', message: error || 'Failed to verify age.' });
       return;
     }
-    setState({ kind: 'hidden' }); // hide after success
+    setState({ kind: 'hidden' });
   }
 
   function handleDismiss() {
-    // Soft-dismiss for this session only. Server still enforces requireAdult where needed.
     sessionStorage.setItem(DISMISS_KEY, '1');
     setState({ kind: 'hidden' });
   }

@@ -11,16 +11,27 @@ import {
 // ✅ NEW imports for refunds
 import { db } from '../../models/sequelize.js';
 import { createRefund } from '../../services/stripe.service.js';
+import { z, type ZodError } from 'zod'; // <-- add z for serializer
+
+// ---- minimal, non-deprecated Zod error serializer
+function zDetails(err: ZodError) {
+  const treeify = (z as any).treeifyError;
+  if (typeof treeify === 'function') return treeify(err);
+  return {
+    issues: err.issues.map((i) => ({
+      path: Array.isArray(i.path) ? i.path.join('.') : String(i.path ?? ''),
+      message: i.message,
+      code: i.code,
+    })),
+  };
+}
 
 function toDateBound(s?: string, endOfDay = false): Date | null {
   if (!s) return null;
   const d = new Date(s);
   if (!Number.isFinite(d.getTime())) return null;
-  if (endOfDay) {
-    d.setHours(23, 59, 59, 999);
-  } else {
-    d.setHours(0, 0, 0, 0);
-  }
+  if (endOfDay) d.setHours(23, 59, 59, 999);
+  else d.setHours(0, 0, 0, 0);
   return d;
 }
 
@@ -29,7 +40,7 @@ export async function listAdminOrders(req: Request, res: Response, next: NextFun
   try {
     const parsed = adminListOrdersSchema.safeParse(req.query);
     if (!parsed.success) {
-      res.status(400).json({ error: 'Invalid query', details: parsed.error.flatten() });
+      res.status(400).json({ error: 'Invalid query', details: zDetails(parsed.error) }); // ← no deprecated .flatten()
       return;
     }
 
@@ -88,6 +99,7 @@ export async function listAdminOrders(req: Request, res: Response, next: NextFun
       include: [
         {
           model: OrderItem,
+          as: 'items', // ← must match alias in associations.ts
           attributes: [
             'id',
             'orderId',
@@ -118,7 +130,7 @@ export async function getAdminOrder(req: Request, res: Response, next: NextFunct
   try {
     const parsed = adminOrderIdParamSchema.safeParse(req.params);
     if (!parsed.success) {
-      res.status(400).json({ error: 'Invalid order id', details: parsed.error.flatten() });
+      res.status(400).json({ error: 'Invalid order id', details: zDetails(parsed.error) }); // ← no .flatten()
       return;
     }
 
@@ -126,6 +138,7 @@ export async function getAdminOrder(req: Request, res: Response, next: NextFunct
       include: [
         {
           model: OrderItem,
+          as: 'items', // ← include alias here too
           attributes: [
             'id',
             'orderId',

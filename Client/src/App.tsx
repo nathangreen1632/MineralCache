@@ -1,47 +1,39 @@
 // Client/src/App.tsx
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import AppRoutes from './AppRoutes';
 import Navbar from './common/Navbar';
 import Footer from './common/Footer';
 import { Toaster } from 'react-hot-toast';
-import { get, post } from './lib/api';
+import { get } from './lib/api';
 import GravatarStrip from './components/profile/GravatarStrip';
 
 // --- 18+ banner mounted globally ---
 function AgeGateBanner(): React.ReactElement | null {
   const [visible, setVisible] = useState(false);
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        // Expect dobVerified18 on one of these shapes; be tolerant
         const { data } = await get('/auth/me');
-        const v =
+        // If /auth/me returns the user directly (per your controller),
+        // data is the user object, not { user: ... }.
+        const dobOk =
           (data && (data as any).dobVerified18 === true) ||
           (data && (data as any).user?.dobVerified18 === true) ||
           (data && (data as any).me?.dobVerified18 === true);
-        if (alive && !v) setVisible(true);
+
+        if (alive && !dobOk) setVisible(true);
       } catch {
-        // If unknown, show the prompt so users can self-verify
-        if (alive) setVisible(true);
+        // ❗ If not logged in, do NOT show the banner (avoids 401 on click)
+        if (alive) setVisible(false);
       }
     })();
     return () => {
       alive = false;
     };
   }, []);
-
-  async function confirm18() {
-    try {
-      setBusy(true);
-      await post('/auth/verify-18', { confirmed: true });
-      setVisible(false);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   if (!visible) return null;
 
@@ -58,18 +50,15 @@ function AgeGateBanner(): React.ReactElement | null {
     >
       <div className="mx-auto max-w-7xl 2xl:max-w-[80rem] px-4 py-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <p className="text-sm">
-          You must be 18+ to place bids or checkout. Please confirm you are at least 18 years old.
+          You must be 18+ to place bids or checkout. Please verify your age to continue.
         </p>
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={confirm18}
-            disabled={busy}
-            className="rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-60"
-            style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
+          <Link
+            to="/verify-age"
+            className="inline-flex rounded-xl px-4 py-2 text-sm font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
           >
-            {busy ? 'Saving…' : 'I am 18+'}
-          </button>
+            Verify age
+          </Link>
           <a
             href="/"
             className="rounded-lg px-3 py-1.5 text-sm font-medium ring-1 ring-inset"

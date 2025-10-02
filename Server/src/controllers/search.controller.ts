@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { Op, type Order } from 'sequelize';
 import { z, type ZodError } from 'zod';
 import { Product } from '../models/product.model.js';
+import { ProductImage } from '../models/productImage.model.js';
 import { Vendor } from '../models/vendor.model.js';
 import { productSearchQuerySchema } from '../validation/search.schema.js';
 
@@ -16,6 +17,14 @@ function zDetails(err: ZodError) {
       code: i.code,
     })),
   };
+}
+
+// Public uploads mount (same default as products.controller)
+const UPLOADS_PUBLIC_ROUTE = process.env.UPLOADS_PUBLIC_ROUTE ?? '/uploads';
+function toPublicUrl(rel?: string | null) {
+  if (!rel) return null;
+  const s = String(rel).replace(/^\/+/, '');
+  return `${UPLOADS_PUBLIC_ROUTE}/${s}`;
 }
 
 export async function searchProducts(req: Request, res: Response): Promise<void> {
@@ -47,6 +56,7 @@ export async function searchProducts(req: Request, res: Response): Promise<void>
         { title: { [Op.iLike]: `%${t}%` } },
         { species: { [Op.iLike]: `%${t}%` } },
         { locality: { [Op.iLike]: `%${t}%` } },
+        { description: { [Op.iLike]: `%${t}%` } },
       ],
     }));
   }
@@ -64,11 +74,11 @@ export async function searchProducts(req: Request, res: Response): Promise<void>
     where.vendorId = v.id;
   }
 
-  // Sorting (keep parity with products list)
+  // Sorting (parity with products list)
   let order: Order;
-  if (sort === 'price_asc') order = [['priceCents', 'ASC']];
-  else if (sort === 'price_desc') order = [['priceCents', 'DESC']];
-  else order = [['createdAt', 'DESC']];
+  if (sort === 'price_asc') order = [['priceCents', 'ASC'], ['id', 'ASC']] as unknown as Order;
+  else if (sort === 'price_desc') order = [['priceCents', 'DESC'], ['id', 'DESC']] as unknown as Order;
+  else order = [['createdAt', 'DESC'], ['id', 'DESC']] as unknown as Order;
 
   const offset = (page - 1) * pageSize;
 
@@ -78,10 +88,40 @@ export async function searchProducts(req: Request, res: Response): Promise<void>
       order,
       offset,
       limit: pageSize,
+      include: [
+        {
+          model: ProductImage,
+          as: 'images',
+          attributes: ['v320Path', 'v800Path', 'v1600Path', 'origPath', 'isPrimary', 'sortOrder'],
+          separate: true,
+          limit: 1, // return one cover image per product
+          order: [
+            ['isPrimary', 'DESC'],
+            ['sortOrder', 'ASC'],
+            ['id', 'ASC'],
+          ],
+        },
+      ],
+    });
+
+    // Flatten primaryImageUrl so the cards can render a photo
+    const items = rows.map((p) => {
+      const j: any = p.toJSON();
+      const cover = Array.isArray(j.images) && j.images[0] ? j.images[0] : null;
+      const rel =
+        cover?.v800Path || cover?.v320Path || cover?.v1600Path || cover?.origPath || null;
+      const url = rel ? toPublicUrl(rel) : null;
+
+      return {
+        ...j,
+        primaryImageUrl: url,
+        // If you don’t want to ship the nested array:
+        // images: undefined,
+      };
     });
 
     res.json({
-      items: rows,
+      items,
       page,
       pageSize,
       total: count,

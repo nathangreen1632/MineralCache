@@ -87,21 +87,24 @@ const DEFAULT_UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
 export const UPLOADS_PUBLIC_ROUTE = process.env.UPLOADS_PUBLIC_ROUTE ?? '/uploads';
 
 // Use env when present; if it isn’t writable (e.g., local dev), fall back.
-export let UPLOADS_DIR = process.env.UPLOADS_DIR
+const INITIAL_UPLOADS_DIR = process.env.UPLOADS_DIR
   ? path.resolve(process.env.UPLOADS_DIR)
   : DEFAULT_UPLOADS_DIR;
 
+// Export a const (Sonar OK) whose property we can update internally.
+export const UPLOADS_DIR = { current: INITIAL_UPLOADS_DIR };
+
 export async function ensureUploadsReady() {
   try {
-    await fs.mkdir(UPLOADS_DIR, { recursive: true });
-    const test = path.join(UPLOADS_DIR, '.writecheck');
+    await fs.mkdir(UPLOADS_DIR.current, { recursive: true });
+    const test = path.join(UPLOADS_DIR.current, '.writecheck');
     await fs.writeFile(test, 'ok');
     await fs.unlink(test);
   } catch (e: any) {
     if (e?.code === 'EACCES' || e?.code === 'EPERM') {
-      UPLOADS_DIR = DEFAULT_UPLOADS_DIR;
-      await fs.mkdir(UPLOADS_DIR, { recursive: true });
-      const test = path.join(UPLOADS_DIR, '.writecheck');
+      UPLOADS_DIR.current = DEFAULT_UPLOADS_DIR;               // <— re-point here
+      await fs.mkdir(UPLOADS_DIR.current, { recursive: true });
+      const test = path.join(UPLOADS_DIR.current, '.writecheck');
       await fs.writeFile(test, 'ok');
       await fs.unlink(test);
     } else {
@@ -109,6 +112,7 @@ export async function ensureUploadsReady() {
     }
   }
 }
+
 
 async function ensureDir(p: string) { await fs.mkdir(p, { recursive: true }); }
 
@@ -401,13 +405,10 @@ export async function getProduct(req: Request, res: Response): Promise<void> {
 /** ---------------------------------------------
  * Catalog list — filters & sorting (effective price, size range, etc.)
  * --------------------------------------------*/
-function saleActiveExpr(nowIso: string) {
-  // TRUE when salePriceCents is set and now within [start,end] (nulls open-ended)
-  return literal(`("salePriceCents" IS NOT NULL AND
-    (("saleStartAt" IS NULL OR "saleStartAt" <= TIMESTAMP '${nowIso}')
-     AND ("saleEndAt" IS NULL OR TIMESTAMP '${nowIso}' <= "saleEndAt')))`);
-}
 
+// NOTE: Removed saleActiveExpr to avoid raw SQL quoting issues.
+
+// Keep effective price expression for range/sort:
 function effectivePriceExpr(nowIso: string) {
   return literal(`CASE WHEN "salePriceCents" IS NOT NULL AND
     (("saleStartAt" IS NULL OR "saleStartAt" <= TIMESTAMP '${nowIso}')
@@ -448,7 +449,8 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       maxCents,
     } = q as any;
 
-    const nowIso = new Date().toISOString();
+    const now = new Date();                  // <-- use Date for operator comparisons
+    const nowIso = now.toISOString();
     const andClauses: any[] = [{ archivedAt: { [Op.is]: null } }];
 
     // vendor
@@ -477,11 +479,21 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       if (conds.length) andClauses.push({ condition: { [Op.in]: conds } });
     }
 
-    // onSale (effective now)
+    // ✅ onSale (no raw SQL)
     if (typeof onSale !== 'undefined') {
-      const expr = saleActiveExpr(nowIso);
+      const onSaleTrueClauses = [
+        { salePriceCents: { [Op.ne]: null } },
+        { [Op.or]: [{ saleStartAt: null }, { saleStartAt: { [Op.lte]: now } }] },
+        { [Op.or]: [{ saleEndAt: null }, { saleEndAt: { [Op.gte]: now } }] },
+      ];
+
       const isTrue = String(onSale).toLowerCase() === 'true';
-      andClauses.push(where(expr, '=', isTrue));
+      if (isTrue) {
+        andClauses.push({ [Op.and]: onSaleTrueClauses });
+      } else {
+        // NOT on sale → negate the "on sale" condition
+        andClauses.push({ [Op.not]: { [Op.and]: onSaleTrueClauses } });
+      }
     }
 
     // effective price range
@@ -548,17 +560,15 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
 
     // Flatten a primaryImageUrl for the client (and keep images[0] if you want)
     const items = rows.map((p) => {
-      const j = p.toJSON() as any;
+      const j: any = p.toJSON();   // no assertion; same effect, Sonar-friendly
       const cover = Array.isArray(j.images) && j.images[0] ? j.images[0] : null;
       const rel =
         cover?.v800Path || cover?.v320Path || cover?.v1600Path || cover?.origPath || null;
-
       const url = rel ? toPublicUrl(rel) : null;
 
       return {
         ...j,
         primaryImageUrl: url,
-        // If you don’t want to send the images array at all, uncomment:
         // images: undefined,
       };
     });
@@ -637,7 +647,7 @@ export async function attachImages(req: Request, res: Response): Promise<void> {
 
   // Storage layout: uploads/images/<productId>/
   const productDirRel = `images/${idParsed.data.id}`;
-  const productDirAbs = path.join(UPLOADS_DIR, productDirRel);
+  const productDirAbs = path.join(UPLOADS_DIR.current, productDirRel);
   await ensureDir(productDirAbs);
 
   const createdResponses: Array<{
@@ -665,14 +675,14 @@ export async function attachImages(req: Request, res: Response): Promise<void> {
 
     const base = path.parse(f.originalname).name
       .replace(/\s+/g, '_')
-      .replace(/[^a-zA-Z0-9_\-]/g, '');
+      .replace(/[^a-zA-Z0-9_-]/g, '');
     const stamp = Date.now().toString(36);
     const baseNoExt = `${base}_${stamp}`;
 
     // Write original as JPG to normalize
     const origFilename = variantFilename(baseNoExt, 'orig');
     const origRel = `${productDirRel}/${origFilename}`;
-    const origAbs = path.join(UPLOADS_DIR, origRel);
+    const origAbs = path.join(UPLOADS_DIR.current, origRel);
     await sharp(inputBuffer).jpeg({ quality: 90 }).toFile(origAbs);
     const origStat = await fs.stat(origAbs);
 
@@ -687,7 +697,7 @@ export async function attachImages(req: Request, res: Response): Promise<void> {
     for (const s of sizes) {
       const fn = variantFilename(baseNoExt, s.label);
       const rel = `${productDirRel}/${fn}`;
-      const abs = path.join(UPLOADS_DIR, rel);
+      const abs = path.join(UPLOADS_DIR.current, rel);
 
       await sharp(inputBuffer)
         .resize({ width: s.width, withoutEnlargement: true })

@@ -102,7 +102,7 @@ export default function ProductPhotosTab({ productId }: Readonly<{ productId: nu
           onClick={persistOrder}
           className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)]"
         >
-          Save order
+          Save position
         </button>
       </div>
     </div>
