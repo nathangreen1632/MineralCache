@@ -1,4 +1,4 @@
-// e.g., Server/src/models/associations.ts
+// Server/src/models/associations.ts
 import { Order } from './order.model.js';
 import { OrderVendor } from './orderVendor.model.js';
 import { Product } from './product.model.js';
