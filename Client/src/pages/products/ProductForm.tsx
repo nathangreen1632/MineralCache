@@ -1,5 +1,5 @@
 // Client/src/pages/products/ProductForm.tsx
-import React, { useEffect, useMemo, useState, useId } from 'react';
+import React, { useEffect, useMemo, useState, useId, useRef } from 'react';
 import { z } from 'zod';
 import type { ProductInput } from '../../api/products';
 
@@ -189,9 +189,10 @@ export default function ProductForm({
 
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [images, setImages] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Save is actionable regardless of form content; only block when busy or >4 images
-  const canSubmit = useMemo(() => !busy && images.length <= 4, [busy, images.length]);
+  const canSubmit = useMemo(() => !busy && images.length <= 6, [busy, images.length]);
 
   function setField<K extends keyof ProductFormValues>(key: K, value: ProductFormValues[K]) {
     const next = { ...values, [key]: value };
@@ -220,7 +221,7 @@ export default function ProductForm({
 
   function onPickFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []).filter((f) => f.type.startsWith('image/'));
-    const next = files.slice(0, 4);
+    const next = files.slice(0, 6);
     setImages(next);
   }
 
@@ -580,15 +581,40 @@ export default function ProductForm({
         </div>
       </div>
 
-      {/* Photos (≤4) */}
+      {/* Photos (≤6) */}
       <div>
         <label htmlFor={ids.photos} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-          Photos (up to 4)
+          Photos (up to 6)
         </label>
-        <input id={ids.photos} type="file" accept="image/*" multiple onChange={onPickFiles} />
+
+        {/* Hidden native input */}
+        <input
+          ref={fileInputRef}
+          id={ids.photos}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={onPickFiles}
+          className="sr-only"
+        />
+
+        {/* Button to open file dialog */}
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+        >
+          Choose photos
+        </button>
+
+        <span className="ml-3 text-xs text-[var(--theme-link)]">
+          {images.length} selected (max 6)
+        </span>
+
         <p className="mt-1 text-xs" style={{ color: 'var(--theme-link)' }}>
           We’ll create 320/800/1600 px derivatives on upload.
         </p>
+
         {images.length > 0 && (
           <ul className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
             {images.map((f) => (
@@ -603,10 +629,10 @@ export default function ProductForm({
                   className="h-24 w-full rounded object-cover"
                   onLoad={(ev) => URL.revokeObjectURL((ev.target as HTMLImageElement).src)}
                 />
-                <div className="mt-1 truncate text-xs" style={{ color: 'var(--theme-text)' }}>
+                <div className="mt-1 truncate text-xs text-[var(--theme-text)]">
                   {f.name}
                 </div>
-                <div className="text-[10px]" style={{ color: 'var(--theme-link)' }}>
+                <div className="text-[10px] text-[var(--theme-link)]">
                   {(f.size / 1024).toFixed(0)} KB
                 </div>
               </li>
@@ -614,6 +640,7 @@ export default function ProductForm({
           </ul>
         )}
       </div>
+
 
       <div className="flex items-center gap-2">
         <button
