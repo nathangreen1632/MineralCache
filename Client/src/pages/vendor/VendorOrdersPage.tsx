@@ -1,6 +1,7 @@
 // Client/src/pages/vendor/VendorOrdersPage.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { listVendorOrders, type VendorOrderListItem, type OrderStatus } from '../../api/vendor';
+import { buildPackingSlipUrl } from '../../api/vendorOrders';
 
 type Tab = 'paid' | 'shipped' | 'refunded';
 
@@ -143,7 +144,7 @@ export default function VendorOrdersPage(): React.ReactElement {
                   {/* Packing slip — opens printable page in a new tab */}
                   {tab !== 'refunded' ? (
                     <a
-                      href={`/api/vendors/orders/${r.id}/pack`}
+                      href={buildPackingSlipUrl(r.id)} // or buildPackingSlipUrl(r.id, selectedIds) if you have item IDs to filter by
                       target="_blank"
                       rel="noreferrer"
                       className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
