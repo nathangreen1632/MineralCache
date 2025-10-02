@@ -33,6 +33,7 @@ jobs:
         working-directory: ${{ matrix.app }}
         run: npm run build --if-present
 
+  # Single SonarCloud analysis job (runs for PRs and for pushes to main)
   sonarcloud:
     name: SonarCloud
     runs-on: ubuntu-latest
@@ -43,6 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # Full history improves blame/age metrics & PR decoration
           fetch-depth: 0
 
       - name: Use Node 20.x for analysis
@@ -62,13 +64,15 @@ jobs:
         working-directory: Client
         run: npm ci
 
+      # ✅ No workspaces; build each app via --prefix
       - name: Build (optional – keep if your sonar rules rely on compiled output)
         run: |
-          npm -w Server run build --if-present
-          npm -w Client run build --if-present
+          npm run build --if-present --prefix Server
+          npm run build --if-present --prefix Client
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        # sonar-project.properties at repo root will be auto-detected
