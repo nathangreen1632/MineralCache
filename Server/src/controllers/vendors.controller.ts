@@ -1,20 +1,12 @@
 // Server/src/controllers/vendors.controller.ts
-import type { Request, Response } from 'express';
-import { z, type ZodError } from 'zod';
-import { Op, UniqueConstraintError } from 'sequelize';
-import { Vendor } from '../models/vendor.model.js';
-import { ensureVendorStripeAccount, createAccountLink, stripeEnabled } from '../services/stripe.service.js';
-import { applyVendorSchema } from '../validation/vendor.schema.js';
-import { Order } from '../models/order.model.js';
-import { OrderItem } from '../models/orderItem.model.js';
-
-// ✅ NEW imports for vendor product endpoints
-import { Product } from '../models/product.model.js';
-import {
-  listVendorProductsQuerySchema,
-  type ListVendorProductsQuery,
-  updateVendorProductFlagsSchema,
-} from '../validation/vendorProducts.schema.js';
+import type {Request, Response} from 'express';
+import {z, type ZodError} from 'zod';
+import {Op, UniqueConstraintError} from 'sequelize';
+import {Vendor} from '../models/vendor.model.js';
+import {createAccountLink, ensureVendorStripeAccount, stripeEnabled} from '../services/stripe.service.js';
+import {applyVendorSchema} from '../validation/vendor.schema.js';
+import {Order} from '../models/order.model.js';
+import {OrderItem} from '../models/orderItem.model.js';
 
 /** -------------------------------------------------------------
  * Zod helpers
@@ -24,7 +16,7 @@ function zDetails(err: ZodError) {
   if (typeof treeify === 'function') {
     return treeify(err);
   }
-  // Fallback that avoids deprecated `.flatten()`
+
   const issues = err.issues.map((i) => ({
     path: Array.isArray(i.path) ? i.path.join('.') : String(i.path ?? ''),
     message: i.message,
@@ -48,17 +40,22 @@ function ensureAuthed(req: Request, res: Response): req is Request & {
   return true;
 }
 
+function trimDashes(str: string): string {
+  let start = 0;
+  let end = str.length;
+  while (start < end && str.charCodeAt(start) === 45) start++;
+  while (end > start && str.charCodeAt(end - 1) === 45) end--;
+  return str.slice(start, end);
+}
+
 function slugify(input: string): string {
-  const s = String(input || '').trim().toLowerCase();
-  const base = s
+  const s = String(input ?? '').trim().toLowerCase();
+  const mid = s
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-+)|(-+$)/g, '');
-  if (base.length > 0) {
-    return base.slice(0, 140);
-  }
-  return `vendor-${Date.now()}`;
+    .replace(/[^a-z0-9]+/g, '-');
+  const base = trimDashes(mid);
+  return base ? base.slice(0, 140) : `vendor-${Date.now()}`;
 }
 
 function suggestSlugs(base: string, take = 2): string[] {
@@ -70,123 +67,176 @@ function suggestSlugs(base: string, take = 2): string[] {
 }
 
 /** -------------------------------------------------------------
+ * applyVendor helpers (to reduce CC)
+ * ------------------------------------------------------------*/
+function parseApplyBody(req: Request, res: Response) {
+  const parsed = applyVendorSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid input', details: zDetails(parsed.error) });
+    return null;
+  }
+  return parsed.data;
+}
+
+async function getExistingForUser(userId: number) {
+  const existing = await Vendor.findOne({ where: { userId } });
+  const excludeId = existing ? { [Op.ne]: existing.id } : undefined;
+  return { existing, excludeId };
+}
+
+async function guardConflicts(
+  args: { displayName: string; slug: string },
+  excludeId: any,
+  res: Response
+): Promise<boolean> {
+  const { displayName, slug } = args;
+
+  const [slugExists, nameExists] = await Promise.all([
+    Vendor.findOne({
+      where: { slug: { [Op.iLike]: slug }, ...(excludeId ? { id: excludeId } : {}) } as any,
+      attributes: ['id', 'slug'],
+    }),
+    Vendor.findOne({
+      where: { displayName: { [Op.iLike]: displayName }, ...(excludeId ? { id: excludeId } : {}) } as any,
+      attributes: ['id', 'displayName'],
+    }),
+  ]);
+
+  if (slugExists) {
+    res.status(409).json({
+      ok: false,
+      code: 'SLUG_TAKEN',
+      message: 'That shop URL is taken.',
+      suggestions: suggestSlugs(slug),
+    });
+    return true;
+  }
+  if (nameExists) {
+    res.status(409).json({
+      ok: false,
+      code: 'DISPLAY_NAME_TAKEN',
+      message: 'That display name is taken.',
+    });
+    return true;
+  }
+  return false;
+}
+
+async function saveExistingVendor(
+  existing: InstanceType<typeof Vendor>,
+  fields: {
+    displayName: string;
+    slug: string;
+    bio: string | null;
+    logoUrl: string | null;
+    country: string | null;
+  }
+) {
+  existing.displayName = fields.displayName;
+  existing.slug = fields.slug;
+  existing.bio = fields.bio;
+  existing.logoUrl = fields.logoUrl;
+  existing.country = fields.country;
+  existing.approvalStatus = 'pending';
+  (existing as any).approvedBy = null;
+  (existing as any).approvedAt = null;
+  (existing as any).rejectedReason = null;
+  await existing.save();
+  return existing;
+}
+
+async function createNewVendor(
+  userId: number,
+  fields: {
+    displayName: string;
+    slug: string;
+    bio: string | null;
+    logoUrl: string | null;
+    country: string | null;
+  }
+) {
+  const now = new Date();
+  return await Vendor.create({
+    userId,
+    displayName: fields.displayName,
+    slug: fields.slug,
+    bio: fields.bio,
+    logoUrl: fields.logoUrl,
+    country: fields.country,
+    approvalStatus: 'pending',
+    approvedBy: null,
+    approvedAt: null,
+    rejectedReason: null,
+    createdAt: now,
+    updatedAt: now,
+  } as any);
+}
+
+function handleUniqueConstraint(e: unknown, slug: string, res: Response): boolean {
+  if (!(e instanceof UniqueConstraintError)) return false;
+  const msg = String((e as any)?.message || '').toLowerCase();
+  if (msg.includes('slug')) {
+    res.status(409).json({
+      ok: false,
+      code: 'SLUG_TAKEN',
+      message: 'That shop URL is taken.',
+      suggestions: suggestSlugs(slug),
+    });
+    return true;
+  }
+  if (msg.includes('display') || msg.includes('name')) {
+    res.status(409).json({
+      ok: false,
+      code: 'DISPLAY_NAME_TAKEN',
+      message: 'That display name is taken.',
+    });
+    return true;
+  }
+  return false;
+}
+
+/** -------------------------------------------------------------
  * User endpoints
  * ------------------------------------------------------------*/
 export async function applyVendor(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
 
-  // ✅ use shared schema
-  const parsed = applyVendorSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: 'Invalid input', details: zDetails(parsed.error) });
-    return;
-  }
+  const data = parseApplyBody(req, res);
+  if (!data) return;
 
-  const data = parsed.data;
   const displayName = data.displayName.trim();
   const slug = slugify(displayName);
 
   try {
-    // If user has an existing vendor record, update it and reset to pending
-    const existing = await Vendor.findOne({ where: { userId: (req as any).user.id } });
+    const userId = (req as any).user.id as number;
+    const { existing, excludeId } = await getExistingForUser(userId);
 
-    // Friendly pre-checks for duplicates (exclude own record on update)
-    const excludeId = existing ? { [Op.ne]: existing.id } : undefined;
-
-    const [slugExists, nameExists] = await Promise.all([
-      Vendor.findOne({
-        where: {
-          slug: { [Op.iLike]: slug },
-          ...(excludeId ? { id: excludeId } : {}),
-        } as any,
-        attributes: ['id', 'slug'],
-      }),
-      Vendor.findOne({
-        where: {
-          displayName: { [Op.iLike]: displayName },
-          ...(excludeId ? { id: excludeId } : {}),
-        } as any,
-        attributes: ['id', 'displayName'],
-      }),
-    ]);
-
-    if (slugExists) {
-      res.status(409).json({
-        ok: false,
-        code: 'SLUG_TAKEN',
-        message: 'That shop URL is taken.',
-        suggestions: suggestSlugs(slug),
-      });
-      return;
-    }
-    if (nameExists) {
-      res.status(409).json({
-        ok: false,
-        code: 'DISPLAY_NAME_TAKEN',
-        message: 'That display name is taken.',
-      });
-      return;
-    }
+    const conflicted = await guardConflicts({ displayName, slug }, excludeId, res);
+    if (conflicted) return;
 
     if (existing) {
-      existing.displayName = displayName;
-      existing.slug = slug;
-      existing.bio = data.bio ?? null;
-      existing.logoUrl = data.logoUrl ?? null;
-      existing.country = data.country ?? null;
-      existing.approvalStatus = 'pending';
-      // Reset audit fields on resubmission
-      (existing as any).approvedBy = null;
-      (existing as any).approvedAt = null;
-      (existing as any).rejectedReason = null;
-
-      await existing.save();
-
-      res.json({ ok: true, vendorId: Number(existing.id), status: existing.approvalStatus });
+      const saved = await saveExistingVendor(existing, {
+        displayName,
+        slug,
+        bio: data.bio ?? null,
+        logoUrl: data.logoUrl ?? null,
+        country: data.country ?? null,
+      });
+      res.json({ ok: true, vendorId: Number(saved.id), status: saved.approvalStatus });
       return;
     }
 
-    // Create a new vendor application
-    const now = new Date();
-    const created = await Vendor.create({
-      userId: (req as any).user.id,
+    const created = await createNewVendor(userId, {
       displayName,
       slug,
       bio: data.bio ?? null,
       logoUrl: data.logoUrl ?? null,
       country: data.country ?? null,
-      approvalStatus: 'pending',
-      // audit fields start empty
-      approvedBy: null,
-      approvedAt: null,
-      rejectedReason: null,
-      createdAt: now,
-      updatedAt: now,
-    } as any);
+    });
 
     res.status(201).json({ ok: true, vendorId: Number(created.id), status: 'pending' });
   } catch (e: any) {
-    // DB-level unique collision fallback
-    if (e instanceof UniqueConstraintError) {
-      const msg = String(e.message || '').toLowerCase();
-      if (msg.includes('slug')) {
-        res.status(409).json({
-          ok: false,
-          code: 'SLUG_TAKEN',
-          message: 'That shop URL is taken.',
-          suggestions: suggestSlugs(slug),
-        });
-        return;
-      }
-      if (msg.includes('display') || msg.includes('name')) {
-        res.status(409).json({
-          ok: false,
-          code: 'DISPLAY_NAME_TAKEN',
-          message: 'That display name is taken.',
-        });
-        return;
-      }
-    }
+    if (handleUniqueConstraint(e, slug, res)) return;
     res.status(500).json({ error: 'Failed to submit vendor application', detail: e?.message });
   }
 }
@@ -350,131 +400,4 @@ export async function getVendorOrders(req: Request, res: Response): Promise<void
     total: count,
     orders: list,
   });
-}
-
-/** -------------------------------------------------------------
- * NEW: Vendor products endpoints (used by Vendor Dashboard)
- * ------------------------------------------------------------*/
-
-// Helper to ensure we have the logged-in user's vendor record
-async function ensureVendorForUser(req: Request, res: Response) {
-  const user = (req.session as any)?.user;
-  if (!user?.id) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return null;
-  }
-  const vendor = await Vendor.findOne({ where: { userId: user.id } });
-  if (!vendor) {
-    res.status(403).json({ error: 'Vendor account required' });
-    return null;
-  }
-  return { user, vendor };
-}
-
-// GET /vendors/me/products
-export async function listMyProducts(req: Request, res: Response): Promise<void> {
-  const ctx = await ensureVendorForUser(req, res);
-  if (!ctx) return;
-
-  // Prefer validated query from middleware; fallback parse if not present
-  let q = (res.locals.query as ListVendorProductsQuery) ?? null;
-  if (!q) {
-    const parsed = listVendorProductsQuerySchema.safeParse(req.query);
-    if (!parsed.success) {
-      res.status(400).json({ error: 'Invalid query', details: zDetails(parsed.error) });
-      return;
-    }
-    q = parsed.data;
-  }
-
-  const whereAnd: any[] = [{ vendorId: ctx.vendor.id }];
-  // Optional status filter support (active/archived/all)
-  if (q.status === 'active') whereAnd.push({ archivedAt: { [Op.is]: null } as any });
-  if (q.status === 'archived') whereAnd.push({ archivedAt: { [Op.not]: null } as any });
-  // Optional q (title search)
-  if (q.q) whereAnd.push({ title: { [Op.iLike]: `%${q.q}%` } });
-
-  // sort
-  let order: any;
-  if (q.sort === 'price_asc') order = [['priceCents', 'ASC'], ['id', 'ASC']];
-  else if (q.sort === 'price_desc') order = [['priceCents', 'DESC'], ['id', 'DESC']];
-  else if (q.sort === 'oldest') order = [['createdAt', 'ASC'], ['id', 'ASC']];
-  else order = [['createdAt', 'DESC'], ['id', 'DESC']];
-
-  const offset = (q.page - 1) * q.pageSize;
-
-  const { rows, count } = await Product.findAndCountAll({
-    where: { [Op.and]: whereAnd },
-    order,
-    offset,
-    limit: q.pageSize,
-    attributes: [
-      'id',
-      'title',
-      'priceCents',
-      'salePriceCents',
-      'archivedAt',
-      'createdAt',
-      'updatedAt',
-    ],
-  });
-
-  const items = rows.map((p: any) => ({
-    id: Number(p.id),
-    title: String(p.title),
-    priceCents: Number(p.priceCents),
-    onSale: p.salePriceCents != null,
-    archived: p.archivedAt != null,
-    primaryPhotoUrl: null, // can be filled via join to ProductImage if desired
-    photoCount: undefined,
-    createdAt: p.createdAt?.toISOString?.() ?? String(p.createdAt),
-    updatedAt: p.updatedAt?.toISOString?.() ?? String(p.updatedAt),
-  }));
-
-  res.json({
-    items,
-    page: q.page,
-    pageSize: q.pageSize,
-    total: count,
-    totalPages: Math.ceil(count / q.pageSize),
-  });
-}
-
-// PUT /vendors/me/products/:id
-export async function updateMyProductFlags(req: Request, res: Response): Promise<void> {
-  const ctx = await ensureVendorForUser(req, res);
-  if (!ctx) return;
-
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) {
-    res.status(400).json({ error: 'Invalid product id' });
-    return;
-  }
-
-  const parsed = updateVendorProductFlagsSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: 'Invalid body', details: zDetails(parsed.error) });
-    return;
-  }
-  const { onSale, archived } = parsed.data;
-
-  const prod = await Product.findOne({ where: { id, vendorId: ctx.vendor.id } });
-  if (!prod) {
-    res.status(404).json({ error: 'Not found' });
-    return;
-  }
-
-  const patch: any = {};
-  // If you only treat sale via scheduled salePriceCents, you can remove this block.
-  if (onSale !== undefined) {
-    patch.salePriceCents = onSale
-      ? Math.max(1, Number((prod as any).salePriceCents ?? 1))
-      : null;
-  }
-  if (archived !== undefined) {
-    patch.archivedAt = archived ? new Date() : null;
-  }
-
-  await (prod as any).update({ ...patch, updatedAt: new Date() });
-  res.json({ ok: true });
 }
