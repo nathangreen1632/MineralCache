@@ -127,10 +127,6 @@ export type ListResponse = {
   totalPages: number;
 };
 
-// Back-compat aliases (if other files import these names)
-export type ProductListParams = ListQuery;
-export type ProductListResponse = ListResponse;
-
 /* ============================
    API calls
    ============================ */
