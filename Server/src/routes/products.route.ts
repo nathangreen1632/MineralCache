@@ -35,7 +35,7 @@ router.delete('/:id', requireAuth, recaptchaMiddleware, deleteProduct);
 
 // Attach images (≤4)
 // Order: auth → rate-limit → multer → total-batch limit → controller
-router.post('/:id/images', requireAuth, burstLimiter, uploadImagesLimiter, uploadPhotos.array('photos', 4), enforceTotalBatchBytes, attachImages);
+router.post('/:id/images', requireAuth, burstLimiter, uploadImagesLimiter, uploadPhotos.array('photos', 6), enforceTotalBatchBytes, attachImages);
 
 // Photos management (vendor/admin)
 // Order: auth → rate-limit → (optional body validation) → handler
