@@ -5,6 +5,7 @@ import HomePage from './pages/HomePage';
 
 // Auth
 import LoginPage from './pages/LoginPage';
+import AgeVerifyPage from './pages/auth/AgeVerifyPage';
 
 // Public catalog
 import ProductList from './pages/products/ProductList';
@@ -30,7 +31,7 @@ import ProductEdit from './pages/products/ProductEdit';
 // Cart & Checkout
 import CartPage from './pages/cart/CartPage';
 import CheckoutPage from './pages/cart/CheckoutPage';
-import Receipt from "./pages/orders/Receipt.tsx";
+import Receipt from './pages/orders/Receipt.tsx';
 
 // Orders
 import OrderConfirmationPage from './pages/orders/OrderConfirmationPage';
@@ -56,6 +57,7 @@ export default function AppRoutes(): React.ReactElement {
         {/* Public */}
         <Route index element={<HomePage />} />
         <Route path="login" element={<LoginPage />} />
+        <Route path="verify-age" element={<AgeVerifyPage />} />
         <Route path="products" element={<ProductList />} />
         <Route path="products/:id" element={<ProductDetail />} />
         <Route path="cart" element={<CartPage />} />
