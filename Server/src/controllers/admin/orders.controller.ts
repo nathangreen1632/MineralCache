@@ -88,6 +88,7 @@ export async function listAdminOrders(req: Request, res: Response, next: NextFun
       include: [
         {
           model: OrderItem,
+          as: 'items', // ← match alias from associations.ts
           attributes: [
             'id',
             'orderId',
@@ -112,6 +113,7 @@ export async function listAdminOrders(req: Request, res: Response, next: NextFun
     next(err);
   }
 }
+
 
 /** GET /api/admin/orders/:id */
 export async function getAdminOrder(req: Request, res: Response, next: NextFunction) {
