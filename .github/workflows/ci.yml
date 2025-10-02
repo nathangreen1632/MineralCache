@@ -1,9 +1,14 @@
 name: CI
+
 on:
-  pull_request:
+  push:
     branches: [ main ]
+  pull_request:
+    branches: [ '**' ]
+  workflow_dispatch:
 
 jobs:
+  # Matrix build & test for both apps across Node versions
   build:
     runs-on: ubuntu-latest
     strategy:
@@ -26,21 +31,44 @@ jobs:
 
       - name: Build
         working-directory: ${{ matrix.app }}
-        run: npm run build
+        run: npm run build --if-present
 
   sonarcloud:
     name: SonarCloud
     runs-on: ubuntu-latest
     needs: build
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # full history improves PR analysis
+          fetch-depth: 0
+
+      - name: Use Node 20.x for analysis
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            Server/package-lock.json
+            Client/package-lock.json
+
+      - name: Install (Server)
+        working-directory: Server
+        run: npm ci
+
+      - name: Install (Client)
+        working-directory: Client
+        run: npm ci
+
+      - name: Build (optional – keep if your sonar rules rely on compiled output)
+        run: |
+          npm -w Server run build --if-present
+          npm -w Client run build --if-present
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v2
+        uses: SonarSource/sonarcloud-github-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # You said you stored the token as an Actions variable called MineralCacheToken:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        # No args needed because we added sonar-project.properties at repo root
