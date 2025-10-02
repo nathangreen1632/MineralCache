@@ -73,7 +73,7 @@ export const createProductSchema = z.object({
   saleEndAt: z.coerce.date().optional().nullable(),
 
   // Images (keep your current placeholder contract)
-  images: z.array(z.string().trim().max(500)).max(4).optional(),
+  images: z.array(z.string().trim().max(500)).max(6).optional(),
 })
   .refine(
     (v) => !v.salePriceCents || v.salePriceCents < v.priceCents,
