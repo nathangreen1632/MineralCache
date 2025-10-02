@@ -1,4 +1,3 @@
-// Client/src/api/auth.ts
 import { get, post } from '../lib/api';
 
 export type MeUser = {
@@ -17,7 +16,10 @@ export function getMe() {
   return get<MeUser>('/auth/me');
 }
 
-// DOB-based verification used by /verify-age screen
+// DOB-based verification used by /verify-age screen / banner.
+// We transform {year,month,day} into the server schema: { dateOfBirth: ISO8601 }
 export function verify18(d: { year: number; month: number; day: number }) {
-  return post<Verify18Response, { year: number; month: number; day: number }>('/auth/verify-18', d);
+  const { year, month, day } = d;
+  const iso = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0)).toISOString();
+  return post<Verify18Response, { dateOfBirth: string }>('/auth/verify-18', { dateOfBirth: iso });
 }
