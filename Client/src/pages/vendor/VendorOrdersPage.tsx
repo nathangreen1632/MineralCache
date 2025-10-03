@@ -2,11 +2,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { listVendorOrders, type VendorOrderListItem, type OrderStatus } from '../../api/vendor';
 import { buildPackingSlipUrl } from '../../api/vendorOrders';
+import { markOrderDelivered, markOrderShipped } from '../../api/orders';
 
 type Tab = 'paid' | 'shipped' | 'refunded';
 
 function centsToUsd(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
+}
+
+const ALLOWED_CARRIERS = ['usps', 'ups', 'fedex', 'dhl', 'other'] as const;
+type ShipCarrier = (typeof ALLOWED_CARRIERS)[number];
+
+function normalizeCarrier(input: string | null | undefined): ShipCarrier | null {
+  const v = (input ?? '').trim().toLowerCase();
+  return (ALLOWED_CARRIERS as readonly string[]).includes(v) ? (v as ShipCarrier) : null;
 }
 
 export default function VendorOrdersPage(): React.ReactElement {
@@ -76,7 +85,7 @@ export default function VendorOrdersPage(): React.ReactElement {
           <button
             onClick={exportCsv}
             disabled={busy || rows.length === 0}
-            className="rounded-xl px-4 py-2 font-semibold border border-[var(--theme-border)] hover:bg-[var(--theme-card)] disabled:opacity-50"
+            className="rounded-xl px-4 py-2 font-semibold border border-[var(--theme-border)] hover:bg-[var(--theme-card)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
           >
             Export CSV
           </button>
@@ -93,7 +102,7 @@ export default function VendorOrdersPage(): React.ReactElement {
               setTab(t.key);
             }}
             className={[
-              'rounded-xl px-3 py-1.5 text-sm font-semibold border',
+              'rounded-xl px-3 py-1.5 text-sm font-semibold border focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]',
               tab === t.key
                 ? 'bg-[var(--theme-card)] border-[var(--theme-border)]'
                 : 'border-transparent hover:bg-[var(--theme-surface)]',
@@ -126,7 +135,7 @@ export default function VendorOrdersPage(): React.ReactElement {
           )}
           {msg && (
             <tr>
-              <td className="px-4 py-3 text-[var(--theme-error)]" colSpan={6}>
+              <td className="px-4 py-3 text-[var(--theme-error)]" colSpan={6} aria-live="polite">
                 {msg}
               </td>
             </tr>
@@ -141,19 +150,69 @@ export default function VendorOrdersPage(): React.ReactElement {
                 <td className="px-4 py-3">{r.itemCount}</td>
                 <td className="px-4 py-3">{centsToUsd(r.totalCents)}</td>
                 <td className="px-4 py-3">
-                  {/* Packing slip — opens printable page in a new tab */}
-                  {tab !== 'refunded' ? (
-                    <a
-                      href={buildPackingSlipUrl(r.id)} // or buildPackingSlipUrl(r.id, selectedIds) if you have item IDs to filter by
-                      target="_blank"
-                      rel="noreferrer"
-                      className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
-                    >
-                      Packing slip
-                    </a>
-                  ) : (
-                    <span className="opacity-60">—</span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {/* Packing slip — opens printable page in a new tab */}
+                    {tab !== 'refunded' ? (
+                      <a
+                        href={buildPackingSlipUrl(r.id)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex rounded-xl px-3 py-1 border bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+                      >
+                        Packing slip
+                      </a>
+                    ) : (
+                      <span className="opacity-60">—</span>
+                    )}
+
+                    {/* Mark shipped (for orders still in 'paid' tab) */}
+                    {tab === 'paid' && (
+                      <button
+                        type="button"
+                        className="inline-flex rounded-xl px-3 py-1 border bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+                        onClick={async () => {
+                          const rawCarrier = window.prompt('Carrier (usps|ups|fedex|dhl|other)?', 'usps');
+                          const carrier = normalizeCarrier(rawCarrier);
+                          if (!carrier) {
+                            setMsg('Please enter a valid carrier: usps, ups, fedex, dhl, or other.');
+                            return;
+                          }
+                          const tracking = window.prompt('Tracking # (optional)', '')?.trim() || null;
+
+                          setBusy(true);
+                          const res = await markOrderShipped(r.id, carrier, tracking);
+                          setBusy(false);
+                          if (!res.ok) {
+                            setMsg(res.error);
+                            return;
+                          }
+                          void load();
+                        }}
+                      >
+                        Mark shipped
+                      </button>
+                    )}
+
+                    {/* Mark delivered (for orders in 'shipped' tab) */}
+                    {tab === 'shipped' && (
+                      <button
+                        type="button"
+                        className="inline-flex rounded-xl px-3 py-1 border bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+                        onClick={async () => {
+                          setBusy(true);
+                          const res = await markOrderDelivered(r.id);
+                          setBusy(false);
+                          if (!res.ok) {
+                            setMsg(res.error);
+                            return;
+                          }
+                          void load();
+                        }}
+                      >
+                        Mark delivered
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -173,7 +232,7 @@ export default function VendorOrdersPage(): React.ReactElement {
         <button
           onClick={() => setPage((p) => Math.max(1, p - 1))}
           disabled={page <= 1 || busy}
-          className="rounded-lg px-3 py-1 text-sm border border-[var(--theme-border)] disabled:opacity-50"
+          className="rounded-lg px-3 py-1 text-sm border border-[var(--theme-border)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
         >
           Prev
         </button>
@@ -181,7 +240,7 @@ export default function VendorOrdersPage(): React.ReactElement {
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={busy}
-          className="rounded-lg px-3 py-1 text-sm border border-[var(--theme-border)] disabled:opacity-50"
+          className="rounded-lg px-3 py-1 text-sm border border-[var(--theme-border)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
         >
           Next
         </button>
