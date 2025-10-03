@@ -83,3 +83,50 @@ export async function cancelMyOrder(id: number) {
   }
   return { ok: true as const };
 }
+
+/* ============ Week-5: Fulfillment ACL helpers (vendor/admin) ============ */
+
+export type ShipCarrier = 'usps' | 'ups' | 'fedex' | 'dhl' | 'other';
+
+/**
+ * Vendor/Admin: mark an order (this caller's lines or all lines if admin) as shipped.
+ * Server enforces ACL: vendors can only affect their own line items.
+ * Returns { ok } or { ok:false, error }.
+ */
+export async function markOrderShipped(
+  orderId: number,
+  carrier: ShipCarrier,
+  tracking?: string | null,
+  itemIds?: number[]
+) {
+  const r = await fetch(`/api/orders/${orderId}/ship`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ carrier, tracking: tracking ?? null, itemIds }),
+  });
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    return { ok: false as const, error: (body)?.error || `HTTP ${r.status}` };
+  }
+  return { ok: true as const };
+}
+
+/**
+ * Vendor/Admin: mark an order (this caller's lines or all lines if admin) as delivered.
+ * Server enforces ACL: vendors can only affect their own line items.
+ * Returns { ok } or { ok:false, error }.
+ */
+export async function markOrderDelivered(orderId: number, itemIds?: number[]) {
+  const r = await fetch(`/api/orders/${orderId}/deliver`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ itemIds }),
+  });
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    return { ok: false as const, error: (body)?.error || `HTTP ${r.status}` };
+  }
+  return { ok: true as const };
+}
