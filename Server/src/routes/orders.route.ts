@@ -8,6 +8,7 @@ import {
   markDelivered,
   getReceiptHtml,
   cancelPendingOrder,
+  getReceiptPdf, // ✅ NEW
 } from '../controllers/orders.controller.js';
 import {validateBody} from "../middleware/validate.middleware.js";
 import {deliverOrderSchema, shipOrderSchema} from "../validation/orders.schema.js";
@@ -26,5 +27,8 @@ router.patch('/:id/cancel', requireAuth, cancelPendingOrder);
 
 // Receipt (HTML)
 router.get('/:id/receipt', requireAuth, getReceiptHtml);
+
+// Receipt (PDF) ✅ NEW
+router.get('/:id/receipt.pdf', requireAuth, getReceiptPdf);
 
 export default router;
