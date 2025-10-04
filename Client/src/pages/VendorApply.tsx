@@ -24,7 +24,7 @@ const ApplySchema = z.object({
     .optional()
     .nullable()
     .transform((v) => (v === '' ? null : v ?? null))
-    .refine((v) => v == null || v.length === 3, { message: 'Use an ISO 3-letter code.' }),
+    .refine((v) => v == null || v.length === 2, { message: 'Use an ISO 2-letter code.' }),
 });
 
 type FormData = z.infer<typeof ApplySchema>;
@@ -216,7 +216,7 @@ export default function VendorApply(): React.ReactElement {
                 className={fieldClass(Boolean(errors.country))}
                 value={form.country ?? ''}
                 onChange={(e) => setField('country', e.target.value.toUpperCase() as any)}
-                placeholder="USA"
+                placeholder="US, GB, FR, etc."
                 maxLength={3}
               />
               {errors.country && (
