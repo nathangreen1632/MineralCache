@@ -24,7 +24,7 @@ const ApplySchema = z.object({
     .optional()
     .nullable()
     .transform((v) => (v === '' ? null : v ?? null))
-    .refine((v) => v == null || v.length === 2, { message: 'Use an ISO 2-letter code.' }),
+    .refine((v) => v == null || v.length === 3, { message: 'Use an ISO 3-letter code.' }),
 });
 
 type FormData = z.infer<typeof ApplySchema>;
