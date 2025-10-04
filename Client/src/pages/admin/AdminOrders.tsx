@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   listAdminOrders,
+  adminOrdersCsvUrl,            // ✅ NEW
   type AdminOrderStatus,
   type AdminOrderListItem,
 } from '../../api/admin';
@@ -34,6 +35,20 @@ export default function AdminOrders(): React.ReactElement {
   // Refund modal + action state
   const [confirmRefundId, setConfirmRefundId] = useState<number | null>(null);
   const [actBusy, setActBusy] = useState(false);
+
+  // ✅ NEW: CSV URL reflecting current filters
+  const csvHref = useMemo(() => {
+    const sort = 'createdAt';
+    const dir: 'asc' | 'desc' = 'desc';
+    return adminOrdersCsvUrl({
+      status,
+      vendorId: vendorId || null,
+      from: from || null,
+      to: to || null,
+      sort,
+      dir,
+    });
+  }, [status, vendorId, from, to]);
 
   async function load(p = page) {
     setBusy(true);
@@ -175,7 +190,7 @@ export default function AdminOrders(): React.ReactElement {
           />
         </div>
 
-        <div className="md:col-span-4">
+        <div className="md:col-span-4 flex items-center gap-3">
           <button
             type="button"
             onClick={() => { setPage(1); void load(1); }}
@@ -184,6 +199,16 @@ export default function AdminOrders(): React.ReactElement {
           >
             Apply filters
           </button>
+
+          {/* ✅ NEW: Export CSV */}
+          <a
+            href={csvHref}
+            className="inline-flex rounded-lg px-3 py-2 text-sm font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Export CSV
+          </a>
         </div>
       </div>
 
