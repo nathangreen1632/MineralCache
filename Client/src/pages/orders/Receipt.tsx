@@ -1,7 +1,7 @@
 // Client/src/pages/orders/Receipt.tsx
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getMyOrder, type GetOrderRes } from '../../api/orders';
+import { getMyOrder, type GetOrderRes, getReceiptPdfUrl } from '../../api/orders';
 
 type Load =
   | { kind: 'idle' }
@@ -72,16 +72,29 @@ export default function Receipt(): React.ReactElement {
 
   return (
     <section className="mx-auto max-w-3xl px-6 py-14 space-y-6 print:px-4 print:py-8">
-      {/* Header + print button (hidden when printing) */}
+      {/* Header + actions (hidden when printing) */}
       <div className="flex items-center justify-between print:hidden">
         <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Receipt</h1>
-        <button
-          type="button"
-          onClick={() => window.print()}
-          className="rounded-xl px-4 py-2 font-semibold border border-[var(--theme-border)] hover:bg-[var(--theme-card)]"
-        >
-          Print
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="rounded-xl px-4 py-2 font-semibold border border-[var(--theme-border)] hover:bg-[var(--theme-card)]"
+          >
+            Print
+          </button>
+
+          {/* ✅ NEW: Download PDF button */}
+          <a
+            href={getReceiptPdfUrl(o.id)}
+            className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Download PDF receipt"
+          >
+            Download PDF
+          </a>
+        </div>
       </div>
 
       {/* Order summary */}
@@ -110,10 +123,12 @@ export default function Receipt(): React.ReactElement {
           </thead>
           <tbody>
           {o.items.map((it: any) => {
-            const key = it.id ?? it.orderItemId ?? it.productId ?? `${it.title}-${it.quantity}-${it.unitPriceCents}`;
-            const lineTotal = typeof it.lineTotalCents === 'number'
-              ? it.lineTotalCents
-              : (Number(it.quantity) || 1) * (Number(it.unitPriceCents) || 0);
+            const key =
+              it.id ?? it.orderItemId ?? it.productId ?? `${it.title}-${it.quantity}-${it.unitPriceCents}`;
+            const lineTotal =
+              typeof it.lineTotalCents === 'number'
+                ? it.lineTotalCents
+                : (Number(it.quantity) || 1) * (Number(it.unitPriceCents) || 0);
             return (
               <tr
                 key={key}
@@ -141,10 +156,11 @@ export default function Receipt(): React.ReactElement {
         {Array.isArray((o as any).shippingVendors) && (o as any).shippingVendors.length > 0 ? (
           (o as any).shippingVendors.map(
             (v: { vendorId: number; vendorName?: string | null; label?: string | null; amountCents: number }) => {
-              const label =
-                v.vendorName ? `Shipping · ${v.vendorName}` :
-                  v.label ? `Shipping · ${v.label}` :
-                    'Shipping';
+              const label = v.vendorName
+                ? `Shipping · ${v.vendorName}`
+                : v.label
+                  ? `Shipping · ${v.label}`
+                  : 'Shipping';
               return (
                 <div key={`ship-${v.vendorId}`} className="flex items-center justify-between">
                   <div>{label}</div>
@@ -165,7 +181,10 @@ export default function Receipt(): React.ReactElement {
             <div>{centsToUsd(tax)}</div>
           </div>
         ) : null}
-        <div className="mt-2 border-t pt-2 flex items-center justify-between" style={{ borderColor: 'var(--theme-border)' }}>
+        <div
+          className="mt-2 border-t pt-2 flex items-center justify-between"
+          style={{ borderColor: 'var(--theme-border)' }}
+        >
           <div className="text-base font-semibold">Total</div>
           <div className="text-base font-semibold">{centsToUsd(o.totalCents)}</div>
         </div>
