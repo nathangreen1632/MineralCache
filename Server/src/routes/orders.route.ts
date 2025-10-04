@@ -1,6 +1,6 @@
 // Server/src/routes/orders.route.ts
 import { Router } from 'express';
-import { requireAuth } from '../middleware/auth.middleware.js';
+import {requireAdminOrVendorOwner, requireAuth} from '../middleware/auth.middleware.js';
 import {
   listMyOrders,
   getOrder,
@@ -19,8 +19,8 @@ router.get('/', requireAuth, listMyOrders);
 router.get('/:id', requireAuth, getOrder);
 
 // Fulfillment (tighten guards later if you have an admin/vendor check)
-router.patch('/:id/ship', requireAuth, validateBody(shipOrderSchema), markShipped);
-router.patch('/:id/deliver', requireAuth, validateBody(deliverOrderSchema), markDelivered);
+router.patch('/:id/ship', requireAdminOrVendorOwner, validateBody(shipOrderSchema), markShipped);
+router.patch('/:id/deliver', requireAdminOrVendorOwner, validateBody(deliverOrderSchema), markDelivered);
 
 // Buyer cancel (pending only)
 router.patch('/:id/cancel', requireAuth, cancelPendingOrder);
