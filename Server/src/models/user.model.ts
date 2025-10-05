@@ -17,6 +17,7 @@ export class User extends Model<
   declare passwordHash: string;
   declare role: 'buyer' | 'vendor' | 'admin';
   declare dobVerified18: boolean;
+  declare vendorId: number | null;                 // ✅ ADD
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 }
@@ -40,6 +41,7 @@ if (!sequelize) {
         defaultValue: 'buyer',
       },
       dobVerified18: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+      vendorId: { type: DataTypes.BIGINT, allowNull: true }, // ✅ ADD
       createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
       updatedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
     },

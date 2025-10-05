@@ -30,7 +30,8 @@ function readAuth(req: Request) {
 async function ensureVendorOnReq(req: Request, userId: number): Promise<boolean> {
   if ((req as any).vendor) return true;
 
-  const vendor = await Vendor.findOne({ where: { userId } });
+  // ✅ Only allow APPROVED vendors
+  const vendor = await Vendor.findOne({ where: { userId, approvalStatus: 'approved' } });
   if (!vendor) return false;
 
   (req as any).vendor = vendor;
@@ -82,7 +83,7 @@ export async function requireVendor(req: Request, res: Response, next: NextFunct
   }
   const ok = await ensureVendorOnReq(req, userId);
   if (!ok) {
-    res.status(403).json({ error: 'Vendor account required' });
+    res.status(403).json({ error: 'Vendor account (approved) required' });
     return;
   }
   if (!(req as any).user && user) (req as any).user = user;
@@ -103,7 +104,7 @@ export async function requireAdminOrVendorOwner(req: Request, res: Response, nex
   }
   const ok = await ensureVendorOnReq(req, userId);
   if (!ok) {
-    res.status(403).json({ error: 'Vendor account required' });
+    res.status(403).json({ error: 'Vendor account (approved) required' });
     return;
   }
   if (!(req as any).user && user) (req as any).user = user;

@@ -5,37 +5,13 @@ import AppRoutes from './AppRoutes';
 import Navbar from './common/Navbar';
 import Footer from './common/Footer';
 import { Toaster } from 'react-hot-toast';
-import { get } from './lib/api';
 import GravatarStrip from './components/profile/GravatarStrip';
+import { useAuthStore } from './stores/useAuthStore';
 
 // --- 18+ banner mounted globally ---
 function AgeGateBanner(): React.ReactElement | null {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const { data } = await get('/auth/me');
-        // If /auth/me returns the user directly (per your controller),
-        // data is the user object, not { user: ... }.
-        const dobOk =
-          (data && (data as any).dobVerified18 === true) ||
-          (data && (data as any).user?.dobVerified18 === true) ||
-          (data && (data as any).me?.dobVerified18 === true);
-
-        if (alive && !dobOk) setVisible(true);
-      } catch {
-        // ❗ If not logged in, do NOT show the banner (avoids 401 on click)
-        if (alive) setVisible(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  if (!visible) return null;
+  const user = useAuthStore((s) => s.user);
+  if (!user || user.dobVerified18) return null;
 
   return (
     <div
@@ -76,7 +52,7 @@ function AgeGateBanner(): React.ReactElement | null {
   );
 }
 
-// Lightweight bootstrap: ping /auth/me to hydrate session & show a spinner meanwhile
+// Lightweight bootstrap: hydrate auth store on app load & show a spinner meanwhile
 function AuthBootstrap({ children }: Readonly<{ children: React.ReactElement }>) {
   const [booting, setBooting] = useState(true);
 
@@ -84,9 +60,10 @@ function AuthBootstrap({ children }: Readonly<{ children: React.ReactElement }>)
     let alive = true;
     (async () => {
       try {
-        await get('/auth/me'); // ignore result; just warms the session/user
+        // ✅ hydrate session on first paint (robust to /auth/me response shape)
+        await useAuthStore.getState().me();
       } catch {
-        // no-op; we still render the app
+        // no-op; still render the app
       } finally {
         if (alive) setBooting(false);
       }

@@ -5,6 +5,7 @@ import HomePage from './pages/HomePage';
 
 // Auth
 import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
 import AgeVerifyPage from './pages/auth/AgeVerifyPage';
 
 // Public catalog
@@ -42,6 +43,10 @@ import OrderDetailPage from './pages/orders/OrderDetailPage';
 // Age gate banner (mounted globally)
 import AgeGateNotice from './components/AgeGateNotice';
 
+// ✅ Guards
+import RequireAuth from './routes/RequireAuth';
+import RequireRole from './routes/RequireRole';
+
 function WithAgeGate(): React.ReactElement {
   return (
     <>
@@ -58,6 +63,7 @@ export default function AppRoutes(): React.ReactElement {
         {/* Public */}
         <Route index element={<HomePage />} />
         <Route path="login" element={<LoginPage />} />
+        <Route path="register" element={<RegisterPage />} />
         <Route path="verify-age" element={<AgeVerifyPage />} />
         <Route path="products" element={<ProductList />} />
         <Route path="products/:id" element={<ProductDetail />} />
@@ -66,27 +72,125 @@ export default function AppRoutes(): React.ReactElement {
 
         {/* Orders */}
         <Route path="orders/confirmation" element={<OrderConfirmationPage />} />
-        <Route path="account/orders" element={<MyOrdersPage />} />
-        <Route path="account/orders/:id" element={<OrderDetailPage />} />
+        <Route
+          path="account/orders"
+          element={
+            <RequireAuth>
+              <MyOrdersPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="account/orders/:id"
+          element={
+            <RequireAuth>
+              <OrderDetailPage />
+            </RequireAuth>
+          }
+        />
         <Route path="/orders/:id/receipt" element={<Receipt />} />
 
         {/* Vendor */}
-        <Route path="vendor/apply" element={<VendorApply />} />
-        <Route path="vendor/dashboard" element={<VendorDashboard />} />
-        <Route path="vendor/products" element={<VendorProductsPage />} />
-        <Route path="vendor/orders" element={<VendorOrdersPage />} />
-        <Route path="vendor/payouts" element={<PayoutsPage />} />
+        <Route
+          path="vendor/apply"
+          element={
+            <RequireAuth>
+              <VendorApply />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="vendor/dashboard"
+          element={
+            <RequireRole role="vendor">
+              <VendorDashboard />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="vendor/products"
+          element={
+            <RequireRole role="vendor">
+              <VendorProductsPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="vendor/orders"
+          element={
+            <RequireRole role="vendor">
+              <VendorOrdersPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="vendor/payouts"
+          element={
+            <RequireRole role="vendor">
+              <PayoutsPage />
+            </RequireRole>
+          }
+        />
 
         {/* Admin */}
-        <Route path="admin/vendor-apps" element={<AdminVendorApps />} />
-        <Route path="admin/orders" element={<AdminOrders />} />
-        <Route path="admin/orders/:id" element={<AdminOrderDetail />} />
-        <Route path="admin/auctions" element={<AdminAuctionsPage />} /> {/* ✅ NEW */}
-        <Route path="admin/settings" element={<AdminSettings />} />
+        <Route
+          path="admin/vendor-apps"
+          element={
+            <RequireRole role="admin">
+              <AdminVendorApps />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="admin/orders"
+          element={
+            <RequireRole role="admin">
+              <AdminOrders />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="admin/orders/:id"
+          element={
+            <RequireRole role="admin">
+              <AdminOrderDetail />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="admin/auctions"
+          element={
+            <RequireRole role="admin">
+              <AdminAuctionsPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="admin/settings"
+          element={
+            <RequireRole role="admin">
+              <AdminSettings />
+            </RequireRole>
+          }
+        />
 
         {/* Vendor product CRUD */}
-        <Route path="products/new" element={<ProductCreate />} />
-        <Route path="products/:id/edit" element={<ProductEdit />} />
+        <Route
+          path="products/new"
+          element={
+            <RequireRole role="vendor">
+              <ProductCreate />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="products/:id/edit"
+          element={
+            <RequireRole role="vendor">
+              <ProductEdit />
+            </RequireRole>
+          }
+        />
 
         {/* Fallback */}
         <Route path="*" element={<div>Not found.</div>} />
