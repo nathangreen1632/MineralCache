@@ -9,6 +9,7 @@ export type SessionUser = {
   dobVerified18: boolean;
   email?: string | null;
   name?: string | null;
+  vendorId?: number | null;
 };
 
 type AuthState = {
