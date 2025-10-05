@@ -95,7 +95,7 @@ export default function VendorProductsPage(): React.ReactElement {
         <header className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">My Products</h1>
           <Link
-            to="/vendor/products/new"
+            to="/products/new"
             className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
           >
             Add Product
