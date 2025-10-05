@@ -14,7 +14,6 @@ export default function HomePage(): React.ReactElement {
     if (globalThis.crypto && 'randomUUID' in globalThis.crypto) {
       return Array.from({ length: 6 }, () => globalThis.crypto.randomUUID());
     }
-
     if (globalThis.crypto && 'getRandomValues' in globalThis.crypto) {
       return Array.from({ length: 6 }, () => {
         const buf = new Uint32Array(4);
@@ -22,7 +21,6 @@ export default function HomePage(): React.ReactElement {
         return Array.from(buf).map(n => n.toString(16).padStart(8, '0')).join('');
       });
     }
-
     const base = Date.now().toString(36);
     return Array.from({ length: 6 }, (_, i) => `sk-${base}-${i}`);
   }, []);
@@ -42,9 +40,7 @@ export default function HomePage(): React.ReactElement {
         setOnSale([]);
       }
     })();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, []);
 
   let heroContent: React.ReactNode;
@@ -68,9 +64,7 @@ export default function HomePage(): React.ReactElement {
         </h2>
         <p className="text-[var(--theme-muted)] text-sm">
           No featured photos yet. Explore the{' '}
-          <a href="/products" className="underline">
-            catalog
-          </a>.
+          <a href="/products" className="underline">catalog</a>.
         </p>
       </div>
     );
@@ -134,6 +128,21 @@ export default function HomePage(): React.ReactElement {
 
   return (
     <div className="space-y-8">
+      {/* Page header */}
+      <header className="mt-2 text-center">
+        <span
+          role="text"
+          aria-level={1}
+          className="block text-4xl md:text-6xl font-extrabold tracking-tight text-[var(--theme-text)]"
+        >
+          Welcome to Mineral Cache
+        </span>
+              <span className="block mt-1 text-md md:text-2xl text-[var(--theme-muted)]">
+          The best place to buy and sell Minerals and Fossils
+        </span>
+      </header>
+
+
       {/* Hero carousel */}
       <section>{heroContent}</section>
 
