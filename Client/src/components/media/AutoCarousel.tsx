@@ -1,3 +1,4 @@
+// Client/src/components/media/AutoCarousel.tsx
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import CarouselViewport from './CarouselViewport';
@@ -7,7 +8,7 @@ import CarouselControls from './CarouselControls';
 type AutoCarouselProps = {
   images: string[];
   intervalMs?: number;
-  heightClass?: string;
+  heightClass?: string;  // controls overall height
   ctaHref?: string;
   ctaLabel?: string;
 };
@@ -15,11 +16,13 @@ type AutoCarouselProps = {
 export default function AutoCarousel({
                                        images,
                                        intervalMs = 5000,
-                                       heightClass = 'h-80',
+                                       // ⬇️ Taller, responsive default height
+                                       heightClass = 'h-[28rem] md:h-[36rem] lg:h-[44rem]',
                                        ctaHref,
                                        ctaLabel,
                                      }: Readonly<AutoCarouselProps>): React.ReactElement | null {
-  const list = useMemo(() => images.filter(Boolean), [images]);
+  // De-dupe + drop empties
+  const list = useMemo(() => Array.from(new Set(images.filter(Boolean))), [images]);
   const [idx, setIdx] = useState(0);
   const [paused, setPaused] = useState(false);
   const timer = useRef<number | null>(null);
@@ -33,7 +36,7 @@ export default function AutoCarousel({
     [list.length]
   );
 
-  // Auto-advance without attaching events to a non-interactive root
+  // Auto-advance
   useEffect(() => {
     if (list.length <= 1) return;
     function tick() {
@@ -57,6 +60,8 @@ export default function AutoCarousel({
         heightClass,
       ].join(' ')}
       aria-label="Featured vendor images"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
     >
       <CarouselViewport images={list} index={idx} heightClass={heightClass} />
 
