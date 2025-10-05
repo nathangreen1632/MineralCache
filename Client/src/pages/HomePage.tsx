@@ -81,7 +81,7 @@ export default function HomePage(): React.ReactElement {
       <AutoCarousel
         images={photos.slice(0, 10)}
         intervalMs={5000}
-        heightClass="h-[22rem]"
+        heightClass="h-[28rem] md:h-[36rem] lg:h-[44rem]"
         ctaHref="/products"
         ctaLabel="Shop now"
       />
