@@ -10,12 +10,14 @@ import {
   CreditCard,
   UserPlus,
   ChevronDown,
-  LogIn, // ✅ added
-  Package, // ✅ My Orders + Vendor Orders icon
-  Settings, // ✅ Admin Settings icon
-  Banknote, // ✅ NEW: Vendor Payouts icon
+  LogIn,
+  LogOut,        // ✅
+  Package,
+  Settings,
+  Banknote,
+  ShieldCheck,
 } from 'lucide-react';
-import { useAuthStore } from '../stores/useAuthStore'; // ✅ added
+import { useAuthStore } from '../stores/useAuthStore';
 
 type LinkItem = {
   to: string;
@@ -50,7 +52,24 @@ function SideNavLink({ to, label, end, Icon }: Readonly<LinkItem>) {
   );
 }
 
-/** Collapsible group with a header that links to baseTo and expands when on that section */
+// Button-style action (e.g., Sign out)
+function SideActionButton({
+                            label,
+                            Icon,
+                            onClick,
+                          }: Readonly<{
+  label: string;
+  Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  onClick: () => void;
+}>) {
+  return (
+    <button type="button" onClick={onClick} className={itemClasses(false)} aria-label={label}>
+      <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
+
 function NavGroup({
                     baseTo,
                     label,
@@ -67,7 +86,7 @@ function NavGroup({
     if (!location?.pathname) return false;
     if (location.pathname === baseTo) return true;
     return location.pathname.startsWith(baseTo + '/');
-  }, [location, baseTo]);
+  }, [baseTo, location?.pathname]);
 
   const [open, setOpen] = useState(onSection);
   useEffect(() => {
@@ -99,7 +118,15 @@ function NavGroup({
 }
 
 export default function Navbar(): React.ReactElement {
-  const user = useAuthStore((s) => s.user); // ✅ read auth state
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+
+  const isAuthed = Boolean(user);
+  const role = user?.role ?? 'buyer';
+  const isVendor = role === 'vendor';
+  const isAdmin = role === 'admin';
+
+  const AUCTIONS_ENABLED = String(import.meta.env.VITE_AUCTIONS_ENABLED || '').toLowerCase() === 'true';
 
   return (
     <aside
@@ -110,49 +137,85 @@ export default function Navbar(): React.ReactElement {
         'sticky top-0 h-screen overflow-y-auto',
         'px-4 py-4',
       ].join(' ')}
+      aria-label="Primary navigation"
     >
       {/* Brand */}
       <Link
         to="/"
         className="block text-xl font-extrabold tracking-tight text-[var(--theme-text)]"
         style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
+        aria-label="Mineral Cache home"
       >
         Mineral Cache
       </Link>
 
       {/* Nav */}
-      <nav className="mt-6 grid gap-1">
+      <nav className="mt-6 grid gap-1" aria-label="Main">
+        {/* Home */}
         <SideNavLink to="/" end label="Home" Icon={Home} />
 
-        {/* Catalog group with nested New Product */}
-        <NavGroup baseTo="/products" label="Catalog" Icon={Store}>
-          <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
-        </NavGroup>
+        {/* Catalog (admin & vendors build products) */}
+        {(isVendor || isAdmin) && (
+          <NavGroup baseTo="/products" label="Catalog" Icon={Store}>
+            <SideNavLink to="/products" end label="All Products" Icon={Store} />
+            <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
+          </NavGroup>
+        )}
 
-        {/* Vendor tools */}
-        <SideNavLink to="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard} />
-        <SideNavLink to="/vendor/products" label="Vendor · Products" Icon={Store} />
-        <SideNavLink to="/vendor/orders" label="Vendor · Orders" Icon={Package} />
-        <SideNavLink to="/vendor/payouts" label="Vendor · Payouts" Icon={Banknote} />
-        <SideNavLink to="/vendor/apply" label="Apply as Vendor" Icon={UserPlus} />
+        {/* Vendor tools (only vendors) */}
+        {isVendor && (
+          <>
+            <SideNavLink to="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard} />
+            <SideNavLink to="/vendor/products" label="Vendor · Products" Icon={Store} />
+            <SideNavLink to="/vendor/orders" label="Vendor · Orders" Icon={Package} />
+            <SideNavLink to="/vendor/payouts" label="Vendor · Payouts" Icon={Banknote} />
+          </>
+        )}
+
+        {/* Apply as Vendor (only when signed-in buyers) */}
+        {isAuthed && !isVendor && (
+          <SideNavLink to="/vendor/apply" label="Apply as Vendor" Icon={UserPlus} />
+        )}
 
         {/* Admin */}
-        <SideNavLink to="/admin/vendor-apps" label="Admin · Vendor Apps" Icon={ClipboardList} />
-        <SideNavLink to="/admin/orders" label="Admin · Orders" Icon={Package} />
+        {isAdmin && (
+          <>
+            <SideNavLink to="/admin" label="Admin · Dashboard" Icon={LayoutDashboard} />
+            <SideNavLink to="/admin/vendor-apps" label="Admin · Vendor Apps" Icon={ClipboardList} />
+            <SideNavLink to="/admin/orders" label="Admin · Orders" Icon={Package} />
+            {AUCTIONS_ENABLED && (
+              <SideNavLink to="/admin/auctions" label="Admin · Auctions" Icon={ShieldCheck} />
+            )}
+            <SideNavLink to="/admin/settings" label="Admin · Settings" Icon={Settings} />
+          </>
+        )}
 
-        {/* Admin Auctions */}
-        <SideNavLink to="/admin/auctions" label="Admin · Auctions" Icon={ClipboardList} />
-        <SideNavLink to="/admin/settings" label="Admin · Settings" Icon={Settings} />
+        {/* Cart & Checkout — hide unless logged in */}
+        {isAuthed && (
+          <>
+            <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
+            <SideNavLink to="/checkout" label="Checkout" Icon={CreditCard} />
+          </>
+        )}
 
-        {/* Cart & Checkout */}
-        <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
-        <SideNavLink to="/checkout" label="Checkout" Icon={CreditCard} />
+        {/* Account — hide unless logged in */}
+        {isAuthed && <SideNavLink to="/account/orders" label="My Orders" Icon={Package} />}
 
-        {/* Account */}
-        <SideNavLink to="/account/orders" label="My Orders" Icon={Package} />
-
-        {/* Auth: show Sign in when no user is present */}
-        {!user && <SideNavLink to="/login" label="Sign in" Icon={LogIn} />}
+        {/* Auth */}
+        {!isAuthed ? (
+          <>
+            <SideNavLink to="/login" label="Sign in" Icon={LogIn} />
+            <SideNavLink to="/register" label="Create account" Icon={UserPlus} />
+          </>
+        ) : (
+          <SideActionButton
+            label="Sign out"
+            Icon={LogOut}
+            onClick={() => {
+              logout().catch(() => {});
+            }}
+          />
+        )}
       </nav>
     </aside>
   );
