@@ -1,6 +1,7 @@
 // Server/src/controllers/orders.controller.ts
 import type { Request, Response } from 'express';
 import { Op } from 'sequelize';
+import { z } from 'zod';
 import { Order } from '../models/order.model.js';
 import { OrderItem } from '../models/orderItem.model.js';
 
@@ -10,6 +11,17 @@ import { sendOrderEmail } from '../services/email.service.js';
 
 // ✅ NEW: cancel PI helper for buyer-initiated cancellations
 import { cancelPaymentIntent } from '../services/stripe.service.js';
+
+// ✅ NEW: validation + carrier helpers
+import { shipOrderSchema, deliverOrderSchema } from '../validation/orders.schema.js';
+import { normalizeCarrier, trackingUrl as buildTrackingUrl } from '../services/shipping.service.js';
+
+// ✅ NEW: receipt PDF builder
+import {
+  buildReceiptPdf,
+  type ReceiptData,
+  type ReceiptItem,
+} from '../services/pdf/receiptPdf.service.js';
 
 function parsePage(v: unknown, def = 1) {
   const n = Number(v);
@@ -34,6 +46,27 @@ function readOrderNumberSafe(order: any): string | null {
     if (typeof snake === 'string' && snake.length > 0) return snake;
   }
   return null;
+}
+
+/** Read auth from either {auth} or {user}/{vendor} */
+function getAuth(req: Request): { userId: number | null; vendorId: number | null; isAdmin: boolean } {
+  const auth = (req as any).auth as { userId?: number; vendorId?: number; role?: string } | undefined;
+  const user = (req as any).user ?? (req.session as any)?.user ?? auth ?? null;
+  const vendor = (req as any).vendor ?? null;
+
+  const userId =
+    (auth?.userId && Number.isFinite(auth.userId) && auth.userId) ||
+    (user?.id && Number.isFinite(user.id) && user.id) ||
+    null;
+
+  const vendorId =
+    (auth?.vendorId && Number.isFinite(auth.vendorId) && auth.vendorId) ||
+    (vendor?.id && Number.isFinite(vendor.id) && vendor.id) ||
+    null;
+
+  const role = (user?.role ?? auth?.role ?? '').toString().toLowerCase();
+  const isAdmin = role === 'admin' || role === 'superadmin' || role === 'owner';
+  return { userId, vendorId, isAdmin };
 }
 
 export async function listMyOrders(req: Request, res: Response): Promise<void> {
@@ -152,122 +185,193 @@ export async function getOrder(req: Request, res: Response): Promise<void> {
   });
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Fulfillment: Ship / Deliver with ACL + Validation                         */
+/* -------------------------------------------------------------------------- */
+
 // PATCH /api/orders/:id/ship
 export async function markShipped(req: Request, res: Response): Promise<void> {
-  const id = Number(req.params.id);
-  const body = req.body as {
-    carrier?: string;
-    tracking?: string;
-    itemIds?: number[]; // optional: limit to specific items; default = all in order
-  };
+  const { userId, vendorId, isAdmin } = getAuth(req);
+  if (!userId || (!isAdmin && !vendorId)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
 
-  const order = await Order.findByPk(id);
+  const orderId = Number.parseInt(req.params.id, 10);
+  if (!Number.isFinite(orderId) || orderId <= 0) {
+    res.status(400).json({ error: 'Bad order id' });
+    return;
+  }
+
+  const parsed = shipOrderSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid body', details: z.treeifyError(parsed.error) });
+    return;
+  }
+
+  const carrier = normalizeCarrier(parsed.data.carrier);
+  if (!carrier) {
+    res.status(400).json({ error: 'Unsupported carrier' });
+    return;
+  }
+  const tracking = parsed.data.tracking && parsed.data.tracking.trim() !== '' ? parsed.data.tracking.trim() : null;
+  const itemFilterIds = parsed.data.itemIds && parsed.data.itemIds.length > 0 ? parsed.data.itemIds : null;
+
+  const order = await Order.findByPk(orderId);
   if (!order) {
     res.status(404).json({ error: 'Order not found' });
     return;
   }
-
-  if (order.status !== 'paid') {
+  if ((order as any).status !== 'paid') {
     res.status(400).json({ error: 'Only paid orders can be shipped' });
     return;
   }
 
-  const where: any = { orderId: order.id };
-  if (Array.isArray(body.itemIds) && body.itemIds.length > 0) {
-    where.id = { [Op.in]: body.itemIds };
+  // Scope items by role: admin → all; vendor → only their lines; optional itemIds filter
+  const where: any = { orderId };
+  if (!isAdmin && vendorId) where.vendorId = vendorId;
+  if (itemFilterIds) where.id = { [Op.in]: itemFilterIds };
+
+  const items = await OrderItem.findAll({ where });
+  if (items.length === 0) {
+    res.status(403).json({ error: 'No matching items to ship for your role' });
+    return;
   }
 
   const now = new Date();
-  await OrderItem.update(
-    {
-      shipCarrier: body.carrier ?? null,
-      shipTracking: body.tracking ?? null,
-      shippedAt: now,
-    },
-    { where }
-  );
-
-  // Email buyer
-  const buyer = await User.findByPk((order as any).buyerUserId);
-  if (buyer?.email) {
-    const orderItems = await OrderItem.findAll({ where: { orderId: order.id } });
-
-    const lines: string[] = [];
-    for (const i of orderItems) {
-      const qty = i.quantity;
-      let fragment = `• ${i.title} ×${qty}`;
-      const trk = (i as any).shipTracking;
-      if (trk) {
-        fragment += ` (tracking: ${trk})`;
-      }
-      lines.push(fragment);
-    }
-    const itemsBrief = lines.join('<br/>');
-
-    let trackingUrl: string | null = null;
-    if (body.tracking) {
-      const carrier = (body.carrier || '').toLowerCase();
-      if (carrier === 'ups') {
-        trackingUrl = `https://www.ups.com/track?loc=en_US&tracknum=${encodeURIComponent(body.tracking)}`;
-      } else if (carrier === 'usps') {
-        trackingUrl = `https://tools.usps.com/go/TrackConfirmAction?tLabels=${encodeURIComponent(body.tracking)}`;
-      } else if (carrier === 'fedex') {
-        trackingUrl = `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(body.tracking)}`;
-      } else {
-        trackingUrl = null;
-      }
-    }
-
-    const orderNumber = readOrderNumberSafe(order);
-    await sendOrderEmail('order_shipped', {
-      orderId: Number(order.id),
-      orderNumber,
-      buyer: { email: buyer.email, name: (buyer as any)?.fullName ?? null },
-      itemsBrief,
-      carrier: body.carrier ?? null,
-      trackingUrl,
-    });
+  for (const it of items) {
+    it.set('shipCarrier', carrier);
+    it.set('shipTracking', tracking);
+    it.set('shippedAt', now);
+    await it.save();
   }
 
-  res.json({ ok: true });
+  // Flip order status → shipped only if *all* lines are shipped (across vendors)
+  const allItems = await OrderItem.findAll({ where: { orderId } });
+  const allShipped = allItems.every((i: any) => !!i.shippedAt);
+  if (allShipped) {
+    (order as any).status = 'shipped';
+    await order.save();
+  }
+
+  // Email buyer (best-effort)
+  try {
+    const buyer = await User.findByPk((order as any).buyerUserId).catch(() => null);
+    if (buyer?.email) {
+      const orderItems = await OrderItem.findAll({ where: { orderId } });
+      const lines: string[] = [];
+      for (const i of orderItems) {
+        const qty = (i as any).quantity ?? 1;
+        let fragment = `• ${i.title} ×${qty}`;
+        const trk = (i as any).shipTracking;
+        if (trk) fragment += ` (tracking: ${trk})`;
+        lines.push(fragment);
+      }
+      const itemsBrief = lines.join('<br/>');
+
+      const emailTrackingUrl = buildTrackingUrl(carrier, tracking || null);
+      const orderNumber = readOrderNumberSafe(order);
+
+      await sendOrderEmail('order_shipped', {
+        orderId: Number(order.id),
+        orderNumber,
+        buyer: { email: buyer.email, name: (buyer as any)?.fullName ?? null },
+        itemsBrief,
+        carrier,
+        trackingUrl: emailTrackingUrl,
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+
+  res.json({
+    ok: true,
+    updated: items.map((i) => Number(i.id)),
+    orderStatus: (order as any).status,
+  });
 }
 
 // PATCH /api/orders/:id/deliver
 export async function markDelivered(req: Request, res: Response): Promise<void> {
-  const id = Number(req.params.id);
-  const body = req.body as { itemIds?: number[] };
+  const { userId, vendorId, isAdmin } = getAuth(req);
+  if (!userId || (!isAdmin && !vendorId)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
 
-  const order = await Order.findByPk(id);
+  const orderId = Number.parseInt(req.params.id, 10);
+  if (!Number.isFinite(orderId) || orderId <= 0) {
+    res.status(400).json({ error: 'Bad order id' });
+    return;
+  }
+
+  const parsed = deliverOrderSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid body', details: z.treeifyError(parsed.error) });
+    return;
+  }
+  const itemFilterIds = parsed.data.itemIds && parsed.data.itemIds.length > 0 ? parsed.data.itemIds : null;
+
+  const order = await Order.findByPk(orderId);
   if (!order) {
     res.status(404).json({ error: 'Order not found' });
     return;
   }
 
-  const where: any = { orderId: order.id };
-  if (Array.isArray(body.itemIds) && body.itemIds.length > 0) {
-    where.id = { [Op.in]: body.itemIds };
+  const where: any = { orderId };
+  if (!isAdmin && vendorId) where.vendorId = vendorId;
+  if (itemFilterIds) where.id = { [Op.in]: itemFilterIds };
+
+  const items = await OrderItem.findAll({ where });
+  if (items.length === 0) {
+    res.status(403).json({ error: 'No matching items to deliver for your role' });
+    return;
   }
 
   const now = new Date();
-  await OrderItem.update({ deliveredAt: now }, { where });
-
-  // Email buyer
-  const buyer = await User.findByPk((order as any).buyerUserId);
-  if (buyer?.email) {
-    const orderItems = await OrderItem.findAll({ where: { orderId: order.id } });
-    const itemsBrief = orderItems.map(i => `• ${i.title}`).join('<br/>');
-
-    const orderNumber = readOrderNumberSafe(order);
-    await sendOrderEmail('order_delivered', {
-      orderId: Number(order.id),
-      orderNumber,
-      buyer: { email: buyer.email, name: (buyer as any)?.fullName ?? null },
-      itemsBrief,
-    });
+  for (const it of items) {
+    it.set('deliveredAt', now);
+    await it.save();
   }
 
-  res.json({ ok: true });
+  // Flip order status → delivered only if *all* lines are delivered
+  const allItems = await OrderItem.findAll({ where: { orderId } });
+  const allDelivered = allItems.every((i: any) => !!i.deliveredAt);
+  if (allDelivered) {
+    (order as any).status = 'delivered';
+    await order.save();
+  }
+
+  // Email buyer (best-effort)
+  try {
+    const buyer = await User.findByPk((order as any).buyerUserId).catch(() => null);
+    if (buyer?.email) {
+      const orderItems = await OrderItem.findAll({ where: { orderId } });
+      const itemsBrief = orderItems.map((i) => `• ${i.title}`).join('<br/>');
+
+      const orderNumber = readOrderNumberSafe(order);
+      await sendOrderEmail('order_delivered', {
+        orderId: Number(order.id),
+        orderNumber,
+        buyer: { email: buyer.email, name: (buyer as any)?.fullName ?? null },
+        itemsBrief,
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+
+  res.json({
+    ok: true,
+    updated: items.map((i) => Number(i.id)),
+    orderStatus: (order as any).status,
+  });
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Receipt + Buyer-initiated Cancel                                          */
+/* -------------------------------------------------------------------------- */
 
 // GET /api/orders/:id/receipt
 export async function getReceiptHtml(req: Request, res: Response): Promise<void> {
@@ -340,6 +444,89 @@ export async function getReceiptHtml(req: Request, res: Response): Promise<void>
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.status(200).send(html);
+}
+
+// ✅ NEW: PDF receipt download (owner or admin)
+// GET /api/orders/:id/receipt.pdf
+export async function getReceiptPdf(req: Request, res: Response): Promise<void> {
+  const { userId, isAdmin } = getAuth(req);
+
+  if (!userId && !isAdmin) {
+    res.status(401).json({ ok: false, message: 'Unauthorized' });
+    return;
+  }
+
+  const rawId = req.params.id;
+  const id = Number(rawId);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ ok: false, message: 'Invalid order id' });
+    return;
+  }
+
+  const order = await Order.findByPk(id);
+  if (!order) {
+    res.status(404).json({ ok: false, message: 'Order not found' });
+    return;
+  }
+
+  // ACL: only owner (buyer) or admin
+  const isOwner = userId != null && Number((order as any).buyerUserId) === Number(userId);
+  if (!isOwner && !isAdmin) {
+    res.status(403).json({ ok: false, message: 'Not authorized to view this receipt' });
+    return;
+  }
+
+  // Load items and buyer (email/name if available)
+  const orderItems = await OrderItem.findAll({ where: { orderId: id } });
+  const buyer = await User.findByPk((order as any).buyerUserId).catch(() => null);
+
+  const items: ReceiptItem[] = orderItems.map((it) => {
+    const qty = Number((it as any).quantity ?? 1);
+    const unitCents = Number((it as any).unitPriceCents ?? (it as any).priceCents ?? 0);
+    const lineCents = Number((it as any).lineTotalCents ?? (it as any).totalCents ?? qty * unitCents);
+
+    return {
+      title: String((it as any).title ?? (it as any).productTitle ?? (it as any).name ?? `Item #${it.id}`),
+      vendorName: (it as any).vendorName ?? (it as any).vendor?.name ?? null,
+      sku: (it as any).sku ?? (it as any).productSku ?? null,
+      quantity: qty,
+      unitPriceCents: unitCents,
+      lineTotalCents: lineCents,
+    };
+  });
+
+  const subtotalCents = Number(
+    (order as any).subtotalCents ?? items.reduce((s, i) => s + i.lineTotalCents, 0),
+  );
+  const shippingCents = Number((order as any).shippingCents ?? 0);
+  const taxCents = Number((order as any).taxCents ?? 0);
+  const totalCents = Number(
+    (order as any).totalCents ?? subtotalCents + shippingCents + taxCents,
+  );
+
+  const billingAddress = (order as any).billingAddressText ?? null;
+  const shippingAddress = (order as any).shippingAddressText ?? null;
+
+  const data: ReceiptData = {
+    orderId: id,
+    createdAt: new Date((order as any).createdAt ?? Date.now()),
+    buyerEmail: buyer?.email ?? null,
+    buyerName: (order as any).buyerName ?? null,
+    billingAddress,
+    shippingAddress,
+    items,
+    subtotalCents,
+    shippingCents,
+    taxCents,
+    totalCents,
+  };
+
+  const pdf = await buildReceiptPdf(data);
+  const filename = `Order-${id}-Receipt.pdf`;
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.status(200).send(pdf);
 }
 
 // ✅ NEW: Buyer cancel (pre-payment)

@@ -133,12 +133,15 @@ export default function Navbar(): React.ReactElement {
         <SideNavLink to="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard} />
         <SideNavLink to="/vendor/products" label="Vendor · Products" Icon={Store} />
         <SideNavLink to="/vendor/orders" label="Vendor · Orders" Icon={Package} />
-        <SideNavLink to="/vendor/payouts" label="Vendor · Payouts" Icon={Banknote} /> {/* ✅ NEW */}
+        <SideNavLink to="/vendor/payouts" label="Vendor · Payouts" Icon={Banknote} />
         <SideNavLink to="/vendor/apply" label="Apply as Vendor" Icon={UserPlus} />
 
         {/* Admin */}
         <SideNavLink to="/admin/vendor-apps" label="Admin · Vendor Apps" Icon={ClipboardList} />
         <SideNavLink to="/admin/orders" label="Admin · Orders" Icon={Package} />
+
+        {/* Admin Auctions */}
+        <SideNavLink to="/admin/auctions" label="Admin · Auctions" Icon={ClipboardList} />
         <SideNavLink to="/admin/settings" label="Admin · Settings" Icon={Settings} />
 
         {/* Cart & Checkout */}
@@ -148,7 +151,7 @@ export default function Navbar(): React.ReactElement {
         {/* Account */}
         <SideNavLink to="/account/orders" label="My Orders" Icon={Package} />
 
-        {/* ✅ Auth: show Sign in when no user is present */}
+        {/* Auth: show Sign in when no user is present */}
         {!user && <SideNavLink to="/login" label="Sign in" Icon={LogIn} />}
       </nav>
     </aside>

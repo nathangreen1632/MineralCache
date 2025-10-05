@@ -89,7 +89,8 @@ export async function resolveShippingPolicyForVendor(vendorId: number | null): P
         perWeightCents: Number((vendorRule as any).perWeightCents || 0),
         minCents: (vendorRule as any).minCents == null ? null : Number((vendorRule as any).minCents),
         maxCents: (vendorRule as any).maxCents == null ? null : Number((vendorRule as any).maxCents),
-        freeThresholdCents: (vendorRule as any).freeThresholdCents == null ? null : Number((vendorRule as any).freeThresholdCents),
+        freeThresholdCents:
+          (vendorRule as any).freeThresholdCents == null ? null : Number((vendorRule as any).freeThresholdCents),
       };
     }
   }
@@ -107,7 +108,8 @@ export async function resolveShippingPolicyForVendor(vendorId: number | null): P
       perWeightCents: Number((globalDefault as any).perWeightCents || 0),
       minCents: (globalDefault as any).minCents == null ? null : Number((globalDefault as any).minCents),
       maxCents: (globalDefault as any).maxCents == null ? null : Number((globalDefault as any).maxCents),
-      freeThresholdCents: (globalDefault as any).freeThresholdCents == null ? null : Number((globalDefault as any).freeThresholdCents),
+      freeThresholdCents:
+        (globalDefault as any).freeThresholdCents == null ? null : Number((globalDefault as any).freeThresholdCents),
     };
   }
 
@@ -125,7 +127,8 @@ export async function resolveShippingPolicyForVendor(vendorId: number | null): P
       perWeightCents: Number((anyGlobal as any).perWeightCents || 0),
       minCents: (anyGlobal as any).minCents == null ? null : Number((anyGlobal as any).minCents),
       maxCents: (anyGlobal as any).maxCents == null ? null : Number((anyGlobal as any).maxCents),
-      freeThresholdCents: (anyGlobal as any).freeThresholdCents == null ? null : Number((anyGlobal as any).freeThresholdCents),
+      freeThresholdCents:
+        (anyGlobal as any).freeThresholdCents == null ? null : Number((anyGlobal as any).freeThresholdCents),
     };
   }
 
@@ -241,4 +244,44 @@ export async function computeVendorShippingByLines(opts: {
   }
 
   return { shippingCents: Math.trunc(total), snapshot: policy };
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Carrier helpers (kept here to co-locate server shipping utilities)        */
+/* -------------------------------------------------------------------------- */
+
+export type ShipCarrier = 'usps' | 'ups' | 'fedex' | 'dhl' | 'other';
+export const ALLOWED_CARRIERS: ShipCarrier[] = ['usps', 'ups', 'fedex', 'dhl', 'other'];
+
+/** Normalize user input to one of the allowed carriers; returns null if unknown */
+export function normalizeCarrier(input: unknown): ShipCarrier | null {
+  if (!input || typeof input !== 'string') return null;
+  const s = input.trim().toLowerCase();
+  if (ALLOWED_CARRIERS.includes(s as ShipCarrier)) return s as ShipCarrier;
+  // naive aliasing
+  if (['us postal', 'usps.com', 'postal', 'mail'].includes(s)) return 'usps';
+  if (['united parcel service'].includes(s)) return 'ups';
+  if (['federal express', 'fed ex'].includes(s)) return 'fedex';
+  return null;
+}
+
+/** Build an external tracking URL for display */
+export function trackingUrl(
+  carrier: ShipCarrier | null | undefined,
+  tracking: string | null | undefined
+): string | null {
+  const t = (tracking || '').trim();
+  if (!carrier || !t) return null;
+  switch (carrier) {
+    case 'usps':
+      return `https://tools.usps.com/go/TrackConfirmAction?tLabels=${encodeURIComponent(t)}`;
+    case 'ups':
+      return `https://www.ups.com/track?tracknum=${encodeURIComponent(t)}`;
+    case 'fedex':
+      return `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(t)}`;
+    case 'dhl':
+      return `https://www.dhl.com/global-en/home/tracking.html?tracking-id=${encodeURIComponent(t)}`;
+    default:
+      return null; // 'other' → no deep link
+  }
 }

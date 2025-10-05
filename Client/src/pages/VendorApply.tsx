@@ -216,7 +216,7 @@ export default function VendorApply(): React.ReactElement {
                 className={fieldClass(Boolean(errors.country))}
                 value={form.country ?? ''}
                 onChange={(e) => setField('country', e.target.value.toUpperCase() as any)}
-                placeholder="USA"
+                placeholder="US, GB, FR, etc."
                 maxLength={3}
               />
               {errors.country && (

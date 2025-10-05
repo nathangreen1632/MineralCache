@@ -23,6 +23,7 @@ import AdminVendorApps from './pages/admin/AdminVendorApps';
 import AdminOrders from './pages/admin/AdminOrders';
 import AdminOrderDetail from './pages/admin/AdminOrderDetail';
 import AdminSettings from './pages/admin/AdminSettings';
+import AdminAuctionsPage from './pages/admin/AdminAuctionsPage'; // ✅ NEW
 
 // Vendor product CRUD
 import ProductCreate from './pages/products/ProductCreate';
@@ -80,6 +81,7 @@ export default function AppRoutes(): React.ReactElement {
         <Route path="admin/vendor-apps" element={<AdminVendorApps />} />
         <Route path="admin/orders" element={<AdminOrders />} />
         <Route path="admin/orders/:id" element={<AdminOrderDetail />} />
+        <Route path="admin/auctions" element={<AdminAuctionsPage />} /> {/* ✅ NEW */}
         <Route path="admin/settings" element={<AdminSettings />} />
 
         {/* Vendor product CRUD */}

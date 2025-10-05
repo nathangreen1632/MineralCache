@@ -8,6 +8,10 @@ import {
   adminOrderIdParamSchema,
 } from '../../validation/adminOrders.schema.js';
 
+// ✅ NEW for CSV export
+import { User } from '../../models/user.model.js';
+import { buildAdminOrdersCsv } from '../../services/admin/adminOrdersCsv.service.js';
+
 // ✅ NEW imports for refunds
 import { db } from '../../models/sequelize.js';
 import { createRefund } from '../../services/stripe.service.js';
@@ -35,7 +39,8 @@ function toDateBound(s?: string, endOfDay = false): Date | null {
   return d;
 }
 
-/** GET /api/admin/orders */
+/* ----------------------------- Admin: List ------------------------------ */
+
 export async function listAdminOrders(req: Request, res: Response, next: NextFunction) {
   try {
     const parsed = adminListOrdersSchema.safeParse(req.query);
@@ -125,7 +130,8 @@ export async function listAdminOrders(req: Request, res: Response, next: NextFun
   }
 }
 
-/** GET /api/admin/orders/:id */
+/* ---------------------------- Admin: Get One ---------------------------- */
+
 export async function getAdminOrder(req: Request, res: Response, next: NextFunction) {
   try {
     const parsed = adminOrderIdParamSchema.safeParse(req.params);
@@ -164,7 +170,126 @@ export async function getAdminOrder(req: Request, res: Response, next: NextFunct
   }
 }
 
-// ======================= NEW: Admin Refund =======================
+/* ---------------------------- Admin: Export CSV ------------------------- */
+
+// small helpers for this handler
+function parseDate(d?: string | string[] | null): Date | null {
+  const v = typeof d === 'string' ? d.trim() : '';
+  if (!v) return null;
+  const dt = new Date(v);
+  return Number.isFinite(dt.valueOf()) ? dt : null;
+}
+function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+function endOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+function isAdminReq(req: Request): boolean {
+  const auth = (req as any).user ?? (req as any).auth ?? null;
+  const role = (auth?.role ?? '').toString().toLowerCase();
+  return role === 'admin' || role === 'superadmin' || role === 'owner';
+}
+
+/**
+ * GET /api/admin/orders.csv
+ * Query params (optional):
+ * - status: string ('paid','shipped','delivered','failed','refunded','cancelled','pending_payment' or 'all')
+ * - vendorId: number (only orders containing at least one item from this vendor)
+ * - from: YYYY-MM-DD
+ * - to: YYYY-MM-DD
+ * - sort: field (default 'createdAt')
+ * - dir: 'asc' | 'desc' (default 'desc')
+ * - limit: number (default 5000, max 25000)
+ */
+export async function exportCsv(req: Request, res: Response): Promise<void> {
+  if (!isAdminReq(req)) {
+    res.status(403).json({ ok: false, error: 'Admin only' });
+    return;
+  }
+
+  const q = req.query as Record<string, string | undefined>;
+
+  const status = q.status && q.status !== 'all' ? q.status : undefined;
+  const vendorId = q.vendorId ? Number(q.vendorId) : undefined;
+
+  const from = parseDate(q.from ?? undefined);
+  const to = parseDate(q.to ?? undefined);
+
+  const where: any = {};
+  if (status) where.status = status;
+  if (from || to) {
+    where.createdAt = {};
+    if (from) where.createdAt[Op.gte] = startOfDay(from);
+    if (to) where.createdAt[Op.lte] = endOfDay(to);
+  }
+
+  const sort = (q.sort ?? 'createdAt').toString();
+  const dir = (q.dir ?? 'desc').toString().toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+  const limitRaw = q.limit ? Number(q.limit) : 5000;
+  const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(25000, limitRaw)) : 5000;
+
+  // If filtering by vendor, use an EXISTS include (attributes: []), then fetch all items separately.
+  const includeForFilter: any[] = [];
+  if (Number.isFinite(vendorId as number)) {
+    includeForFilter.push({
+      model: OrderItem,
+      as: 'items',             // match your alias
+      attributes: [],
+      where: { vendorId: Number(vendorId) },
+      required: true,
+    });
+  }
+
+  const orders = await Order.findAll({
+    where,
+    include: includeForFilter,
+    order: [[sort, dir]],
+    limit,
+  });
+
+  const orderIds = orders.map((o) => Number((o as any).id)).filter((n) => Number.isFinite(n));
+  const items = orderIds.length
+    ? await OrderItem.findAll({ where: { orderId: { [Op.in]: orderIds } } })
+    : [];
+
+  const byOrderId = new Map<number, any[]>();
+  for (const it of items) {
+    const k = Number((it as any).orderId);
+    const cur = byOrderId.get(k) ?? [];
+    cur.push(it);
+    byOrderId.set(k, cur);
+  }
+
+  const buyerIds = Array.from(
+    new Set(orders.map((o) => Number((o as any).buyerUserId ?? 0)).filter((x) => Number.isFinite(x) && x > 0)),
+  );
+  const buyers = buyerIds.length
+    ? await User.findAll({ where: { id: { [Op.in]: buyerIds } }, attributes: ['id', 'email'] })
+    : [];
+
+  const emailById = new Map<number, string>();
+  for (const b of buyers) {
+    const id = Number((b as any).id);
+    const em = (b as any).email ?? '';
+    if (Number.isFinite(id)) emailById.set(id, em);
+  }
+
+  const csv = buildAdminOrdersCsv(orders as any[], byOrderId as any, emailById);
+
+  const file = `admin-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${file}"`);
+  // Add UTF-8 BOM for Excel compatibility
+  res.status(200).send('\uFEFF' + csv);
+}
+
+/* ---------------------------- Admin: Refund ------------------------------ */
 
 function hasFn(obj: any, key: string): obj is Record<string, any> {
   return obj && typeof obj[key] === 'function';

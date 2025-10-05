@@ -100,3 +100,33 @@ export function updateAdminSettings(body: Partial<AdminSettings>) {
   // Server expects PATCH for partial updates.
   return patch<{ ok: true }, Partial<AdminSettings>>('/admin/settings', body);
 }
+
+/* =========================
+   CSV Export (Admin)
+   ========================= */
+
+/**
+ * Builds the absolute API URL for exporting Admin Orders as CSV.
+ * Use in an <a href={adminOrdersCsvUrl(...)}>Export CSV</a>.
+ */
+export function adminOrdersCsvUrl(params: {
+  status?: AdminOrderStatus | 'all' | null;
+  vendorId?: string | number | null;
+  from?: string | null; // YYYY-MM-DD
+  to?: string | null;   // YYYY-MM-DD
+  sort?: string | null;
+  dir?: 'asc' | 'desc' | null;
+}): string {
+  const usp = new URLSearchParams();
+
+  if (params.status && params.status !== 'all') usp.set('status', String(params.status));
+  if (params.vendorId != null && String(params.vendorId).trim() !== '') usp.set('vendorId', String(params.vendorId));
+  if (params.from && params.from.trim() !== '') usp.set('from', params.from);
+  if (params.to && params.to.trim() !== '') usp.set('to', params.to);
+  if (params.sort && params.sort.trim() !== '') usp.set('sort', params.sort);
+  if (params.dir && params.dir.trim() !== '') usp.set('dir', params.dir.toLowerCase());
+
+  const qs = usp.toString();
+  // Use absolute /api path so <a href> works without the fetch helper
+  return `/api/admin/orders.csv${qs ? `?${qs}` : ''}`;
+}
