@@ -12,7 +12,7 @@ export type OnSaleProduct = {
 type ListResponse<T> = { items: T };
 
 export async function getFeaturedPhotos(): Promise<string[]> {
-  const { data, error } = await get<ListResponse<string[]>>('/public/featured-photos');
+  const { data, error } = await get<ListResponse<string[]>>('/public/featured-photos?primary=true&size=1600');
   if (error) throw new Error(error);
   return (data?.items ?? []).map((u) => String(u));
 }
