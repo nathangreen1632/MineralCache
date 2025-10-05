@@ -10,7 +10,6 @@ export default function HomePage(): React.ReactElement {
     useState<Awaited<ReturnType<typeof getOnSaleProducts>> | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // ✅ Generate stable unique keys once for skeleton placeholders
   const skeletonKeys = useMemo(() => {
     if (globalThis.crypto && 'randomUUID' in globalThis.crypto) {
       return Array.from({ length: 6 }, () => globalThis.crypto.randomUUID());
@@ -48,7 +47,6 @@ export default function HomePage(): React.ReactElement {
     };
   }, []);
 
-  // ----- Hero content (no nested ternaries) -----
   let heroContent: React.ReactNode;
   if (photos === null) {
     heroContent = (
@@ -88,7 +86,6 @@ export default function HomePage(): React.ReactElement {
     );
   }
 
-  // ----- On-sale content (no nested ternaries) -----
   let onSaleContent: React.ReactNode;
   if (onSale === null) {
     onSaleContent = (
@@ -140,7 +137,6 @@ export default function HomePage(): React.ReactElement {
       {/* Hero carousel */}
       <section>{heroContent}</section>
 
-      {/* On-sale grid: 2 columns down the page */}
       <section className="space-y-3 mb-12">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-extrabold text-[var(--theme-text)]">On sale</h2>
