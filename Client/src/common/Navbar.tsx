@@ -11,7 +11,7 @@ import {
   UserPlus,
   ChevronDown,
   LogIn,
-  LogOut,        // ✅
+  LogOut,
   Package,
   Settings,
   Banknote,
@@ -52,16 +52,11 @@ function SideNavLink({ to, label, end, Icon }: Readonly<LinkItem>) {
   );
 }
 
-// Button-style action (e.g., Sign out)
 function SideActionButton({
                             label,
                             Icon,
                             onClick,
-                          }: Readonly<{
-  label: string;
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  onClick: () => void;
-}>) {
+                          }: Readonly<{ label: string; Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; onClick: () => void }>) {
   return (
     <button type="button" onClick={onClick} className={itemClasses(false)} aria-label={label}>
       <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
@@ -154,12 +149,15 @@ export default function Navbar(): React.ReactElement {
         {/* Home */}
         <SideNavLink to="/" end label="Home" Icon={Home} />
 
-        {/* Catalog (admin & vendors build products) */}
-        {(isVendor || isAdmin) && (
+        {/* Shop for everyone; builder tools for vendor/admin */}
+        {(isVendor || isAdmin) ? (
           <NavGroup baseTo="/products" label="Catalog" Icon={Store}>
             <SideNavLink to="/products" end label="All Products" Icon={Store} />
             <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
           </NavGroup>
+        ) : (
+          // Public shoppers
+          <SideNavLink to="/products" end label="Shop" Icon={Store} />
         )}
 
         {/* Vendor tools (only vendors) */}
