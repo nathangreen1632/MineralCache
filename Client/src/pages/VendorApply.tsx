@@ -1,7 +1,8 @@
 // Client/src/pages/VendorApply.tsx
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { z } from 'zod';
-import { applyVendor } from '../api/vendor';
+import { applyVendor, getMyVendorFull } from '../api/vendor'; // ✅ added
+import { useAuthStore } from '../stores/useAuthStore'; // ✅ added
 
 // Mirror of server ApplySchema (client-side, non-deprecated Zod)
 const ApplySchema = z.object({
@@ -18,7 +19,7 @@ const ApplySchema = z.object({
     .optional()
     .nullable()
     .transform((v) => (v === '' ? null : v ?? null))
-    .refine((v) => v == null || z.url().safeParse(v).success, { message: 'Invalid URL.' }),
+    .refine((v) => v == null || z.string().url().safeParse(v).success, { message: 'Invalid URL.' }),
   country: z
     .string()
     .optional()
@@ -53,6 +54,8 @@ export default function VendorApply(): React.ReactElement {
   const [state, setState] = useState<FormState>({ kind: 'idle' });
 
   const hasErrors = useMemo(() => Object.keys(errors).length > 0, [errors]);
+
+  const me = useAuthStore((s) => s.me); // ✅ hydrate session after approval
 
   function setField<K extends keyof FormData>(key: K, value: FormData[K]) {
     const next = { ...form, [key]: value };
@@ -128,6 +131,39 @@ export default function VendorApply(): React.ReactElement {
     }
   }
 
+  // ✅ Poll for approval and unlock vendor features automatically
+  const checkStatusNow = useCallback(async () => {
+    try {
+      const res = await getMyVendorFull();
+      const vendor = (res as any)?.vendor ?? res;
+      if (vendor?.approvalStatus === 'approved') {
+        await me(); // refresh session: role -> 'vendor', vendorId set
+        window.location.href = '/vendor/dashboard';
+      }
+    } catch {
+      // ignore transient errors
+    }
+  }, [me]);
+
+  useEffect(() => {
+    if (state.kind !== 'submitted') return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    async function loop() {
+      await checkStatusNow();
+      if (!cancelled) {
+        timer = setTimeout(loop, 5000); // poll every 5s until approved
+      }
+    }
+
+    loop();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [state.kind, checkStatusNow]);
+
   const submitted = state.kind === 'submitted';
 
   return (
@@ -144,9 +180,22 @@ export default function VendorApply(): React.ReactElement {
           <p className="text-sm" style={{ color: 'var(--theme-text)' }}>
             Thanks! Your application is <strong>{state.status}</strong>.
           </p>
+
+          {/* ✅ Let the user manually check status while waiting */}
+          {state.status === 'pending' && (
+            <button
+              type="button"
+              onClick={checkStatusNow}
+              className="mt-3 inline-flex rounded-lg px-3 py-2 text-sm font-semibold"
+              style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
+            >
+              Check approval status
+            </button>
+          )}
+
           <a
             href="/vendor/dashboard"
-            className="mt-3 inline-flex rounded-lg px-3 py-2 text-sm font-semibold"
+            className="mt-3 ml-2 inline-flex rounded-lg px-3 py-2 text-sm font-semibold"
             style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
           >
             Go to Vendor Dashboard
@@ -155,10 +204,11 @@ export default function VendorApply(): React.ReactElement {
       ) : (
         <form onSubmit={onSubmit} className="space-y-5">
           <div>
-            <label htmlFor="Class of stone" className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
+            <label htmlFor="displayName" className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
               Display name
             </label>
             <input
+              id="displayName"
               className={fieldClass(Boolean(errors.displayName))}
               value={form.displayName}
               onChange={(e) => setField('displayName', e.target.value)}
@@ -173,8 +223,9 @@ export default function VendorApply(): React.ReactElement {
           </div>
 
           <div>
-            <label htmlFor="Tell buyers about your specialization" className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Bio</label>
+            <label htmlFor="bio" className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Bio</label>
             <textarea
+              id="bio"
               className={fieldClass(Boolean(errors.bio))}
               value={form.bio ?? ''}
               onChange={(e) => setField('bio', e.target.value)}
@@ -191,10 +242,11 @@ export default function VendorApply(): React.ReactElement {
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <label htmlFor="Logo URL" className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
+              <label htmlFor="logoUrl" className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
                 Logo URL
               </label>
               <input
+                id="logoUrl"
                 className={fieldClass(Boolean(errors.logoUrl))}
                 value={form.logoUrl ?? ''}
                 onChange={(e) => setField('logoUrl', e.target.value)}
@@ -209,10 +261,11 @@ export default function VendorApply(): React.ReactElement {
             </div>
 
             <div>
-              <label htmlFor="Country Code" className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
+              <label htmlFor="country" className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
                 Country
               </label>
               <input
+                id="country"
                 className={fieldClass(Boolean(errors.country))}
                 value={form.country ?? ''}
                 onChange={(e) => setField('country', e.target.value.toUpperCase() as any)}
