@@ -118,7 +118,7 @@ export default function Navbar(): React.ReactElement {
 
   const isAuthed = Boolean(user);
   const role = user?.role ?? 'buyer';
-  const isVendor = role === 'vendor';
+  const isVendor = role === 'vendor' || Number.isFinite(user?.vendorId);
   const isAdmin = role === 'admin';
 
   const AUCTIONS_ENABLED = String(import.meta.env.VITE_AUCTIONS_ENABLED || '').toLowerCase() === 'true';
