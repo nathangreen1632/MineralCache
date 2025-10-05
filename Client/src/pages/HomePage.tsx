@@ -141,7 +141,7 @@ export default function HomePage(): React.ReactElement {
       <section>{heroContent}</section>
 
       {/* On-sale grid: 2 columns down the page */}
-      <section className="space-y-3">
+      <section className="space-y-3 mb-12">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-extrabold text-[var(--theme-text)]">On sale</h2>
           <a
