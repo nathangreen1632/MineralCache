@@ -63,8 +63,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   async me() {
-    const { data } = await api<{ user: SessionUser | null }>('/auth/me');
-    const u = data?.user ?? null;
+    const { data } = await api<any>('/auth/me');
+
+    // accept any of: { user }, { me }, or the object itself
+    const raw = data ?? null;
+    const u: SessionUser | null =
+      (raw && (raw.user ?? raw.me ?? raw)) ? (raw.user ?? raw.me ?? raw) as SessionUser : null;
 
     const name = displayNameFrom(u);
     const gravatarHash = emailHash(u?.email);
@@ -73,11 +77,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   gravatarUrl(size = 64, fallback = 'identicon') {
-    const { gravatarHash, user } = get();
+    const { gravatarHash } = get();
     const hash = gravatarHash ?? '00000000000000000000000000000000';
-    if (!user?.email && hash.startsWith('0000')) {
-      return `https://www.gravatar.com/avatar/${hash}?s=${size}&d=${fallback}`;
-    }
     return `https://www.gravatar.com/avatar/${hash}?s=${size}&d=${fallback}`;
   },
 
