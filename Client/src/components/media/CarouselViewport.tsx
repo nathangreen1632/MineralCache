@@ -1,12 +1,14 @@
+// Client/src/components/media/CarouselViewport.tsx
 import React from 'react';
 
 export default function CarouselViewport({
                                            images,
                                            index,
-                                         }: Readonly<{ images: string[]; index: number; heightClass: string }>): React.ReactElement {
+                                           heightClass = 'h-[28rem]', // default taller height
+                                         }: Readonly<{ images: string[]; index: number; heightClass?: string }>): React.ReactElement {
   return (
     <div
-      className="h-full w-full transition-transform duration-700 ease-out flex"
+      className={['w-full transition-transform duration-700 ease-out flex', heightClass].join(' ')}
       style={{ transform: `translateX(-${index * 100}%)` }}
     >
       {images.map((src, i) => (
