@@ -1,6 +1,6 @@
 // Server/src/routes/products.route.ts
 import { Router } from 'express';
-import { requireAuth } from '../middleware/auth.middleware.js';
+import {requireAdminOrVendorOwner, requireAuth} from '../middleware/auth.middleware.js';
 import { recaptchaMiddleware } from '../middleware/recaptcha.middleware.js';
 import { validateBody, validateQuery } from '../middleware/validate.middleware.js';
 import { createProductSchema, updateProductSchema, listProductsQuerySchema } from '../validation/product.schema.js';
@@ -39,9 +39,9 @@ router.post('/:id/images', requireAuth, burstLimiter, uploadImagesLimiter, uploa
 
 // Photos management (vendor/admin)
 // Order: auth → rate-limit → (optional body validation) → handler
-router.post('/:id/images/:imageId/primary', requireAuth, burstLimiter, setPrimaryImage);
-router.post('/:id/images/reorder', requireAuth, burstLimiter, validateBody(reorderImagesSchema), reorderImages);
-router.delete('/:id/images/:imageId', requireAuth, burstLimiter, softDeleteImage);
-router.post('/:id/images/:imageId/restore', requireAuth, burstLimiter, restoreImage);
+router.post('/:id/images/:imageId/primary', requireAdminOrVendorOwner, burstLimiter, setPrimaryImage);
+router.post('/:id/images/reorder', requireAdminOrVendorOwner, burstLimiter, validateBody(reorderImagesSchema), reorderImages);
+router.delete('/:id/images/:imageId', requireAdminOrVendorOwner, burstLimiter, softDeleteImage);
+router.post('/:id/images/:imageId/restore', requireAdminOrVendorOwner, burstLimiter, restoreImage);
 
 export default router;
