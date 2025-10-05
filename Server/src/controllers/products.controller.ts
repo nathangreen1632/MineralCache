@@ -39,17 +39,23 @@ function zDetails(err: ZodError) {
   };
 }
 
-// Helper: vendor ownership for a specific product
+// in products.controller.ts
 async function assertVendorOwnsProduct(
   productId: number,
   userId: number,
   role: string
 ): Promise<boolean> {
-  if (role === 'admin') return true;
-  if (role !== 'vendor') return false;
-  const p = await Product.findOne({ where: { id: productId }, attributes: ['id', 'vendorId'] });
-  return !!p && Number((p as any).vendorId) === Number(userId);
+  if (role === 'admin' || role === 'superadmin' || role === 'owner') return true;
+
+  if (role !== 'vendor' || !Number.isFinite(userId)) return false;
+
+  const vendor = await Vendor.findOne({ where: { userId }, attributes: ['id'] });
+  if (!vendor) return false;
+
+  const p = await Product.findOne({ where: { id: productId }, attributes: ['vendorId'] });
+  return !!p && Number(p.vendorId) === Number(vendor.id);
 }
+
 
 /** ---------------------------------------------
  * Helpers: auth + vendor scope
