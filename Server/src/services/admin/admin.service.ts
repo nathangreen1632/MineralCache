@@ -1,6 +1,7 @@
 // Server/src/services/admin.service.ts
 import { Op } from 'sequelize';
 import { Vendor } from '../../models/vendor.model.js';
+import { User } from '../../models/user.model.js'; // ✅ NEW
 import {
   ensureVendorStripeAccount,
   createAccountLink,
@@ -25,6 +26,7 @@ export async function listVendorAppsSvc(page: number, pageSize: number) {
 /**
  * Approve a vendor and (if Stripe is enabled) return an onboarding link.
  * Also records audit fields: approvedBy and approvedAt, and clears rejectedReason.
+ * ✅ NEW: Promote owning user to { role: 'vendor', vendorId }
  */
 export async function approveVendorSvc(id: number, adminUserId: number) {
   if (!Number.isFinite(id) || id <= 0) {
@@ -44,8 +46,13 @@ export async function approveVendorSvc(id: number, adminUserId: number) {
   vendor.approvedBy = adminUserId;
   vendor.approvedAt = new Date();
   vendor.rejectedReason = null;
-
   await vendor.save();
+
+  // ✅ Promote the owning user to vendor and attach vendorId
+  await User.update(
+    { role: 'vendor', vendorId: Number(vendor.id) },
+    { where: { id: Number(vendor.userId) } }
+  );
 
   if (!stripeEnabled) {
     return {
@@ -96,7 +103,7 @@ export async function approveVendorSvc(id: number, adminUserId: number) {
   // Audit log placeholder
   // eslint-disable-next-line no-console
   console.log(
-    `[audit] Vendor ${vendor.id} approved by admin ${adminUserId} at ${new Date().toISOString()}`,
+    `[audit] Vendor ${vendor.id} approved by admin ${adminUserId} at ${new Date().toISOString()}`
   );
   // Email/log placeholder
   // eslint-disable-next-line no-console
@@ -107,6 +114,7 @@ export async function approveVendorSvc(id: number, adminUserId: number) {
 
 /**
  * Reject a vendor; records rejectedReason and clears approvedBy/approvedAt.
+ * (Optional: if you want to strictly revert the user, you can also set role:'buyer' and vendorId:null here.)
  */
 export async function rejectVendorSvc(id: number, reason: string | null) {
   if (!Number.isFinite(id) || id <= 0) {
@@ -126,6 +134,12 @@ export async function rejectVendorSvc(id: number, reason: string | null) {
   vendor.approvedAt = null;
 
   await vendor.save();
+
+  // If you want strict behavior on reject, uncomment:
+  // await User.update(
+  //   { role: 'buyer', vendorId: null },
+  //   { where: { id: Number(vendor.userId) } }
+  // );
 
   if (trimmed) {
     // eslint-disable-next-line no-console
