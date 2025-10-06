@@ -145,7 +145,7 @@ export default function VendorProductsPage(): React.ReactElement {
                     <div className="flex items-start justify-between gap-4">
                       <div className="grid gap-1">
                         <Link
-                          to={`/vendor/products/${p.id}/edit`}
+                          to={`/products/${p.id}`}
                           className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
                         >
                           {p.title}
@@ -172,7 +172,6 @@ export default function VendorProductsPage(): React.ReactElement {
                           className="w-20 h-20 object-cover rounded-lg"
                           style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
                           onError={(ev) => {
-                            // hide broken image gracefully
                             ev.currentTarget.style.display = 'none';
                           }}
                         />
