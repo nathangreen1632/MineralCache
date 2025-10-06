@@ -151,10 +151,8 @@ export default function Navbar(): React.ReactElement {
 
         {/* Shop for everyone; builder tools for vendor/admin */}
         {(isVendor || isAdmin) ? (
-          <NavGroup baseTo="/products" label="Catalog" Icon={Store}>
-            <SideNavLink to="/products" end label="All Products" Icon={Store} />
-            <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
-          </NavGroup>
+          <SideNavLink to="/products" label="Catalog" Icon={Store}>
+          </SideNavLink>
         ) : (
           // Public shoppers
           <SideNavLink to="/products" end label="Shop" Icon={Store} />
@@ -164,6 +162,7 @@ export default function Navbar(): React.ReactElement {
         {isVendor && (
           <NavGroup baseTo="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard}>
             <SideNavLink to="/vendor/products" label="Products" Icon={Store} />
+            <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
             <SideNavLink to="/vendor/orders" label="Orders" Icon={Package} />
             <SideNavLink to="/vendor/payouts" label="Payouts" Icon={Banknote} />
           </NavGroup>
