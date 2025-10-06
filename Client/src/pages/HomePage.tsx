@@ -4,11 +4,17 @@ import AutoCarousel from '../components/media/AutoCarousel';
 import ProductCard from '../components/products/ProductCard';
 import { getFeaturedPhotos, getOnSaleProducts } from '../api/public';
 
+const PAGE_SIZE = 24;
+
 export default function HomePage(): React.ReactElement {
   const [photos, setPhotos] = useState<string[] | null>(null);
   const [onSale, setOnSale] =
     useState<Awaited<ReturnType<typeof getOnSaleProducts>> | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  // Pager state
+  const [page, setPage] = useState(1);
+  const effectiveLimit = page * PAGE_SIZE;
 
   const skeletonKeys = useMemo(() => {
     if (globalThis.crypto && 'randomUUID' in globalThis.crypto) {
@@ -25,24 +31,41 @@ export default function HomePage(): React.ReactElement {
     return Array.from({ length: 6 }, (_, i) => `sk-${base}-${i}`);
   }, []);
 
+  // Fetch featured photos once
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const [fp, sale] = await Promise.all([getFeaturedPhotos(), getOnSaleProducts()]);
+        const fp = await getFeaturedPhotos();
         if (!alive) return;
         setPhotos(fp);
-        setOnSale(sale);
       } catch (e: any) {
         if (!alive) return;
-        setErr(e?.message || 'Failed to load content.');
         setPhotos([]);
-        setOnSale([]);
+        setErr(e?.message || 'Failed to load content.');
       }
     })();
     return () => { alive = false; };
   }, []);
 
+  // Fetch on-sale products whenever the page/limit changes
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const sale = await getOnSaleProducts({ limit: effectiveLimit });
+        if (!alive) return;
+        setOnSale(sale);
+      } catch (e: any) {
+        if (!alive) return;
+        setOnSale([]);
+        setErr(e?.message || 'Failed to load content.');
+      }
+    })();
+    return () => { alive = false; };
+  }, [effectiveLimit]);
+
+  // ---------- Hero ----------
   let heroContent: React.ReactNode;
   if (photos === null) {
     heroContent = (
@@ -80,10 +103,22 @@ export default function HomePage(): React.ReactElement {
     );
   }
 
+  // ---------- On Sale grid + pager ----------
+  const visibleOnSale = useMemo(() => {
+    if (!onSale) return [];
+    const start = (page - 1) * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
+    return onSale.slice(start, end);
+  }, [onSale, page]);
+
+  const canPrev = page > 1;
+  // If we got exactly `effectiveLimit` items back, there might be more → allow Next
+  const canNext = (onSale?.length ?? 0) === effectiveLimit;
+
   let onSaleContent: React.ReactNode;
   if (onSale === null) {
     onSaleContent = (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {skeletonKeys.map((key) => (
           <div
             key={key}
@@ -97,32 +132,61 @@ export default function HomePage(): React.ReactElement {
         ))}
       </div>
     );
-  } else if (onSale.length === 0) {
+  } else if (visibleOnSale.length === 0) {
     onSaleContent = (
       <div
         className="rounded-2xl border p-6"
         style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-card)' }}
       >
         <p className="text-sm text-[var(--theme-muted)]">
-          No items on sale right now. Check back soon!
+          No items on this page. Try the previous page.
         </p>
       </div>
     );
   } else {
     onSaleContent = (
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {onSale.map((p) => (
-          <ProductCard
-            key={p.id}
-            id={p.id}
-            slug={p.slug}
-            name={p.name}
-            imageUrl={p.imageUrl || undefined}
-            price={p.price}
-            salePrice={p.salePrice ?? undefined}
-          />
-        ))}
-      </div>
+      <>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {visibleOnSale.map((p) => (
+            <ProductCard
+              key={p.id}
+              id={p.id}
+              slug={p.slug}
+              name={p.name}
+              imageUrl={p.imageUrl || undefined}
+              price={p.price}
+              salePrice={p.salePrice ?? undefined}
+            />
+          ))}
+        </div>
+
+        {/* Pager */}
+        <div className="mt-4 flex items-center justify-between">
+          <button
+            type="button"
+            className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)] disabled:opacity-50"
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={!canPrev}
+            aria-label="Previous page"
+          >
+            Prev
+          </button>
+
+          <span className="text-sm text-[var(--theme-muted)]" aria-live="polite" role="text">
+            Page {page}
+          </span>
+
+          <button
+            type="button"
+            className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)] disabled:opacity-50"
+            onClick={() => setPage(p => p + 1)}
+            disabled={!canNext}
+            aria-label="Next page"
+          >
+            Next
+          </button>
+        </div>
+      </>
     );
   }
 
@@ -137,11 +201,10 @@ export default function HomePage(): React.ReactElement {
         >
           Welcome to Mineral Cache
         </span>
-              <span className="block mt-1 text-md md:text-2xl text-[var(--theme-muted)]">
+        <span className="block mt-1 text-md md:text-2xl text-[var(--theme-muted)]">
           The best place to buy and sell Minerals and Fossils
         </span>
       </header>
-
 
       {/* Hero carousel */}
       <section>{heroContent}</section>
