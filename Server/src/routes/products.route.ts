@@ -1,6 +1,6 @@
 // Server/src/routes/products.route.ts
 import { Router } from 'express';
-import {requireAdminOrVendorOwner, requireAuth} from '../middleware/auth.middleware.js';
+import { requireAdminOrVendorOwner, requireAuth } from '../middleware/auth.middleware.js';
 import { recaptchaMiddleware } from '../middleware/recaptcha.middleware.js';
 import { validateBody, validateQuery } from '../middleware/validate.middleware.js';
 import { createProductSchema, updateProductSchema, listProductsQuerySchema } from '../validation/product.schema.js';
@@ -15,6 +15,8 @@ import {
   reorderImages,
   softDeleteImage,
   restoreImage,
+  archiveProduct,   // ✅ NEW
+  reviveProduct,    // ✅ NEW
 } from '../controllers/products.controller.js';
 import { uploadPhotos, enforceTotalBatchBytes } from '../middleware/upload.middleware.js';
 import { uploadImagesLimiter } from '../middleware/uploadRateLimit.middleware.js';
@@ -33,7 +35,12 @@ router.post('/', requireAuth, validateBody(createProductSchema), recaptchaMiddle
 router.patch('/:id', requireAuth, validateBody(updateProductSchema), recaptchaMiddleware, updateProduct);
 router.delete('/:id', requireAuth, recaptchaMiddleware, deleteProduct);
 
-// Attach images (≤4)
+// ✅ Archive / Revive (soft delete + restore)
+// Order: auth → recaptcha → handler (mirrors delete route)
+router.post('/:id/archive', requireAuth, recaptchaMiddleware, archiveProduct);
+router.post('/:id/revive', requireAuth, recaptchaMiddleware, reviveProduct);
+
+// Attach images (≤6)
 // Order: auth → rate-limit → multer → total-batch limit → controller
 router.post('/:id/images', requireAuth, burstLimiter, uploadImagesLimiter, uploadPhotos.array('photos', 6), enforceTotalBatchBytes, attachImages);
 
