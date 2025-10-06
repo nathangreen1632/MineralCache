@@ -111,7 +111,7 @@ function AuthBootstrap({ children }: Readonly<{ children: React.ReactElement }>)
 
 export default function App(): React.ReactElement {
   // Container width (adjust per-route if you want)
-  const mainWidth = 'max-w-7xl 2xl:max-w-[80rem]';
+  const mainWidth = 'max-w-7xl 2xl:max-w-[110rem]';
 
   return (
     <AuthBootstrap>
