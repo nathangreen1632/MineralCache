@@ -21,6 +21,7 @@
     --c-l: #E9D7E1; /* Veridian → secondary green complement */
     --c-m: #C1EDF0; /* Burnt Umber → info/error-adjacent complement */
     --c-n: #F2F2F2; /* Erie Black → neutral hover/alt */
+    --c-o: #F5AF02; /* Orange (for highlights) */
 
     /* LIGHT MODE theme mapping */
     --theme-bg: var(--c-b);
@@ -45,6 +46,7 @@
     --theme-button-blue-hover: var(--c-c);
     --theme-button-gray: var(--c-c);
     --theme-button-dark: var(--c-a);
+    --theme-button-yellow: var(--c-o);
     --theme-button-hover: var(--c-k);
     --theme-pill-green: var(--c-l);
     --theme-pill-orange: var(--c-m);
@@ -97,6 +99,7 @@
     --c-l: #41785A; /* Veridian (green pill/cta) */
     --c-m: #902923; /* Burnt Umber (orange/danger alt) */
     --c-n: #191919; /* Erie Black (neutral alt) */
+    --c-o: #F5AF02; /* Orange (for highlights) */
     /* (Also available if needed: Night #0F0E0E) */
 
     /* DARK MODE theme mapping — mirrors your previous logic */
@@ -123,6 +126,7 @@
     --theme-button-gray: var(--c-b);
     --theme-button-dark: var(--c-e);
     --theme-button-hover: var(--c-k);
+    --theme-button-yellow: var(--c-o);
     --theme-pill-green: var(--c-l);
     --theme-pill-orange: var(--c-m);
 
