@@ -77,8 +77,8 @@ export default function AutoCarousel({
         <div className="absolute bottom-3 right-3">
           <Link
             to={ctaHref}
-            className="inline-flex rounded-xl px-4 py-2 text-sm font-semibold"
-            style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
+            className="inline-flex rounded-xl px-4 py-2 text-2xl font-semibold"
+            style={{ background: 'var(--theme-button-yellow)', color: 'var(--theme-text-white)' }}
           >
             {ctaLabel}
           </Link>
