@@ -110,7 +110,7 @@ export default function HomePage(): React.ReactElement {
     );
   } else {
     onSaleContent = (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {onSale.map((p) => (
           <ProductCard
             key={p.id}
@@ -127,13 +127,13 @@ export default function HomePage(): React.ReactElement {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-12">
       {/* Page header */}
       <header className="mt-2 text-center">
         <span
           role="text"
           aria-level={1}
-          className="block text-4xl md:text-6xl font-extrabold tracking-tight text-[var(--theme-text)]"
+          className="block text-4xl md:text-6xl font-extrabold tracking-tight text-[var(--theme-text)] mt-12 md:mt-16 lg:mt-20"
         >
           Welcome to Mineral Cache
         </span>
