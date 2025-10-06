@@ -137,7 +137,7 @@ export default function Navbar(): React.ReactElement {
       {/* Brand */}
       <Link
         to="/"
-        className="block text-xl font-extrabold tracking-tight text-[var(--theme-text)]"
+        className="block text-3xl font-extrabold tracking-tight text-[var(--theme-text)]"
         style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
         aria-label="Mineral Cache home"
       >
@@ -162,13 +162,13 @@ export default function Navbar(): React.ReactElement {
 
         {/* Vendor tools (only vendors) */}
         {isVendor && (
-          <>
-            <SideNavLink to="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard} />
-            <SideNavLink to="/vendor/products" label="Vendor · Products" Icon={Store} />
-            <SideNavLink to="/vendor/orders" label="Vendor · Orders" Icon={Package} />
-            <SideNavLink to="/vendor/payouts" label="Vendor · Payouts" Icon={Banknote} />
-          </>
+          <NavGroup baseTo="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard}>
+            <SideNavLink to="/vendor/products" label="Products" Icon={Store} />
+            <SideNavLink to="/vendor/orders" label="Orders" Icon={Package} />
+            <SideNavLink to="/vendor/payouts" label="Payouts" Icon={Banknote} />
+          </NavGroup>
         )}
+
 
         {/* Apply as Vendor (only when signed-in buyers) */}
         {isAuthed && !isVendor && (
