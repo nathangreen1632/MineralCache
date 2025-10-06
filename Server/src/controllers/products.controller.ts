@@ -337,6 +337,70 @@ export async function deleteProduct(req: Request, res: Response): Promise<void> 
   }
 }
 
+// --- ADD BELOW deleteProduct() (and export) ---
+
+// POST /products/:id/archive  → set archivedAt (soft-delete)
+export async function archiveProduct(req: Request, res: Response): Promise<void> {
+  if (!ensureAuthed(req, res)) return;
+
+  const idParsed = productIdParamSchema.safeParse(req.params);
+  if (!idParsed.success) {
+    res.status(400).json({ error: 'Invalid product id', details: zDetails(idParsed.error) });
+    return;
+  }
+
+  const vendor = await requireVendor(req, res);
+  if (!vendor) return;
+
+  const prod = await Product.findOne({
+    where: { id: idParsed.data.id, vendorId: vendor.id, archivedAt: { [Op.is]: null } as any },
+  });
+  if (!prod) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  try {
+    (prod as any).archivedAt = new Date();
+    await (prod as any).save();
+    res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ error: 'Failed to archive product', detail: e?.message });
+  }
+}
+
+// POST /products/:id/revive  → clear archivedAt (unarchive)
+export async function reviveProduct(req: Request, res: Response): Promise<void> {
+  if (!ensureAuthed(req, res)) return;
+
+  const idParsed = productIdParamSchema.safeParse(req.params);
+  if (!idParsed.success) {
+    res.status(400).json({ error: 'Invalid product id', details: zDetails(idParsed.error) });
+    return;
+  }
+
+  const vendor = await requireVendor(req, res);
+  if (!vendor) return;
+
+  const prod = await Product.findOne({
+    // allow finding even if currently archived
+    where: { id: idParsed.data.id, vendorId: vendor.id },
+  });
+  if (!prod) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  try {
+    (prod as any).archivedAt = null; // unarchive
+    await (prod as any).save();
+    res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ error: 'Failed to revive product', detail: e?.message });
+  }
+}
+
+
 /** ---------------------------------------------
  * Public reads
  * --------------------------------------------*/
