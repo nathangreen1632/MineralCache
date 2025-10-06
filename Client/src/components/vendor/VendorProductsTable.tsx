@@ -1,6 +1,12 @@
 // Client/src/components/vendor/VendorProductsTable.tsx
 import React, { useEffect, useState } from 'react';
-import { listVendorProducts, setProductOnSale, setProductArchived, type VendorProductRow } from '../../api/vendor';
+import {
+  listVendorProducts,
+  setProductOnSale,
+  setProductArchived,
+  type VendorProductRow,
+  type ListVendorProductsParams,
+} from '../../api/vendor';
 import { Link } from 'react-router-dom';
 
 type Load =
@@ -17,11 +23,17 @@ export default function VendorProductsTable(): React.ReactElement {
   const [state, setState] = useState<Load>({ kind: 'idle' });
   const [msg, setMsg] = useState<string | null>(null);
 
+  // NEW: filter + sort + paging
+  const [status, setStatus] = useState<ListVendorProductsParams['status']>('active');
+  const [sort, setSort] = useState<ListVendorProductsParams['sort']>('newest');
+  const [page, setPage] = useState(1);
+  const pageSize = 100; // keep your previous fetch size
+
   useEffect(() => {
     let alive = true;
     (async () => {
       setState({ kind: 'loading' });
-      const { data, error } = await listVendorProducts(1, 100);
+      const { data, error } = await listVendorProducts({ page, pageSize, status, sort });
       if (!alive) return;
       if (error || !data) {
         setState({ kind: 'error', message: error || 'Failed to load products' });
@@ -30,13 +42,13 @@ export default function VendorProductsTable(): React.ReactElement {
       setState({ kind: 'loaded', items: data.items ?? [], total: data.total ?? 0 });
     })();
     return () => { alive = false; };
-  }, []);
+  }, [page, pageSize, status, sort]);
 
   async function toggleOnSale(p: VendorProductRow, next: boolean) {
     if (state.kind !== 'loaded') return;
     setMsg(null);
     const prev = [...state.items];
-    const local = state.items.map(i => i.id === p.id ? { ...i, onSale: next } : i);
+    const local = state.items.map(i => (i.id === p.id ? { ...i, onSale: next } : i));
     setState({ kind: 'loaded', items: local, total: state.total });
     const { error } = await setProductOnSale(p.id, next);
     if (error) {
@@ -48,9 +60,24 @@ export default function VendorProductsTable(): React.ReactElement {
   async function toggleArchived(p: VendorProductRow, next: boolean) {
     if (state.kind !== 'loaded') return;
     setMsg(null);
+
+    // Optimistic UI:
+    // - Archiving while viewing "active" → remove from list
+    // - Reviving while viewing "archived" → remove from list
+    // - Otherwise (e.g., "all") → just flip the flag locally
     const prev = [...state.items];
-    const local = state.items.map(i => i.id === p.id ? { ...i, archived: next } : i);
+    let local: VendorProductRow[];
+
+    if (next === true && status === 'active') {
+      local = state.items.filter(i => i.id !== p.id);
+    } else if (next === false && status === 'archived') {
+      local = state.items.filter(i => i.id !== p.id);
+    } else {
+      local = state.items.map(i => (i.id === p.id ? { ...i, archived: next } : i));
+    }
+
     setState({ kind: 'loaded', items: local, total: state.total });
+
     const { error } = await setProductArchived(p.id, next);
     if (error) {
       setMsg(error);
@@ -58,7 +85,11 @@ export default function VendorProductsTable(): React.ReactElement {
     }
   }
 
-  const card = { background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' } as const;
+  const card = {
+    background: 'var(--theme-surface)',
+    borderColor: 'var(--theme-border)',
+    color: 'var(--theme-text)',
+  } as const;
 
   if (state.kind === 'idle' || state.kind === 'loading') {
     return (
@@ -77,35 +108,86 @@ export default function VendorProductsTable(): React.ReactElement {
   }
 
   const items = state.items;
+  const headerStyle = { background: 'var(--theme-card)' } as const;
+
+  const totalPages =
+    state.kind === 'loaded' ? Math.max(1, Math.ceil((state.total ?? 0) / pageSize)) : 1;
 
   return (
     <div className="rounded-2xl border" style={card}>
+      {/* Controls */}
+      <div className="flex flex-wrap items-center gap-3 p-4">
+        <label className="inline-flex items-center gap-2">
+          <span className="text-sm">Show</span>
+          <select
+            aria-label="Filter products by status"
+            className="rounded-xl border px-3 py-2 bg-[var(--theme-surface)] border-[var(--theme-border)]"
+            value={status ?? 'active'}
+            onChange={(e) => { setPage(1); setStatus(e.target.value as ListVendorProductsParams['status']); }}
+          >
+            <option value="active">Active</option>
+            <option value="archived">Archived</option>
+            <option value="all">All</option>
+          </select>
+        </label>
+
+        <label className="inline-flex items-center gap-2 ml-auto">
+          <span className="text-sm">Sort</span>
+          <select
+            aria-label="Sort products"
+            className="rounded-xl border px-3 py-2 bg-[var(--theme-surface)] border-[var(--theme-border)]"
+            value={sort ?? 'newest'}
+            onChange={(e) => { setPage(1); setSort(e.target.value as ListVendorProductsParams['sort']); }}
+          >
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="price_asc">Price ↑</option>
+            <option value="price_desc">Price ↓</option>
+          </select>
+        </label>
+      </div>
+
       {msg ? (
-        <div className="px-4 py-2 border-b text-sm" style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-error)' }}>
+        <div
+          className="px-4 py-2 border-t text-sm"
+          style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-error)' }}
+          role="status"
+          aria-live="polite"
+        >
           {msg}
         </div>
       ) : null}
 
+      {/* Table */}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="text-left">
-          <tr className="border-b" style={{ borderColor: 'var(--theme-border)' }}>
-            <th className="px-4 py-3">Item</th>
-            <th className="px-4 py-3">Price</th>
-            <th className="px-4 py-3">Photos</th>
-            <th className="px-4 py-3">On sale</th>
-            <th className="px-4 py-3">Archived</th>
-            <th className="px-4 py-3"></th>
+          <thead style={headerStyle}>
+          <tr>
+            <th className="px-4 py-3 text-left">Product</th>
+            <th className="px-4 py-3 text-left">Price</th>
+            <th className="px-4 py-3 text-left">Photos</th>
+            <th className="px-4 py-3 text-left">On sale</th>
+            <th className="px-4 py-3 text-left">Archived</th>
+            <th className="px-4 py-3 text-left">Actions</th>
           </tr>
           </thead>
           <tbody>
           {items.map((p) => (
-            <tr key={p.id} className="border-b last:border-b-0" style={{ borderColor: 'var(--theme-border)' }}>
+            <tr key={p.id} className="border-t border-[var(--theme-border)]">
               <td className="px-4 py-3">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-md overflow-hidden bg-[var(--theme-card)]">
-                    {p.primaryPhotoUrl ? <img src={p.primaryPhotoUrl} alt="" className="h-full w-full object-cover" /> : null}
-                  </div>
+                  {p.primaryPhotoUrl ? (
+                    <img
+                      src={p.primaryPhotoUrl}
+                      alt=""
+                      width={48}
+                      height={48}
+                      className="rounded-lg object-cover"
+                      style={{ background: 'var(--theme-card)' }}
+                    />
+                  ) : (
+                    <div className="h-12 w-12 rounded-lg" style={{ background: 'var(--theme-card)' }} />
+                  )}
                   <div className="min-w-0">
                     <div className="truncate font-medium">{p.title}</div>
                     <div className="text-xs opacity-70">#{p.id}</div>
@@ -144,8 +226,42 @@ export default function VendorProductsTable(): React.ReactElement {
               </td>
             </tr>
           ))}
+          {items.length === 0 && (
+            <tr>
+              <td className="px-4 py-8 text-center opacity-70" colSpan={6}>
+                {status === 'archived' ? 'No archived products.' : 'No products found.'}
+              </td>
+            </tr>
+          )}
           </tbody>
         </table>
+      </div>
+
+      {/* Footer with pager & hint */}
+      <div className="flex items-center justify-between p-4">
+        <div className="text-xs opacity-70">
+          Tip: Archive removes items from Active view. Switch “Show → Archived” to revive them.
+        </div>
+        <div className="inline-flex gap-2">
+          <button
+            type="button"
+            className="inline-flex rounded-xl px-3 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            aria-label="Previous page"
+          >
+            Prev
+          </button>
+          <button
+            type="button"
+            className="inline-flex rounded-xl px-3 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+            onClick={() => setPage(p => p + 1)}
+            disabled={page >= totalPages}
+            aria-label="Next page"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );
