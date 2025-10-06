@@ -68,9 +68,9 @@ export default function VendorProductsTable(): React.ReactElement {
     const prev = [...state.items];
     let local: VendorProductRow[];
 
-    if (next === true && status === 'active') {
+    if (next && status === 'active') {
       local = state.items.filter(i => i.id !== p.id);
-    } else if (next === false && status === 'archived') {
+    } else if (!next && status === 'archived') {
       local = state.items.filter(i => i.id !== p.id);
     } else {
       local = state.items.map(i => (i.id === p.id ? { ...i, archived: next } : i));
