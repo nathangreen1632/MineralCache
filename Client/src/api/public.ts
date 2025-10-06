@@ -12,13 +12,17 @@ export type OnSaleProduct = {
 type ListResponse<T> = { items: T };
 
 export async function getFeaturedPhotos(): Promise<string[]> {
-  const { data, error } = await get<ListResponse<string[]>>('/public/featured-photos?primary=true&size=1600');
+  const { data, error } = await get<ListResponse<string[]>>(
+    '/public/featured-photos?primary=true&size=1600'
+  );
   if (error) throw new Error(error);
   return (data?.items ?? []).map((u) => String(u));
 }
 
-export async function getOnSaleProducts(): Promise<OnSaleProduct[]> {
-  const { data, error } = await get<ListResponse<OnSaleProduct[]>>('/public/on-sale');
+/** Get on-sale products; optionally increase the server limit for paging on Home */
+export async function getOnSaleProducts(opts?: { limit?: number }): Promise<OnSaleProduct[]> {
+  const qs = opts?.limit ? `?limit=${encodeURIComponent(opts.limit)}` : '';
+  const { data, error } = await get<ListResponse<OnSaleProduct[]>>(`/public/on-sale${qs}`);
   if (error) throw new Error(error);
   return data?.items ?? [];
 }
