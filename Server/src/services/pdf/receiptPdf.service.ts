@@ -22,6 +22,10 @@ export type ReceiptData = {
   shippingCents: number;
   taxCents: number;
   totalCents: number;
+
+  // ✅ NEW: optional customizations (backwards compatible)
+  brandName?: string | null;        // defaults to 'Mineral Cache'
+  orderNumber?: string | null;      // if provided, header shows #orderNumber
 };
 
 function centsToUsd(cents: number): string {
@@ -43,13 +47,20 @@ export async function buildReceiptPdf(data: ReceiptData): Promise<Buffer> {
     doc.on('data', (c) => chunks.push(c as Buffer));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
 
+    const brand = (data.brandName && String(data.brandName)) || 'Mineral Cache';
+    const ordLabel = data.orderNumber ? `#${data.orderNumber}` : `#${data.orderId}`;
+
     // Header
-    doc.font('Helvetica-Bold').fontSize(18).text('Mineral Cache — Order Receipt');
+    doc.font('Helvetica-Bold').fontSize(18).text(`${brand} — Order Receipt`);
     doc.moveDown(0.25);
     doc.fontSize(11);
-    writeKeyValue(doc, 'Order #', String(data.orderId));
+    writeKeyValue(doc, 'Order', ordLabel);
     writeKeyValue(doc, 'Date:', new Date(data.createdAt).toLocaleString());
-    writeKeyValue(doc, 'Buyer:', data.buyerName ? `${data.buyerName} <${data.buyerEmail ?? ''}>` : (data.buyerEmail ?? undefined));
+    writeKeyValue(
+      doc,
+      'Buyer:',
+      data.buyerName ? `${data.buyerName} <${data.buyerEmail ?? ''}>` : (data.buyerEmail ?? undefined),
+    );
     doc.moveDown(0.5);
 
     // Addresses block
@@ -68,50 +79,79 @@ export async function buildReceiptPdf(data: ReceiptData): Promise<Buffer> {
     }
     doc.moveDown(0.75);
 
-    // Items table header
-    doc.moveDown(0.25);
-    doc.font('Helvetica-Bold');
+    // Table header drawer (used again on page breaks)
     const col = { title: 50, vendor: 260, qty: 380, unit: 430, total: 500 };
-    doc.text('Item', col.title, doc.y);
-    doc.text('Vendor', col.vendor, doc.y);
-    doc.text('Qty', col.qty, doc.y, { width: 30, align: 'right' });
-    doc.text('Unit', col.unit, doc.y, { width: 60, align: 'right' });
-    doc.text('Line Total', col.total, doc.y, { width: 80, align: 'right' });
-    doc.moveTo(50, doc.y + 3).lineTo(560, doc.y + 3).stroke();
-    doc.moveDown(0.25);
+    const drawTableHeader = () => {
+      doc.moveDown(0.25);
+      doc.font('Helvetica-Bold');
+      const headerY = doc.y;
+      doc.text('Item', col.title, headerY);
+      doc.text('Vendor', col.vendor, headerY);
+      doc.text('Qty', col.qty, headerY, { width: 30, align: 'right' });
+      doc.text('Unit', col.unit, headerY, { width: 60, align: 'right' });
+      doc.text('Line Total', col.total, headerY, { width: 80, align: 'right' });
+      doc.moveTo(50, doc.y + 3).lineTo(560, doc.y + 3).stroke();
+      doc.moveDown(0.25);
+      doc.font('Helvetica');
+    };
 
-    // Items rows
-    doc.font('Helvetica');
+    drawTableHeader();
+
+    // Simple page-break helper
+    const ensureSpace = (rowHeight: number) => {
+      const bottom = doc.page.height - doc.page.margins.bottom;
+      if (doc.y + rowHeight + 24 > bottom) {
+        doc.addPage();
+        drawTableHeader();
+      }
+    };
+
+    // Items rows (wrap correctly; compute max row height)
     data.items.forEach((it) => {
-      const y = doc.y;
-      const titleLines: string[] = [];
-      titleLines.push(it.title);
+      const titleLines: string[] = [it.title];
       if (it.sku) titleLines.push(`SKU: ${it.sku}`);
+      const titleText = titleLines.join(' • ');
+      const vendorText = it.vendorName ?? '';
 
-      doc.text(titleLines.join(' • '), col.title, y, { width: 190 });
-      doc.text(it.vendorName ?? '', col.vendor, y, { width: 100 });
+      // Measure heights for wrapping
+      const titleHeight = doc.heightOfString(titleText, { width: 190 });
+      const vendorHeight = doc.heightOfString(vendorText, { width: 100 });
+      const rowHeight = Math.max(titleHeight, vendorHeight, 12) + 4;
+
+      ensureSpace(rowHeight);
+
+      const y = doc.y;
+      // Draw columns
+      doc.text(titleText, col.title, y, { width: 190 });
+      doc.text(vendorText, col.vendor, y, { width: 100 });
       doc.text(String(it.quantity), col.qty, y, { width: 30, align: 'right' });
       doc.text(centsToUsd(it.unitPriceCents), col.unit, y, { width: 60, align: 'right' });
       doc.text(centsToUsd(it.lineTotalCents), col.total, y, { width: 80, align: 'right' });
-      doc.moveDown(0.2);
+
+      // Advance by computed row height
+      doc.y = y + rowHeight;
     });
 
     // Totals
     doc.moveDown(0.4);
     doc.moveTo(360, doc.y).lineTo(560, doc.y).stroke();
     doc.moveDown(0.2);
+
     const rightKey = (k: string, v: string) => {
       const y = doc.y;
       doc.font('Helvetica-Bold').text(k, 360, y, { width: 100, align: 'right' });
       doc.font('Helvetica').text(v, 470, y, { width: 90, align: 'right' });
       doc.moveDown(0.1);
     };
+
     rightKey('Subtotal:', centsToUsd(data.subtotalCents));
     rightKey('Shipping & Handling:', centsToUsd(data.shippingCents));
-    rightKey('Tax:', centsToUsd(data.taxCents));
+    if ((data.taxCents ?? 0) > 0) rightKey('Tax:', centsToUsd(data.taxCents));
+
     doc.moveDown(0.1);
     doc.moveTo(360, doc.y).lineTo(560, doc.y).stroke();
     doc.moveDown(0.1);
+
     doc.font('Helvetica-Bold');
     const y = doc.y;
     doc.text('Total:', 360, y, { width: 100, align: 'right' });
@@ -119,7 +159,10 @@ export async function buildReceiptPdf(data: ReceiptData): Promise<Buffer> {
 
     // Footer
     doc.moveDown(1.2);
-    doc.font('Helvetica-Oblique').fontSize(10).text('Thank you for your purchase from Mineral Cache.', { align: 'center' });
+    doc.font('Helvetica-Oblique')
+      .fontSize(10)
+      .text(`Thank you for your purchase from ${brand}.`, { align: 'center' });
+
     doc.end();
   });
 }
