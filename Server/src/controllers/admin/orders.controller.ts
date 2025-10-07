@@ -8,14 +8,14 @@ import {
   adminOrderIdParamSchema,
 } from '../../validation/adminOrders.schema.js';
 
-// ✅ NEW for CSV export
+// ✅ CSV export support
 import { User } from '../../models/user.model.js';
 import { buildAdminOrdersCsv } from '../../services/admin/adminOrdersCsv.service.js';
 
-// ✅ NEW imports for refunds
+// ✅ Refunds
 import { db } from '../../models/sequelize.js';
 import { createRefund } from '../../services/stripe.service.js';
-import { z, type ZodError } from 'zod'; // <-- add z for serializer
+import { z, type ZodError } from 'zod';
 
 // ---- minimal, non-deprecated Zod error serializer
 function zDetails(err: ZodError) {
@@ -45,7 +45,7 @@ export async function listAdminOrders(req: Request, res: Response, next: NextFun
   try {
     const parsed = adminListOrdersSchema.safeParse(req.query);
     if (!parsed.success) {
-      res.status(400).json({ error: 'Invalid query', details: zDetails(parsed.error) }); // ← no deprecated .flatten()
+      res.status(400).json({ error: 'Invalid query', details: zDetails(parsed.error) });
       return;
     }
 
@@ -100,11 +100,11 @@ export async function listAdminOrders(req: Request, res: Response, next: NextFun
       order: orderClause as any,
       offset,
       limit: pageSize,
-      distinct: true, // ensure count isn’t multiplied by include
+      distinct: true,
       include: [
         {
           model: OrderItem,
-          as: 'items', // ← must match alias in associations.ts
+          as: 'items',
           attributes: [
             'id',
             'orderId',
@@ -136,7 +136,7 @@ export async function getAdminOrder(req: Request, res: Response, next: NextFunct
   try {
     const parsed = adminOrderIdParamSchema.safeParse(req.params);
     if (!parsed.success) {
-      res.status(400).json({ error: 'Invalid order id', details: zDetails(parsed.error) }); // ← no .flatten()
+      res.status(400).json({ error: 'Invalid order id', details: zDetails(parsed.error) });
       return;
     }
 
@@ -144,7 +144,7 @@ export async function getAdminOrder(req: Request, res: Response, next: NextFunct
       include: [
         {
           model: OrderItem,
-          as: 'items', // ← include alias here too
+          as: 'items',
           attributes: [
             'id',
             'orderId',
@@ -170,122 +170,154 @@ export async function getAdminOrder(req: Request, res: Response, next: NextFunct
   }
 }
 
-/* ---------------------------- Admin: Export CSV ------------------------- */
+/* ------------------------- Admin: Export Orders CSV --------------------- */
 
-// small helpers for this handler
-function parseDate(d?: string | string[] | null): Date | null {
-  const v = typeof d === 'string' ? d.trim() : '';
-  if (!v) return null;
-  const dt = new Date(v);
-  return Number.isFinite(dt.valueOf()) ? dt : null;
-}
-function startOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-function endOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
-}
-function isAdminReq(req: Request): boolean {
-  const auth = (req as any).user ?? (req as any).auth ?? null;
-  const role = (auth?.role ?? '').toString().toLowerCase();
-  return role === 'admin' || role === 'superadmin' || role === 'owner';
+/** Build WHERE + optional vendor filter, mirroring listAdminOrders. Supports alias keys `from`/`to`. */
+async function buildAdminOrdersFilter(parsedData: any) {
+  const {
+    status,
+    vendorId,
+    buyerId,
+    paymentIntentId,
+    dateFrom,
+    dateTo,
+    from,
+    to,
+  } = parsedData ?? {};
+
+  const where: any = {};
+  if (status) where.status = status;
+  if (buyerId) where.buyerUserId = buyerId;
+  if (paymentIntentId) where.paymentIntentId = paymentIntentId;
+
+  const start = toDateBound(dateFrom ?? from, false);
+  const end = toDateBound(dateTo ?? to, true);
+  if (start && end) where.createdAt = { [Op.between]: [start, end] };
+  else if (start) where.createdAt = { [Op.gte]: start };
+  else if (end) where.createdAt = { [Op.lte]: end };
+
+  // Optional vendor filter: include only orders that contain at least one item for that vendor
+  if (vendorId) {
+    const rows = await OrderItem.findAll({
+      where: { vendorId },
+      attributes: ['orderId'],
+      group: ['orderId'],
+      raw: true,
+    });
+    const ids = rows.map((r: any) => Number(r.orderId)).filter((n) => Number.isFinite(n));
+    if (ids.length === 0) return { where: { id: { [Op.in]: [-1] } }, filteredOrderIds: [] as number[] };
+    where.id = { [Op.in]: ids };
+    return { where, filteredOrderIds: ids };
+  }
+
+  return { where, filteredOrderIds: null as number[] | null };
 }
 
 /**
  * GET /api/admin/orders.csv
- * Query params (optional):
- * - status: string ('paid','shipped','delivered','failed','refunded','cancelled','pending_payment' or 'all')
- * - vendorId: number (only orders containing at least one item from this vendor)
- * - from: YYYY-MM-DD
- * - to: YYYY-MM-DD
- * - sort: field (default 'createdAt')
- * - dir: 'asc' | 'desc' (default 'desc')
- * - limit: number (default 5000, max 25000)
+ * Exports orders that match the current filter set as CSV (unpaginated, capped).
  */
-export async function exportCsv(req: Request, res: Response): Promise<void> {
-  if (!isAdminReq(req)) {
-    res.status(403).json({ ok: false, error: 'Admin only' });
+export async function exportAdminOrdersCsv(req: Request, res: Response): Promise<void> {
+  // Query validation (same schema as listing; router also uses validateQuery)
+  const parsed = adminListOrdersSchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid query', details: zDetails(parsed.error) });
     return;
   }
 
-  const q = req.query as Record<string, string | undefined>;
+  // WHERE (with vendor filter if provided)
+  const { where } = await buildAdminOrdersFilter(parsed.data);
 
-  const status = q.status && q.status !== 'all' ? q.status : undefined;
-  const vendorId = q.vendorId ? Number(q.vendorId) : undefined;
+  // Sort: mirror list defaults; allow newest/oldest/amount
+  const sort = parsed.data.sort as string | undefined;
+  let orderClause: any[] = [['createdAt', 'DESC'], ['id', 'DESC']]; // newest
+  if (sort === 'oldest') orderClause = [['createdAt', 'ASC'], ['id', 'ASC']];
+  else if (sort === 'amount_desc') orderClause = [['totalCents', 'DESC'], ['id', 'DESC']];
+  else if (sort === 'amount_asc') orderClause = [['totalCents', 'ASC'], ['id', 'ASC']];
 
-  const from = parseDate(q.from ?? undefined);
-  const to = parseDate(q.to ?? undefined);
+  const HARD_CAP = 5000;
 
-  const where: any = {};
-  if (status) where.status = status;
-  if (from || to) {
-    where.createdAt = {};
-    if (from) where.createdAt[Op.gte] = startOfDay(from);
-    if (to) where.createdAt[Op.lte] = endOfDay(to);
-  }
-
-  const sort = (q.sort ?? 'createdAt').toString();
-  const dir = (q.dir ?? 'desc').toString().toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-
-  const limitRaw = q.limit ? Number(q.limit) : 5000;
-  const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(25000, limitRaw)) : 5000;
-
-  // If filtering by vendor, use an EXISTS include (attributes: []), then fetch all items separately.
-  const includeForFilter: any[] = [];
-  if (Number.isFinite(vendorId as number)) {
-    includeForFilter.push({
-      model: OrderItem,
-      as: 'items',             // match your alias
-      attributes: [],
-      where: { vendorId: Number(vendorId) },
-      required: true,
-    });
-  }
-
+  // Fetch orders (explicit attributes that exist per ERD; note: no buyerName column)
   const orders = await Order.findAll({
     where,
-    include: includeForFilter,
-    order: [[sort, dir]],
-    limit,
+    order: orderClause as any,
+    attributes: [
+      'id',
+      'createdAt',
+      'updatedAt',
+      'paidAt',
+      'failedAt',
+      'refundedAt',
+      'status',
+      'buyerUserId',
+      'subtotalCents',
+      'shippingCents',
+      'taxCents',
+      'totalCents',
+      'paymentIntentId',
+    ],
+    limit: HARD_CAP,
+    raw: true,
   });
 
-  const orderIds = orders.map((o) => Number((o as any).id)).filter((n) => Number.isFinite(n));
-  const items = orderIds.length
-    ? await OrderItem.findAll({ where: { orderId: { [Op.in]: orderIds } } })
-    : [];
-
-  const byOrderId = new Map<number, any[]>();
-  for (const it of items) {
-    const k = Number((it as any).orderId);
-    const cur = byOrderId.get(k) ?? [];
-    cur.push(it);
-    byOrderId.set(k, cur);
+  // If nothing to export, send header row only
+  if (orders.length === 0) {
+    const empty = buildAdminOrdersCsv([], new Map(), new Map());
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="admin-orders.csv"');
+    res.status(200).send('\uFEFF' + empty);
+    return;
   }
 
+  // Fetch items for these orders to compute counts/vendor sets inside the CSV service
+  const orderIds = orders.map((o: any) => Number(o.id));
+  const orderItems = await OrderItem.findAll({
+    where: { orderId: { [Op.in]: orderIds } },
+    attributes: [
+      'id',
+      'orderId',
+      'vendorId',
+      'title',
+      'unitPriceCents',
+      'quantity',
+      'lineTotalCents',
+    ],
+    raw: true,
+  });
+
+  // index items by orderId
+  const byOrderId = new Map<number, any[]>();
+  for (const it of orderItems as any[]) {
+    const oid = Number(it.orderId);
+    const cur = byOrderId.get(oid) ?? [];
+    cur.push(it);
+    byOrderId.set(oid, cur);
+  }
+
+  // Pull buyer emails (optional enrichment)
   const buyerIds = Array.from(
-    new Set(orders.map((o) => Number((o as any).buyerUserId ?? 0)).filter((x) => Number.isFinite(x) && x > 0)),
+    new Set(
+      orders
+        .map((o: any) => Number(o.buyerUserId ?? 0))
+        .filter((n) => Number.isFinite(n) && n > 0),
+    ),
   );
   const buyers = buyerIds.length
-    ? await User.findAll({ where: { id: { [Op.in]: buyerIds } }, attributes: ['id', 'email'] })
+    ? await User.findAll({ where: { id: { [Op.in]: buyerIds } }, attributes: ['id', 'email'], raw: true })
     : [];
 
   const emailById = new Map<number, string>();
-  for (const b of buyers) {
-    const id = Number((b as any).id);
-    const em = (b as any).email ?? '';
-    if (Number.isFinite(id)) emailById.set(id, em);
+  for (const b of buyers as any[]) {
+    emailById.set(Number(b.id), String(b.email ?? ''));
   }
 
+  // Build CSV body
   const csv = buildAdminOrdersCsv(orders as any[], byOrderId as any, emailById);
 
-  const file = `admin-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+  // Send (with UTF-8 BOM for Excel)
+  const stamp = new Date().toISOString().slice(0, 10);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${file}"`);
-  // Add UTF-8 BOM for Excel compatibility
+  res.setHeader('Content-Disposition', `attachment; filename="admin-orders-${stamp}.csv"`);
   res.status(200).send('\uFEFF' + csv);
 }
 
