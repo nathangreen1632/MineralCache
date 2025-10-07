@@ -38,15 +38,13 @@ export default function AdminOrders(): React.ReactElement {
 
   // ✅ NEW: CSV URL reflecting current filters
   const csvHref = useMemo(() => {
-    const sort = 'createdAt';
-    const dir: 'asc' | 'desc' = 'desc';
+    const sort: 'newest' | 'oldest' | 'amount_desc' | 'amount_asc' = 'newest'; // ← must match server schema
     return adminOrdersCsvUrl({
       status,
       vendorId: vendorId || null,
       from: from || null,
       to: to || null,
       sort,
-      dir,
     });
   }, [status, vendorId, from, to]);
 
