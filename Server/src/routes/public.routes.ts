@@ -1,10 +1,16 @@
 import { Router } from 'express';
-import { getFeaturedPhotosCtrl, getOnSaleProductsCtrl } from '../controllers/public.controller.js';
+import {
+  listPublicCategories,
+  getFeaturedPhotosCtrl,
+  getOnSaleProductsCtrl,
+  listPublicProductsCtrl,    // ← NEW
+} from '../controllers/public.controller.js';
 
 export const publicRouter: Router = Router();
 
-// GET /public/featured-photos
 publicRouter.get('/featured-photos', getFeaturedPhotosCtrl);
-
-// GET /public/on-sale
 publicRouter.get('/on-sale', getOnSaleProductsCtrl);
+publicRouter.get('/categories', listPublicCategories);
+
+// NEW: the endpoint your Category page calls
+publicRouter.get('/products', listPublicProductsCtrl);
