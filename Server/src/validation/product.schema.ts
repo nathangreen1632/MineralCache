@@ -72,6 +72,9 @@ export const createProductSchema = z.object({
   saleStartAt: z.coerce.date().optional().nullable(),
   saleEndAt: z.coerce.date().optional().nullable(),
 
+  // Category (single — enforced today, flexible later)
+  categoryId: id,
+
   // Images (keep your current placeholder contract)
   images: z.array(z.string().trim().max(500)).max(6).optional(),
 })
@@ -92,7 +95,12 @@ export const updateProductSchema = createProductSchema
 /** Archive = soft delete */
 export const archiveProductSchema = z.object({ id });
 
-/** Public list filters + sorting (supports new filters + keeps old min/max aliases) */
+/**
+ * Public list filters + sorting
+ * - NEW: category (slug)
+ * - NEW: dollars-based priceMin/priceMax (kept alongside existing cents fields for back-compat)
+ * - NEW: 'oldest' sort
+ */
 export const listProductsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(60).default(24),
@@ -113,10 +121,18 @@ export const listProductsQuerySchema = z.object({
   fluorescence: z.string().trim().max(50).optional(), // single or comma list of SW,LW,both,none
   condition: z.string().trim().max(200).optional(),    // single or comma list of enum values
 
-  // Sorting
-  sort: z.enum(['newest', 'price_asc', 'price_desc']).optional().default('newest'),
+  // Categories
+  category: z.string().trim().min(1).max(140).optional(),  // slug (preferred for public routes)
+  categoryId: z.coerce.number().int().positive().optional(), // internal/admin convenience
 
-  // Effective price range (in cents) — prefer these
+  // Sorting
+  sort: z.enum(['newest', 'oldest', 'price_asc', 'price_desc']).optional().default('newest'),
+
+  // Dollars (preferred for public endpoints)
+  priceMin: z.coerce.number().min(0).optional(),
+  priceMax: z.coerce.number().min(0).optional(),
+
+  // Effective price range (in cents) — legacy/back-compat
   priceMinCents: cents.optional(),
   priceMaxCents: cents.optional(),
 
