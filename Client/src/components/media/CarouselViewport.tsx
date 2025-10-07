@@ -1,14 +1,25 @@
 // Client/src/components/media/CarouselViewport.tsx
 import React from 'react';
 
+type Props = {
+  images: string[];
+  index: number;
+  /** Mobile-first height; can be overridden by parent */
+  heightClass?: string;
+};
+
 export default function CarouselViewport({
                                            images,
                                            index,
-                                           heightClass = 'h-[28rem]', // default taller height
-                                         }: Readonly<{ images: string[]; index: number; heightClass?: string }>): React.ReactElement {
+                                           heightClass = 'h-72 sm:h-80 md:h-[28rem] lg:h-[36rem] xl:h-[44rem]',
+                                         }: Readonly<Props>): React.ReactElement {
   return (
     <div
-      className={['w-full transition-transform duration-700 ease-out flex', heightClass].join(' ')}
+      className={[
+        'w-full h-full flex transition-transform duration-700 ease-out will-change-transform',
+        'motion-reduce:transition-none',
+        heightClass,
+      ].join(' ')}
       style={{ transform: `translateX(-${index * 100}%)` }}
     >
       {images.map((src, i) => (
@@ -17,9 +28,11 @@ export default function CarouselViewport({
             src={src}
             alt=""
             aria-hidden="true"
-            className="h-full w-full object-cover"
+            className="block h-full w-full object-contain md:object-fill object-center select-none pointer-events-none"
             loading={i === 0 ? 'eager' : 'lazy'}
+            fetchPriority={i === 0 ? 'high' : 'auto'}
             decoding="async"
+            draggable={false}
           />
         </div>
       ))}

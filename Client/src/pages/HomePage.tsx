@@ -71,8 +71,8 @@ export default function HomePage(): React.ReactElement {
   if (photos === null) {
     heroContent = (
       <div
-        className="rounded-2xl border p-6 h-80 animate-pulse"
-        style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-card)' }}
+        className="rounded-2xl border p-6 h-80 animate-pulse
+                   border-[var(--theme-border)] bg-[var(--theme-card)]"
       >
         <div className="h-full w-full bg-[var(--theme-surface)] rounded-xl" />
       </div>
@@ -80,8 +80,8 @@ export default function HomePage(): React.ReactElement {
   } else if (photos.length === 0) {
     heroContent = (
       <div
-        className="rounded-2xl border p-6 mt-12"
-        style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-card)' }}
+        className="rounded-2xl border p-6 mt-12
+                   border-[var(--theme-border)] bg-[var(--theme-card)]"
       >
         <h2 className="text-lg font-semibold text-[var(--theme-text)]">
           Welcome to Mineral Cache
@@ -123,8 +123,8 @@ export default function HomePage(): React.ReactElement {
         {skeletonKeys.map((key) => (
           <div
             key={key}
-            className="rounded-2xl border p-4 animate-pulse"
-            style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-card)' }}
+            className="rounded-2xl border p-4 animate-pulse
+                       border-[var(--theme-border)] bg-[var(--theme-card)]"
           >
             <div className="aspect-[4/3] w-full rounded-xl bg-[var(--theme-surface)]" />
             <div className="mt-3 h-4 w-2/3 rounded bg-[var(--theme-surface)]" />
@@ -136,8 +136,8 @@ export default function HomePage(): React.ReactElement {
   } else if (visibleOnSale.length === 0) {
     onSaleContent = (
       <div
-        className="rounded-2xl border p-6"
-        style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-card)' }}
+        className="rounded-2xl border p-6
+                   border-[var(--theme-border)] bg-[var(--theme-card)]"
       >
         <p className="text-sm text-[var(--theme-muted)]">
           No items on this page. Try the previous page.
@@ -165,7 +165,13 @@ export default function HomePage(): React.ReactElement {
         <div className="mt-4 flex items-center justify-between">
           <button
             type="button"
-            className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)] disabled:opacity-50"
+            className="inline-flex rounded-xl px-4 py-2 font-semibold
+                       bg-[var(--theme-button)] text-[var(--theme-text-white)]
+                       hover:bg-[var(--theme-button-hover)]
+                       focus-visible:ring-2 focus-visible:ring-offset-2
+                       focus-visible:ring-[var(--theme-focus)]
+                       focus-visible:ring-offset-[var(--theme-surface)]
+                       disabled:opacity-50"
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={!canPrev}
             aria-label="Previous page"
@@ -179,7 +185,13 @@ export default function HomePage(): React.ReactElement {
 
           <button
             type="button"
-            className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)] disabled:opacity-50"
+            className="inline-flex rounded-xl px-4 py-2 font-semibold
+                       bg-[var(--theme-button)] text-[var(--theme-text-white)]
+                       hover:bg-[var(--theme-button-hover)]
+                       focus-visible:ring-2 focus-visible:ring-offset-2
+                       focus-visible:ring-[var(--theme-focus)]
+                       focus-visible:ring-offset-[var(--theme-surface)]
+                       disabled:opacity-50"
             onClick={() => setPage(p => p + 1)}
             disabled={!canNext}
             aria-label="Next page"
@@ -200,10 +212,10 @@ export default function HomePage(): React.ReactElement {
           aria-level={1}
           className="block text-4xl md:text-6xl font-extrabold tracking-tight text-[var(--theme-text)] mt-12 md:mt-16 lg:mt-20"
         >
-          Welcome to Mineral Cache
+          Welcome to Mineral<span className="italic">Cache</span>
         </span>
         <span className="block mt-1 text-md md:text-2xl text-[var(--theme-muted)]">
-          The best place to buy and sell Minerals and Fossils
+          The multi-vendor mineral & fossil marketplace
         </span>
       </header>
 
@@ -230,10 +242,10 @@ export default function HomePage(): React.ReactElement {
 
         {err && (
           <div
-            className="rounded-md border p-3"
-            style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-card-alt)' }}
+            className="rounded-md border p-3
+                       border-[var(--theme-border)] bg-[var(--theme-card-alt)]"
           >
-            <p className="text-sm" style={{ color: 'var(--theme-error)' }}>{err}</p>
+            <p className="text-sm text-[var(--theme-error)]">{err}</p>
           </div>
         )}
       </section>

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { listCategories, type PublicCategory } from '../../api/public';
 
 const VISIBLE = 8;
-const ROTATE_MS = 15000;
+const ROTATE_MS = 5000;
 
 function getWindow<T>(arr: T[], start: number, size: number): T[] {
   const out: T[] = [];
@@ -84,10 +84,11 @@ export default function CategoriesRow(): React.ReactElement {
           type="button"
           aria-pressed={paused}
           onClick={() => setPaused((p) => !p)}
-          className="inline-flex rounded-xl px-4 py-2 bg-[var(--theme-button)] text-[var(--theme-text-white)] text-xs font-bold hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+          className="hidden md:inline-flex rounded-xl px-4 py-2 bg-[var(--theme-button)] text-[var(--theme-text-white)] text-xs font-bold hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
         >
           {paused ? 'Resume' : 'Pause'}
         </button>
+
       </div>
 
       <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-4">
