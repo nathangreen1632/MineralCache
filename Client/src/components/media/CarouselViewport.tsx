@@ -17,7 +17,7 @@ export default function CarouselViewport({
             src={src}
             alt=""
             aria-hidden="true"
-            className="h-full w-full object-cover"
+            className="h-full w-full object-fill"
             loading={i === 0 ? 'eager' : 'lazy'}
             decoding="async"
           />
