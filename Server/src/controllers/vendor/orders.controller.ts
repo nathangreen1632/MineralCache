@@ -145,7 +145,7 @@ function renderPackingSlipHTML(opts: {
     .join('');
 
   // Prefer a preformatted shippingAddressText if present; fallback to individual fields
-  let shipToHtml = '';
+  let shipToHtml: string;
   if (shipToBlock && shipToBlock.trim() !== '') {
     shipToHtml = `<pre style="margin:0;white-space:pre-wrap">${escapeHtml(shipToBlock)}</pre>`;
   } else {
@@ -175,7 +175,7 @@ function renderPackingSlipHTML(opts: {
   });
 
   return `<!doctype html>
-<html>
+<html lang="en-US">
 <head>
 <meta charset="utf-8" />
 <title>Packing Slip • Order #${order.id} • ${brandName}</title>
