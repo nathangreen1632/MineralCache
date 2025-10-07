@@ -1,3 +1,5 @@
+// Client/src/components/media/CarouselControls.tsx
+
 import React from 'react';
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
 
