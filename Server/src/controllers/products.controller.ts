@@ -10,6 +10,10 @@ import sharp from 'sharp';
 import { Product } from '../models/product.model.js';
 import { Vendor } from '../models/vendor.model.js';
 import { ProductImage } from '../models/productImage.model.js';
+// NEW: categories
+import { Category } from '../models/category.model.js';
+import { ProductCategory } from '../models/productCategory.model.js';
+
 import {
   createProductSchema,
   updateProductSchema,
@@ -197,6 +201,13 @@ export async function createProduct(req: Request, res: Response): Promise<void> 
       } as any
     );
 
+    // NEW: Assign the single required category
+    await ProductCategory.destroy({ where: { productId: Number(created.id) } });
+    await ProductCategory.create({
+      productId: Number(created.id),
+      categoryId: Number(p.categoryId),
+    });
+
     res.status(201).json({ ok: true, id: Number(created.id) });
   } catch (e: any) {
     res.status(500).json({ error: 'Failed to create product', detail: e?.message });
@@ -299,8 +310,17 @@ export async function updateProduct(req: Request, res: Response): Promise<void> 
     }
 
     Object.assign(prod, patch, { updatedAt: new Date() });
-
     await (prod as any).save();
+
+    // NEW: If categoryId provided, reset the single link
+    if (Object.prototype.hasOwnProperty.call(p, 'categoryId')) {
+      await ProductCategory.destroy({ where: { productId: Number(prod.id) } });
+      await ProductCategory.create({
+        productId: Number(prod.id),
+        categoryId: Number(p.categoryId),
+      });
+    }
+
     res.json({ ok: true });
   } catch (e: any) {
     res.status(500).json({ error: 'Failed to update product', detail: e?.message });
@@ -514,6 +534,13 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       fluorescence,
       condition,
       sort,
+
+      // NEW: category filters + dollar inputs
+      category,
+      categoryId,
+      priceMin, // dollars
+      priceMax, // dollars
+
       // Back-compat (deprecated)
       minCents,
       maxCents,
@@ -566,9 +593,11 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       }
     }
 
-    // effective price range
-    const minP = priceMinCents ?? minCents ?? null;
-    const maxP = priceMaxCents ?? maxCents ?? null;
+    // effective price range — support dollars (priceMin/priceMax) and cents (new/legacy)
+    const dMin = typeof priceMin === 'number' ? Math.round(priceMin * 100) : undefined;
+    const dMax = typeof priceMax === 'number' ? Math.round(priceMax * 100) : undefined;
+    const minP = (dMin ?? priceMinCents ?? minCents) ?? null;
+    const maxP = (dMax ?? priceMaxCents ?? maxCents) ?? null;
     if (minP != null || maxP != null) {
       const eff = effectivePriceExpr(nowIso);
       if (minP != null && maxP != null) {
@@ -600,37 +629,59 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       order = [[effectivePriceExpr(nowIso), 'ASC'], ['id', 'ASC']] as unknown as Order;
     } else if (sort === 'price_desc') {
       order = [[effectivePriceExpr(nowIso), 'DESC'], ['id', 'DESC']] as unknown as Order;
+    } else if (sort === 'oldest') {
+      order = [['createdAt', 'ASC'], ['id', 'ASC']] as unknown as Order;
     } else {
       order = [['createdAt', 'DESC'], ['id', 'DESC']] as unknown as Order;
     }
 
     const offset = (page - 1) * pageSize;
 
-    // ⬇️ include ONE image per product, ordered by primary → sortOrder → id
+    // Build include chain
+    const include: any[] = [];
+
+    // NEW: category join (by slug or id)
+    if (category || categoryId) {
+      const whereCat: any = {};
+      if (category) whereCat.slug = String(category);
+      if (categoryId) whereCat.id = Number(categoryId);
+
+      include.push({
+        model: Category,
+        as: 'categories',
+        through: { attributes: [] },
+        where: whereCat,
+        required: true,
+        attributes: ['id', 'name', 'slug'],
+      });
+    }
+
+    // ONE image per product, ordered by primary → sortOrder → id
+    include.push({
+      model: ProductImage,
+      as: 'images',
+      attributes: ['v320Path', 'v800Path', 'v1600Path', 'origPath', 'isPrimary', 'sortOrder'],
+      separate: true, // don't blow up row count
+      limit: 1,       // only the cover we need for the card
+      order: [
+        ['isPrimary', 'DESC'],
+        ['sortOrder', 'ASC'],
+        ['id', 'ASC'],
+      ],
+    });
+
     const { rows, count } = await Product.findAndCountAll({
       where: { [Op.and]: andClauses },
       order,
       offset,
       limit: pageSize,
-      include: [
-        {
-          model: ProductImage,
-          as: 'images',
-          attributes: ['v320Path', 'v800Path', 'v1600Path', 'origPath', 'isPrimary', 'sortOrder'],
-          separate: true, // don't blow up row count
-          limit: 1,       // only the cover we need for the card
-          order: [
-            ['isPrimary', 'DESC'],
-            ['sortOrder', 'ASC'],
-            ['id', 'ASC'],
-          ],
-        },
-      ],
+      include,
+      distinct: true, // keep count accurate when a join is present
     });
 
     // Flatten a primaryImageUrl for the client (and keep images[0] if you want)
     const items = rows.map((p) => {
-      const j: any = p.toJSON();   // no assertion; same effect, Sonar-friendly
+      const j: any = p.toJSON();
       const cover = Array.isArray(j.images) && j.images[0] ? j.images[0] : null;
       const rel =
         cover?.v800Path || cover?.v320Path || cover?.v1600Path || cover?.origPath || null;
@@ -648,7 +699,7 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       page,
       pageSize,
       total: count,
-      totalPages: Math.ceil(count / pageSize),
+      totalPages: Math.ceil((count) / pageSize),
     });
   } catch (e: any) {
     res.status(500).json({ error: 'Failed to list products', detail: e?.message });
