@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+// Client/src/common/Navbar.tsx
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import {
   Home,
@@ -16,8 +17,19 @@ import {
   Settings,
   Banknote,
   ShieldCheck,
+  Menu,
+  X,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/useAuthStore';
+
+/** Brand helper so we get "MineralCache" with italic "Cache" consistently */
+function BrandName({ className }: { className?: string }) {
+  return (
+    <span className={className}>
+      Mineral<span className="italic">Cache</span>
+    </span>
+  );
+}
 
 type LinkItem = {
   to: string;
@@ -112,7 +124,7 @@ function NavGroup({
   );
 }
 
-export default function Navbar(): React.ReactElement {
+function NavContent(): React.ReactElement {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
@@ -121,99 +133,178 @@ export default function Navbar(): React.ReactElement {
   const isVendor = role === 'vendor' || Number.isFinite(user?.vendorId);
   const isAdmin = role === 'admin';
 
-  const AUCTIONS_ENABLED = String(import.meta.env.VITE_AUCTIONS_ENABLED || '').toLowerCase() === 'true';
+  const AUCTIONS_ENABLED =
+    String(import.meta.env.VITE_AUCTIONS_ENABLED || '').toLowerCase() === 'true';
 
   return (
-    <aside
-      className={[
-        'w-64 shrink-0',
-        'border-r border-[var(--theme-border)]',
-        'bg-[var(--theme-surface)]',
-        'sticky top-0 h-screen overflow-y-auto',
-        'px-4 py-4',
-      ].join(' ')}
-      aria-label="Primary navigation"
-    >
-      {/* Brand */}
-      <Link
-        to="/"
-        className="block text-3xl font-extrabold tracking-tight text-[var(--theme-text)]"
-        style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
-        aria-label="Mineral Cache home"
+    <nav className="mt-6 grid gap-1" aria-label="Main">
+      <SideNavLink to="/" end label="Home" Icon={Home} />
+      {(isVendor || isAdmin) ? (
+        <SideNavLink to="/products" label="Catalog" Icon={Store} />
+      ) : (
+        <SideNavLink to="/products" end label="Shop" Icon={Store} />
+      )}
+      {isVendor && (
+        <NavGroup baseTo="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard}>
+          <SideNavLink to="/vendor/products" label="Products" Icon={Store} />
+          <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
+          <SideNavLink to="/vendor/orders" label="Orders" Icon={Package} />
+          <SideNavLink to="/vendor/payouts" label="Payouts" Icon={Banknote} />
+        </NavGroup>
+      )}
+      {isAuthed && !isVendor && (
+        <SideNavLink to="/vendor/apply" label="Apply as Vendor" Icon={UserPlus} />
+      )}
+      {isAdmin && (
+        <>
+          <SideNavLink to="/admin" label="Admin · Dashboard" Icon={LayoutDashboard} />
+          <SideNavLink to="/admin/vendor-apps" label="Admin · Vendor Apps" Icon={ClipboardList} />
+          <SideNavLink to="/admin/orders" label="Admin · Orders" Icon={Package} />
+          {AUCTIONS_ENABLED && (
+            <SideNavLink to="/admin/auctions" label="Admin · Auctions" Icon={ShieldCheck} />
+          )}
+          <SideNavLink to="/admin/settings" label="Admin · Settings" Icon={Settings} />
+        </>
+      )}
+      {isAuthed && (
+        <>
+          <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
+          <SideNavLink to="/checkout" label="Checkout" Icon={CreditCard} />
+        </>
+      )}
+      {isAuthed && <SideNavLink to="/account/orders" label="My Orders" Icon={Package} />}
+      {!isAuthed ? (
+        <>
+          <SideNavLink to="/login" label="Sign in" Icon={LogIn} />
+          <SideNavLink to="/register" label="Create account" Icon={UserPlus} />
+        </>
+      ) : (
+        <SideActionButton
+          label="Sign out"
+          Icon={LogOut}
+          onClick={() => {
+            logout().catch(() => {});
+          }}
+        />
+      )}
+    </nav>
+  );
+}
+
+export default function Navbar(): React.ReactElement {
+  const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const location = useLocation();
+
+  // Close on route change
+  useEffect(() => { setOpen(false); }, [location.pathname]);
+
+  // Close on outside click (document listener)
+  useEffect(() => {
+    function onDocClick(e: MouseEvent | TouchEvent) {
+      if (!open) return;
+      const t = e.target as Node | null;
+      const inPanel = panelRef.current && t && panelRef.current.contains(t);
+      const inButton = buttonRef.current && t && buttonRef.current.contains(t);
+      if (!inPanel && !inButton) setOpen(false);
+    }
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('touchstart', onDocClick, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('touchstart', onDocClick);
+    };
+  }, [open]);
+
+  // Close on Escape
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Focus the panel when opened
+  useEffect(() => { if (open) panelRef.current?.focus(); }, [open]);
+
+  const label = open ? 'Close navigation' : 'Open navigation';
+
+  return (
+    <>
+      {/* Hamburger: visible at ≤1024px, hidden when >1024px */}
+      <button
+        ref={buttonRef}
+        type="button"
+        className="hidden max-[1025px]:inline-flex fixed top-3 left-3 z-50 items-center rounded-xl px-3 py-2
+                   bg-[var(--theme-button)] text-[var(--theme-text-white)]
+                   hover:bg-[var(--theme-button-hover)]
+                   focus-visible:ring-2 focus-visible:ring-offset-2
+                   focus-visible:ring-[var(--theme-focus)]
+                   focus-visible:ring-offset-[var(--theme-surface)]
+                   shadow-[0_10px_30px_var(--theme-shadow)]"
+        aria-label={label}
+        aria-expanded={open}
+        aria-controls="mobile-nav-panel"
+        onClick={() => setOpen((v) => !v)}
       >
-        Mineral Cache
-      </Link>
+        {open ? <X className="h-4 w-4" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
+      </button>
 
-      {/* Nav */}
-      <nav className="mt-6 grid gap-1" aria-label="Main">
-        {/* Home */}
-        <SideNavLink to="/" end label="Home" Icon={Home} />
+      {/* Floating overlay panel: only render at ≤1024px */}
+      {open && (
+        <div className="hidden max-[1024px]:block fixed inset-0 z-40">
+          <div
+            id="mobile-nav-panel"
+            ref={panelRef}
+            tabIndex={-1}
+            role="text"
+            aria-modal="true"
+            aria-labelledby="mobile-nav-title"
+            className="absolute top-3 left-3 right-3 max-h-[85vh] overflow-y-auto
+                       rounded-2xl border border-[var(--theme-border)]
+                       bg-[var(--theme-surface)] shadow-[0_10px_30px_var(--theme-shadow)] p-4"
+          >
+            <div className="flex items-center justify-between">
+              <Link
+                id="mobile-nav-title"
+                to="/"
+                className="text-2xl font-extrabold tracking-tight text-[var(--theme-text)] mt-4"
+                style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
+                onClick={() => setOpen(false)}
+                aria-label="MineralCache home"
+              >
+                <BrandName />
+              </Link>
+            </div>
 
-        {/* Shop for everyone; builder tools for vendor/admin */}
-        {(isVendor || isAdmin) ? (
-          <SideNavLink to="/products" label="Catalog" Icon={Store}>
-          </SideNavLink>
-        ) : (
-          // Public shoppers
-          <SideNavLink to="/products" end label="Shop" Icon={Store} />
-        )}
+            <div className="mt-4 grid gap-1">
+              <NavContent />
+            </div>
+          </div>
+        </div>
+      )}
 
-        {/* Vendor tools (only vendors) */}
-        {isVendor && (
-          <NavGroup baseTo="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard}>
-            <SideNavLink to="/vendor/products" label="Products" Icon={Store} />
-            <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
-            <SideNavLink to="/vendor/orders" label="Orders" Icon={Package} />
-            <SideNavLink to="/vendor/payouts" label="Payouts" Icon={Banknote} />
-          </NavGroup>
-        )}
-
-
-        {/* Apply as Vendor (only when signed-in buyers) */}
-        {isAuthed && !isVendor && (
-          <SideNavLink to="/vendor/apply" label="Apply as Vendor" Icon={UserPlus} />
-        )}
-
-        {/* Admin */}
-        {isAdmin && (
-          <>
-            <SideNavLink to="/admin" label="Admin · Dashboard" Icon={LayoutDashboard} />
-            <SideNavLink to="/admin/vendor-apps" label="Admin · Vendor Apps" Icon={ClipboardList} />
-            <SideNavLink to="/admin/orders" label="Admin · Orders" Icon={Package} />
-            {AUCTIONS_ENABLED && (
-              <SideNavLink to="/admin/auctions" label="Admin · Auctions" Icon={ShieldCheck} />
-            )}
-            <SideNavLink to="/admin/settings" label="Admin · Settings" Icon={Settings} />
-          </>
-        )}
-
-        {/* Cart & Checkout — hide unless logged in */}
-        {isAuthed && (
-          <>
-            <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
-            <SideNavLink to="/checkout" label="Checkout" Icon={CreditCard} />
-          </>
-        )}
-
-        {/* Account — hide unless logged in */}
-        {isAuthed && <SideNavLink to="/account/orders" label="My Orders" Icon={Package} />}
-
-        {/* Auth */}
-        {!isAuthed ? (
-          <>
-            <SideNavLink to="/login" label="Sign in" Icon={LogIn} />
-            <SideNavLink to="/register" label="Create account" Icon={UserPlus} />
-          </>
-        ) : (
-          <SideActionButton
-            label="Sign out"
-            Icon={LogOut}
-            onClick={() => {
-              logout().catch(() => {});
-            }}
-          />
-        )}
-      </nav>
-    </aside>
+      {/* Desktop sidebar: visible only when width > 1024px */}
+      <aside
+        className="hidden min-[1025px]:block w-64 shrink-0
+                   border-r border-[var(--theme-border)]
+                   bg-[var(--theme-surface)]
+                   sticky top-0 h-screen overflow-y-auto
+                   px-4 py-4"
+        aria-label="Primary navigation"
+      >
+        <Link
+          to="/"
+          className="block text-3xl font-extrabold tracking-tight text-[var(--theme-text)]"
+          style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
+          aria-label="MineralCache home"
+        >
+          <BrandName />
+        </Link>
+        <NavContent />
+      </aside>
+    </>
   );
 }
