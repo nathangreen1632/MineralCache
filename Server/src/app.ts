@@ -1,4 +1,4 @@
-import express from 'express';
+import express, {Express} from 'express';
 import path from 'node:path';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -15,12 +15,13 @@ import { jsonErrorHandler } from './middleware/error.middleware.js';
 import { getVersionInfo } from './utils/version.util.js';
 import { assertStripeAtBoot, getStripeStatus } from './services/stripe.service.js';
 import webhooksRouter from './routes/webhooks.route.js';
-import { registerUploadsStatic } from './middleware/uploadsStatic.js'; // ✅ NEW
+import { registerUploadsStatic } from './middleware/uploadsStatic.js';
+import { publicRouter } from './routes/public.routes.js';
 
 // ✅ Fail fast if Stripe is enabled but not correctly configured
 assertStripeAtBoot();
 
-const app = express();
+const app: Express = express();
 
 // Trust proxy (Render)
 app.set('trust proxy', true);
@@ -101,6 +102,9 @@ if (process.env.NODE_ENV !== 'production') {
 
 // ✅ Serve uploaded files (Render + local). Must come BEFORE routes that return HTML.
 await registerUploadsStatic(app);
+
+// ✅ Mount public endpoints (non-auth, used by HomePage)
+app.use('/api/public', publicRouter);
 
 // Mount your API routers under /api
 app.use('/api', apiRouter);

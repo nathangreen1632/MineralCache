@@ -352,7 +352,7 @@ export default function ProductList(): React.ReactElement {
   const qStr = params.get('q') ?? '';
 
   return (
-    <section className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+    <section className="mx-auto max-w-12xl px-4 py-8 space-y-6">
       <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Catalog</h1>
 
       {/* Search + Filters */}
@@ -467,7 +467,7 @@ export default function ProductList(): React.ReactElement {
 
       {state.kind === 'loaded' && (
         <>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {state.data.items.map((p) => {
               const onSaleNow = isSaleActive(p);
               const eff = effectivePriceCents(p);

@@ -11,6 +11,7 @@ import AgeVerifyPage from './pages/auth/AgeVerifyPage';
 // Public catalog
 import ProductList from './pages/products/ProductList';
 import ProductDetail from './pages/products/ProductDetail';
+import CategoryPage from './pages/CategoryPage'; // ← NEW
 
 // Vendor
 import VendorApply from './pages/VendorApply';
@@ -67,6 +68,7 @@ export default function AppRoutes(): React.ReactElement {
         <Route path="verify-age" element={<AgeVerifyPage />} />
         <Route path="products" element={<ProductList />} />
         <Route path="products/:id" element={<ProductDetail />} />
+        <Route path="category/:slug" element={<CategoryPage />} />
         <Route path="cart" element={<CartPage />} />
         <Route path="checkout" element={<CheckoutPage />} />
 

@@ -5,10 +5,18 @@ import { z } from 'zod';
 export const listVendorProductsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
+
   // 🔧 include 'oldest' so controller comparisons type-check
   sort: z.enum(['newest', 'oldest', 'price_asc', 'price_desc']).default('newest'),
-  status: z.enum(['active', 'archived', 'all']).optional(),
+
+  // Which set of items to return; default to active so UIs don’t get surprised
+  status: z.enum(['active', 'archived', 'all']).default('active'),
+
   q: z.string().trim().max(200).optional(),
+
+  // New: explicit archive-view flags (controller also honors these)
+  includeArchived: z.coerce.boolean().optional(),
+  onlyArchived: z.coerce.boolean().optional(),
 });
 export type ListVendorProductsQuery = z.infer<typeof listVendorProductsQuerySchema>;
 

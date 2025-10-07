@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState, useId, useRef } from 'react';
 import { z } from 'zod';
 import type { ProductInput } from '../../api/products';
+import { listCategories, type PublicCategory } from '../../api/public'; // ← NEW
 
 /** -------- Relaxed, optional schema (used for hints only; does NOT block submit) -------- */
 const FluorSchema = z.object({
@@ -115,7 +116,35 @@ export default function ProductForm({
     saleStartAt: useId(),
     saleEndAt: useId(),
     photos: useId(),
+    categoryId: useId(), // ← NEW
   };
+
+  // NEW: categories + required selection
+  const [categories, setCategories] = useState<PublicCategory[]>([]);
+  const [categoryId, setCategoryId] = useState<string>(() => {
+    const cid = (initial as any)?.categoryId;
+    return typeof cid === 'number' ? String(cid) : '';
+  });
+
+  useEffect(() => {
+    async function loadCats() {
+      try {
+        const rows = await listCategories();
+        // Prefer active + ordered; fall back safely
+        const sorted = (rows ?? [])
+          .filter((c) => c.active)
+          .sort((a, b) => (a.homeOrder ?? 0) - (b.homeOrder ?? 0));
+        setCategories(sorted);
+        // If editing and initial category present but local state empty, hydrate it
+        const cid = (initial as any)?.categoryId;
+        if (!categoryId && typeof cid === 'number') setCategoryId(String(cid));
+      } catch {
+        setCategories([]);
+      }
+    }
+    void loadCats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial]);
 
   // All fields optional; hydrate from initial without forcing edits later
   const [values, setValues] = useState<ProductFormValues>(() => ({
@@ -185,14 +214,20 @@ export default function ProductForm({
       saleStartAt: initial.saleStartAt ?? prev.saleStartAt,
       saleEndAt: initial.saleEndAt ?? prev.saleEndAt,
     }));
+    // Also hydrate category from initial if present
+    const cid = (initial as any)?.categoryId;
+    if (typeof cid === 'number') setCategoryId(String(cid));
   }, [initial]);
 
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [images, setImages] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Save is actionable regardless of form content; only block when busy or >4 images
-  const canSubmit = useMemo(() => !busy && images.length <= 6, [busy, images.length]);
+  // Save is actionable regardless of form content; only block when busy, >6 images, or missing category
+  const canSubmit = useMemo(
+    () => !busy && images.length <= 6 && categoryId !== '',
+    [busy, images.length, categoryId]
+  );
 
   function setField<K extends keyof ProductFormValues>(key: K, value: ProductFormValues[K]) {
     const next = { ...values, [key]: value };
@@ -216,7 +251,10 @@ export default function ProductForm({
   type Fluor = NonNullable<ProductFormValues['fluorescence']>;
   function setFluorField<K extends keyof Fluor>(key: K, value: Fluor[K]) {
     const current = (values.fluorescence ?? DEFAULT_FLUOR) as Fluor;
-    setField('fluorescence', { ...current, [key]: value } as unknown as ProductFormValues['fluorescence']);
+    setField(
+      'fluorescence',
+      { ...current, [key]: value } as unknown as ProductFormValues['fluorescence']
+    );
   }
 
   function onPickFiles(e: React.ChangeEvent<HTMLInputElement>) {
@@ -228,6 +266,9 @@ export default function ProductForm({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
 
+    // Guard: must have a category (HTML `required` also prevents)
+    if (!categoryId) return;
+
     // Normalize optional strings to null for server parity
     const normalize = (s?: string | null) => {
       if (s == null) return null;
@@ -236,7 +277,7 @@ export default function ProductForm({
     };
 
     // Build a payload with nulls for empties; keep types aligned with ProductInput
-    const payload: ProductInput = {
+    const base: ProductInput = {
       title: normalize(values.title ?? null) ?? '',
       description: normalize(values.description ?? null),
       species: normalize(values.species ?? null) ?? '',
@@ -252,7 +293,7 @@ export default function ProductForm({
       weightCt: values.weightCt ?? null,
 
       fluorescence: {
-        mode: (values.fluorescence?.mode ?? 'none'),
+        mode: values.fluorescence?.mode ?? 'none',
         colorNote: normalize(values.fluorescence?.colorNote ?? null),
         wavelengthNm: values.fluorescence?.wavelengthNm ?? null,
       },
@@ -279,6 +320,9 @@ export default function ProductForm({
 
       images: [], // uploads handled separately
     };
+
+    // NEW: include categoryId (server expects Number)
+    const payload = { ...base, categoryId: Number(categoryId) } as ProductInput;
 
     await onSubmit(payload, images);
   }
@@ -310,6 +354,29 @@ export default function ProductForm({
           {serverMessage}
         </div>
       )}
+
+      {/* NEW: Category (required) */}
+      <div className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-4">
+        <label htmlFor={ids.categoryId} className="block text-sm font-semibold mb-1">
+          Category <span aria-hidden="true">*</span>
+        </label>
+        <select
+          id={ids.categoryId}
+          required
+          value={categoryId}
+          onChange={(e) => setCategoryId(e.target.value)}
+          className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 py-2"
+          aria-describedby="categoryHelp"
+        >
+          <option value="">Select a category…</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        <p id="categoryHelp" className="mt-1 text-xs opacity-80">
+          Choose the single category this product belongs to.
+        </p>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="md:col-span-2">
@@ -640,7 +707,6 @@ export default function ProductForm({
           </ul>
         )}
       </div>
-
 
       <div className="flex items-center gap-2">
         <button

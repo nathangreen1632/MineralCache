@@ -95,7 +95,7 @@ export default function VendorProductsPage(): React.ReactElement {
         <header className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">My Products</h1>
           <Link
-            to="/vendor/products/new"
+            to="/products/new"
             className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
           >
             Add Product
@@ -145,7 +145,7 @@ export default function VendorProductsPage(): React.ReactElement {
                     <div className="flex items-start justify-between gap-4">
                       <div className="grid gap-1">
                         <Link
-                          to={`/vendor/products/${p.id}/edit`}
+                          to={`/products/${p.id}`}
                           className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
                         >
                           {p.title}
@@ -172,7 +172,6 @@ export default function VendorProductsPage(): React.ReactElement {
                           className="w-20 h-20 object-cover rounded-lg"
                           style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
                           onError={(ev) => {
-                            // hide broken image gracefully
                             ev.currentTarget.style.display = 'none';
                           }}
                         />

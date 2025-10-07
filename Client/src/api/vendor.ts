@@ -137,12 +137,25 @@ export type VendorProductRow = {
   updatedAt: string;
 };
 
-export function listVendorProducts(page = 1, pageSize = 50) {
+/** NEW: flexible params aligned with server query schema */
+export type ListVendorProductsParams = {
+  page?: number;
+  pageSize?: number;
+  status?: 'active' | 'archived' | 'all';
+  q?: string;
+  sort?: 'newest' | 'oldest' | 'price_asc' | 'price_desc';
+};
+
+/** UPDATED: accept params object incl. status/q/sort */
+export function listVendorProducts(params: ListVendorProductsParams = {}) {
   const search = new URLSearchParams();
-  search.set('page', String(page));
-  search.set('pageSize', String(pageSize));
-  const query = search.toString();
-  return get<{ items: VendorProductRow[]; total: number }>(`/vendors/me/products?${query}`);
+  if (params.status) search.set('status', params.status);
+  if (params.q) search.set('q', params.q);
+  if (params.sort) search.set('sort', params.sort);
+  search.set('page', String(params.page ?? 1));
+  search.set('pageSize', String(params.pageSize ?? 50));
+  const qs = search.toString();
+  return get<{ items: VendorProductRow[]; total: number }>(`/vendors/me/products?${qs}`);
 }
 
 export function updateVendorProductFlags(
@@ -160,7 +173,10 @@ export function setProductOnSale(productId: number, onSale: boolean) {
 }
 
 export function setProductArchived(productId: number, archived: boolean) {
-  return updateVendorProductFlags(productId, { archived });
+  return post<{ ok: true }, {}>(
+    `/products/${productId}/${archived ? 'archive' : 'revive'}`,
+    {}
+  );
 }
 
 export type OrderStatus = 'pending_payment' | 'paid' | 'failed' | 'refunded' | 'cancelled';
@@ -276,11 +292,10 @@ export async function getMyPayouts(params?: { start?: string; end?: string }) {
     return {
       ok: false as const,
       status: r.status,
-      error: (body)?.error || 'Request failed',
+      error: body?.error || 'Request failed',
     };
   }
 
   const data = await r.json();
   return { ok: true as const, data };
 }
-
