@@ -1,3 +1,5 @@
+// Client/src/components/media/CarouselDots.tsx
+
 import React from 'react';
 
 export default function CarouselDots({
