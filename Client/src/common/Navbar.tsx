@@ -23,7 +23,7 @@ import {
 import { useAuthStore } from '../stores/useAuthStore';
 
 /** Brand helper so we get "MineralCache" with italic "Cache" consistently */
-function BrandName({ className }: { className?: string }) {
+function BrandName({ className }: Readonly<{ className?: string }>) {
   return (
     <span className={className}>
       Mineral<span className="italic">Cache</span>
