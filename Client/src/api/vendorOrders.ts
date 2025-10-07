@@ -2,7 +2,7 @@
 const BASE = '/api/vendor/orders';
 
 export function buildPackingSlipUrl(orderId: number, itemIds?: number[]): string {
-  const url = new URL(`${BASE}/${orderId}/pack`, window.location.origin);
+  const url = new URL(`${BASE}/${orderId}/packing-slip`, window.location.origin);
   if (Array.isArray(itemIds) && itemIds.length > 0) {
     const filtered = itemIds.filter(n => Number.isFinite(n));
     if (filtered.length > 0) {
