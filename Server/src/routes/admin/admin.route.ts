@@ -18,7 +18,7 @@ import {
   listAdminOrders,
   getAdminOrder,
   refundOrder, // ✅ NEW
-  exportCsv,    // ✅ NEW: CSV export handler
+  exportAdminOrdersCsv,    // ✅ NEW: CSV export handler
 } from '../../controllers/admin/orders.controller.js'; // ✅ NEW
 
 const router: Router = Router();
@@ -38,7 +38,7 @@ router.use('/shipping-rules', requireAdmin, shippingRulesRouter);
 
 // Orders (admin)
 // CSV export (place BEFORE '/orders/:id' so 'csv' isn't captured by the param route)
-router.get('/orders.csv', requireAdmin, burstLimiter, exportCsv);
+router.get('/orders.csv', requireAdmin, burstLimiter, exportAdminOrdersCsv);
 
 router.get('/orders', requireAdmin, burstLimiter, validateQuery(adminListOrdersQuerySchema), listAdminOrders);
 router.get('/orders/:id', requireAdmin, burstLimiter, getAdminOrder);

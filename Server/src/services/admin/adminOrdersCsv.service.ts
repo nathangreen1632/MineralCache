@@ -36,7 +36,7 @@ function escapeCsv(v: unknown): string {
 }
 
 function readOrderNumberSafe(order: any): string | null {
-  const direct = order?.orderNumber;
+  const direct = order?.orderNumber ?? order?.order_number;
   if (typeof direct === 'string' && direct.length > 0) return direct;
 
   if (typeof order?.get === 'function') {
@@ -63,7 +63,7 @@ function summarizePerVendor(items: CsvItem[]): string {
   }
 
   const parts: string[] = [];
-  for (const [vid, v] of byVendor.entries()) {
+  for (const [vid, v] of [...byVendor.entries()].sort((a, b) => a[0] - b[0])) {
     const label = v.name ? `${v.name} (${vid})` : `Vendor ${vid}`;
     parts.push(`${label}: $${centsToUsd(v.total)}`);
   }
@@ -75,18 +75,19 @@ export function buildAdminOrdersCsv(
   itemsByOrderId: Map<number, CsvItem[]>,
   buyerEmailById: Map<number, string>,
 ): string {
+  // Human-friendly headers requested
   const header = [
-    'orderId',
-    'orderNumber',
-    'createdAt',
-    'status',
-    'buyerEmail',
-    'itemCount',
-    'subtotalUsd',
-    'shippingUsd',
-    'taxUsd',
-    'totalUsd',
-    'perVendorTotals',
+    'Order ID',
+    'Order Number',
+    'Created At',
+    'Status',
+    'Buyer Email',
+    'Item Count',
+    'Subtotal - USD',
+    'Shipping - USD',
+    'Tax - USD',
+    'Total - USD',
+    'Per-Vendor Totals',
   ].join(',');
 
   const lines: string[] = [header];
