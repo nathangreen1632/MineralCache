@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import AutoCarousel from '../components/media/AutoCarousel';
 import ProductCard from '../components/products/ProductCard';
 import { getFeaturedPhotos, getOnSaleProducts } from '../api/public';
+import CategoriesRow from '../components/categories/CategoriesRow'; // ← NEW
 
 const PAGE_SIZE = 24;
 
@@ -208,6 +209,11 @@ export default function HomePage(): React.ReactElement {
 
       {/* Hero carousel */}
       <section>{heroContent}</section>
+
+      {/* NEW: Categories row under the carousel */}
+      <section>
+        <CategoriesRow />
+      </section>
 
       <section className="space-y-3 mb-12">
         <div className="flex items-center justify-between">
