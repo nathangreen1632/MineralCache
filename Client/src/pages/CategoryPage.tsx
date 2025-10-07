@@ -142,16 +142,37 @@ export default function CategoryPage(): React.ReactElement {
   const total = state.kind === 'loaded' ? state.total : 0;
   const totalPages = total > 0 ? Math.ceil(total / PAGE_SIZE) : 1;
 
-  // Stable keys for loading skeleton (no array index)
-  const loadingKeys = useMemo<string[]>(
-    () =>
-      Array.from({ length: 8 }, () =>
-        (globalThis.crypto && 'randomUUID' in globalThis.crypto)
-          ? globalThis.crypto.randomUUID()
-          : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
-      ),
-    []
-  );
+  // Stable keys for loading skeleton (no array index, no Math.random)
+  const loadingKeys = useMemo<string[]>(() => {
+    const count = 8;
+
+    // Secure ID generator
+    const makeId = (): string => {
+      const c = globalThis.crypto as Crypto | undefined;
+
+      // Prefer native UUID if available
+      if (c && typeof (c as any).randomUUID === 'function') {
+        return (c as any).randomUUID();
+      }
+
+      // Otherwise use CSPRNG bytes
+      if (c && typeof c.getRandomValues === 'function') {
+        const bytes = new Uint8Array(16);
+        c.getRandomValues(bytes);
+        return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+      }
+
+      // Final deterministic fallback (no PRNG)
+      // Ensures stability without relying on randomness.
+      let counter = (makeId as any)._ctr ?? 0;
+      counter += 1;
+      (makeId as any)._ctr = counter;
+      return `skeleton-${Date.now().toString(36)}-${counter}`;
+    };
+
+    return Array.from({ length: count }, () => makeId());
+  }, []);
+
 
   return (
     <main className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)]">
