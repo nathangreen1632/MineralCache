@@ -77,6 +77,23 @@ export function emitOutbid(
   });
 }
 
+/**
+ * Anti-sniping: broadcast when the auction end time is extended.
+ * Uses numeric timestamp (ms since epoch) for easy client-side diffing.
+ */
+export function emitTimeExtended(
+  io: Server,
+  auctionId: number | string,
+  msExtended: number
+) {
+  const rn = auctionRoomName(auctionId);
+  io.to(rn).emit('auction:time-extended', {
+    auctionId,
+    msExtended,
+    ts: Date.now(),
+  });
+}
+
 /* =====================================================================================
  * Back-compat scaffold emitters (kept to match existing style/callers)
  * ===================================================================================== */
