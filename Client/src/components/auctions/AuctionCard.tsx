@@ -21,7 +21,7 @@ type Props = Readonly<{
 }>;
 
 export default function AuctionCard(props: Props): React.ReactElement {
-  let displayTitle = '';
+  let displayTitle:string;
   if (typeof props.title === 'string' && props.title.length > 0) {
     displayTitle = props.title;
   } else {
