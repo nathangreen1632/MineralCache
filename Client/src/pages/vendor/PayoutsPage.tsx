@@ -50,7 +50,7 @@ export default function PayoutsPage(): React.ReactElement {
     .join('&')}`;
 
   return (
-    <section className="mx-auto max-w-4xl px-6 py-10 space-y-4">
+    <section className="mx-auto max-w-12xl px-6 py-10 space-y-4">
       <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Payouts</h1>
 
       <div className="flex flex-wrap items-end gap-3">
