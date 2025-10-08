@@ -41,7 +41,7 @@ export default function Countdown(
   const mins = Math.floor((s % 3600) / 60);
   const secs = s % 60;
 
-  let label = '';
+  let label:string;
   if (ended) {
     label = 'Ended';
   } else if (days > 0) {
@@ -50,7 +50,7 @@ export default function Countdown(
     label = `${fmt(hours)}:${fmt(mins)}:${fmt(secs)}`;
   }
 
-  let className = '';
+  let className:string;
   if (ended) {
     className = 'text-red-500 font-semibold';
   } else {
