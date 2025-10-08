@@ -1,6 +1,7 @@
 // Client/src/pages/vendor/VendorProductsPage.tsx
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { PlusCircle } from 'lucide-react';
 
 type VendorProduct = {
   id: number;
@@ -23,6 +24,10 @@ export default function VendorProductsPage(): React.ReactElement {
   const [items, setItems] = useState<VendorProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+
+  // feature flag (kept consistent with Navbar)
+  const AUCTIONS_ENABLED =
+    String(import.meta.env.VITE_AUCTIONS_ENABLED || '').toLowerCase() === 'true';
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -163,6 +168,26 @@ export default function VendorProductsPage(): React.ReactElement {
                             Updated {new Date(p.updatedAt).toLocaleString()}
                           </div>
                         ) : null}
+
+                        {/* Actions: show ID + quick “Create auction” */}
+                        <div className="mt-2 flex items-center gap-3">
+                          <span className="text-xs rounded-md border border-[var(--theme-border)] px-2 py-0.5">
+                            ID: {p.id}
+                          </span>
+                          {AUCTIONS_ENABLED && (
+                            <Link
+                              to={`/vendor/auctions/new?productId=${p.id}`}
+                              className="inline-flex items-center gap-2 rounded-lg px-2 py-1
+                                         bg-[var(--theme-button)] text-[var(--theme-text-white)]
+                                         hover:bg-[var(--theme-button-hover)]"
+                              aria-label={`Create auction for product ${p.id}`}
+                              title="Create auction"
+                            >
+                              <PlusCircle className="h-4 w-4" />
+                              <span className="text-sm font-semibold">Create auction</span>
+                            </Link>
+                          )}
+                        </div>
                       </div>
 
                       {p.primaryPhotoUrl ? (
