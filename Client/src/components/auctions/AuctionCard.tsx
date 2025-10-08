@@ -31,6 +31,11 @@ export default function AuctionCard(props: Props): React.ReactElement {
     display = props.highBidCents;
   }
 
+  const linkState = {
+    imageUrl: props.imageUrl ?? null,
+    productTitle: props.productTitle ?? (props.title || `Auction #${props.id}`),
+  };
+
   return (
     <article
       className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-4 shadow-[0_10px_30px_var(--theme-shadow)] grid gap-3"
@@ -39,6 +44,7 @@ export default function AuctionCard(props: Props): React.ReactElement {
       {props.imageUrl && (
         <Link
           to={`/auctions/${props.id}`}
+          state={linkState}
           className="block overflow-hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)]"
           aria-label={`View ${displayTitle}`}
         >
@@ -55,6 +61,7 @@ export default function AuctionCard(props: Props): React.ReactElement {
         <Link
           className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
           to={`/auctions/${props.id}`}
+          state={linkState}
         >
           {displayTitle}
         </Link>
@@ -74,6 +81,7 @@ export default function AuctionCard(props: Props): React.ReactElement {
       <div className="flex justify-end">
         <Link
           to={`/auctions/${props.id}`}
+          state={linkState}
           className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
           aria-label={`View details for ${displayTitle}`}
         >
