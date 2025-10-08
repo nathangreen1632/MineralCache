@@ -45,7 +45,7 @@ export default function AuctionCard(props: Props): React.ReactElement {
           <img
             src={props.imageUrl}
             alt={props.productTitle ?? displayTitle}
-            className="h-48 w-full object-cover"
+            className="h-[20rem] w-full object-cover"
             loading="lazy"
           />
         </Link>
