@@ -6,14 +6,14 @@ export type AuctionDto = {
   title?: string | null;
   status: 'draft' | 'scheduled' | 'live' | 'ended' | 'canceled';
   startAt?: string | null;             // optional: server may include
-  endAt: string | null;                 // ISO or null
-  productId?: number;                   // optional: included by some reads
-  vendorId?: number;                    // optional: included by some reads
+  endAt: string | null;                // ISO or null
+  productId?: number;                  // optional: included by some reads
+  vendorId?: number;                   // optional: included by some reads
   highBidCents: number | null;
   highBidUserId: number | null;
   startingBidCents: number;
   reserveCents: number | null;
-  buyNowCents?: number | null;          // optional: Buy It Now (if configured)
+  buyNowCents?: number | null;         // optional: Buy It Now (if configured)
 };
 
 /** List-card DTO used by list screens. */
@@ -28,6 +28,10 @@ export type AuctionListItem = {
   startingBidCents: number;
   highBidCents: number | null;
   highBidUserId: number | null;
+
+  // NEW (optional, server-provided for list views)
+  productTitle?: string | null;
+  imageUrl?: string | null;
 };
 
 export type PlaceBidRes = {
