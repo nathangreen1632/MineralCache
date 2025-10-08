@@ -261,7 +261,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
           <h1 className="text-2xl font-bold">{headerTitle}</h1>
 
           {productTitle && (
-            <div className="text-sm text-[var(--theme-muted)]">
+            <div className="text-lg text-[var(--theme-muted)]">
               {productHref ? (
                 <Link
                   to={productHref}
@@ -275,7 +275,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
             </div>
           )}
 
-          <div className="text-sm flex items-center gap-3">
+          <div className="text-lg flex items-center gap-3">
             <span>Current: <strong>{cents(display)}</strong></span>
             <span>•</span>
             <span>Ends in: <Countdown endAt={auction.endAt} /></span>
@@ -283,7 +283,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
         </header>
 
         {flash && (
-          <div role="text" aria-live="polite" className="rounded-xl border p-3 border-[var(--theme-border)] bg-[var(--theme-card)]">
+          <div role="text" aria-live="polite" className="rounded-xl text-2xl border p-3 border-[var(--theme-border)] bg-[var(--theme-card)]">
             {flash.text}
           </div>
         )}
@@ -304,7 +304,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
             )}
 
             {productTitle && (
-              <div className="text-sm">
+              <div className="text-xl">
                 <span className="font-semibold">Item:</span>{' '}
                 {productHref ? (
                   <Link
@@ -324,10 +324,10 @@ export default function AuctionDetailPage(): React.ReactElement | null {
           {/* RIGHT: independent bid card (sticky on md+ so it stays in view while scrolling the image) */}
           <div className="w-full md:w-[26rem] shrink-0 md:sticky md:top-8">
             <div className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-4 shadow-[0_10px_30px_var(--theme-shadow)] grid gap-4">
-              <h2 className="text-lg font-semibold">Place a bid</h2>
+              <h2 className="text-2xl font-semibold">Place a bid</h2>
               <form onSubmit={onSubmitBid} className="grid gap-3">
                 <div className="grid gap-1">
-                  <label htmlFor="amount" className="text-sm">Your bid (USD)</label>
+                  <label htmlFor="amount" className="text-lg">Your bid (USD)</label>
                   <input
                     id="amount"
                     inputMode="decimal"
@@ -339,7 +339,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
                 </div>
 
                 <div className="grid gap-1">
-                  <label htmlFor="proxy" className="text-sm">Max proxy (optional)</label>
+                  <label htmlFor="proxy" className="text-lg">Max proxy (optional)</label>
                   <input
                     id="proxy"
                     inputMode="decimal"
@@ -348,7 +348,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
                     onChange={(e) => setProxy(e.target.value)}
                     className="rounded-xl border bg-[var(--theme-surface)] border-[var(--theme-border)] px-4 py-2"
                   />
-                  {minHint && <p className="text-xs text-[var(--theme-link)]">{minHint}</p>}
+                  {minHint && <p className="text-sm text-[var(--theme-button-yellow)]">{minHint}</p>}
                 </div>
 
                 <div className="flex items-center gap-3">
