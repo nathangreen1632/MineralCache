@@ -94,7 +94,7 @@ export default function AuctionCreatePage(): React.ReactElement {
   const disabled = submitting || !user || user.role !== 'vendor';
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
+    <div className="max-w-4xl mx-auto p-6">
       <h1 className="text-2xl font-extrabold tracking-tight text-[var(--theme-text)]">Create Auction</h1>
 
       {/* Optional preview for end time */}
