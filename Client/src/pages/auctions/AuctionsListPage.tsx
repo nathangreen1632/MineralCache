@@ -16,7 +16,6 @@ function byNewest(a: AuctionListItem, b: AuctionListItem) {
   if (sa < sb) return 1;
   return b.id - a.id;
 }
-
 function titleSafe(x: { title?: string | null }): string {
   if (typeof x.title === 'string') return x.title;
   return '';
@@ -50,33 +49,32 @@ export default function AuctionsListPage(): React.ReactElement {
 
     let searched = base;
     if (trimmed.length > 0) {
-      searched = base.filter((x) => {
-        const t = titleSafe(x).toLowerCase();
-        return t.includes(trimmed);
-      });
+      searched = base.filter((x) => titleSafe(x).toLowerCase().includes(trimmed));
     }
 
     const out = [...searched];
-    if (sort === 'ending') {
-      out.sort(byEndingSoon);
-    } else {
-      out.sort(byNewest);
-    }
+    if (sort === 'ending') out.sort(byEndingSoon);
+    else out.sort(byNewest);
     return out;
   }, [items, q, sort]);
 
   return (
     <main className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)]">
-      <div className="mx-auto max-w-4xl px-6 py-14 grid gap-8">
-        <header className="grid gap-3">
+      <div className="mx-auto max-w-6xl px-6 py-14 grid gap-10">
+        {/* Standalone, left-aligned page title */}
+        <div>
           <h1 className="text-2xl font-bold">Auctions</h1>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        </div>
+
+        {/* Header with centered controls */}
+        <header aria-label="Filters" className="grid gap-3 max-w-3xl mx-auto">
+          <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-center sm:justify-center sm:gap-4">
             <input
               aria-label="Search auctions"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search by title..."
-              className="w-full rounded-xl border bg-[var(--theme-surface)] border-[var(--theme-border)] px-4 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-focus)]"
+              className="w-full sm:w-[28rem] rounded-xl border bg-[var(--theme-surface)] border-[var(--theme-border)] px-4 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-focus)]"
             />
             <div className="flex items-center gap-2">
               <label htmlFor="sort" className="text-sm">Sort</label>
@@ -95,12 +93,20 @@ export default function AuctionsListPage(): React.ReactElement {
         </header>
 
         {err && (
-          <div role="text" aria-live="polite" className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4">
+          <div
+            role="text"
+            aria-live="polite"
+            className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4"
+          >
             {err}
           </div>
         )}
 
-        <section aria-label="Auction results" className="grid gap-6 sm:grid-cols-2">
+        {/* 2 @ md, 3 @ lg, 4 @ xl+ */}
+        <section
+          aria-label="Auction results"
+          className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3"
+        >
           {(filtered ?? []).map((a) => (
             <AuctionCard
               key={a.id}
