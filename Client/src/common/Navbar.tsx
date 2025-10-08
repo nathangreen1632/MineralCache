@@ -259,7 +259,7 @@ export default function Navbar(): React.ReactElement {
         aria-controls="mobile-nav-panel"
         onClick={() => setOpen((v) => !v)}
       >
-        {open ? <X className="h-4 w-4" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
+        {open ? <X className="h-2 w-2" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
       </button>
 
       {/* Floating overlay panel: only render at ≤1024px */}
