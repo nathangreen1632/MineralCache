@@ -112,6 +112,8 @@ export default function AuctionsListPage(): React.ReactElement {
               key={a.id}
               id={a.id}
               title={a.title}
+              productTitle={a.productTitle}
+              imageUrl={a.imageUrl}
               highBidCents={a.highBidCents}
               startingBidCents={a.startingBidCents}
               endAt={a.endAt}
