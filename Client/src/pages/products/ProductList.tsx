@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { listProducts, type ListQuery, type Product } from '../../api/products';
 import { searchProducts } from '../../api/search';
-import { ChevronDown } from 'lucide-react'; // ⬅️ NEW
+import { ChevronDown } from 'lucide-react'; // ⬅️ mobile collapse icon
 
 // Allow an optional runtime-injected API base (e.g., set on window at boot)
 declare global {
@@ -14,11 +14,8 @@ declare global {
 
 /** --- CONFIG: where the API is serving /uploads from (prod = same origin) --- */
 const API_BASE =
-  // env (Vite)
   ((import.meta as any)?.env?.VITE_API_BASE as string | undefined) ??
-  // optionally injected at runtime
   (typeof window !== 'undefined' ? window.__API_BASE__ : undefined) ??
-  // default: same origin
   '';
 
 /** Join base + path without using regex (no S5852 risk). */
@@ -65,15 +62,14 @@ function highlight(text: string, q: string): React.ReactNode {
   const t = (q || '').trim();
   if (!t) return text;
 
-  // Bound number/size of tokens to keep regex simple & fast
   const tokens = Array.from(new Set(t.split(/\s+/g).filter(Boolean)))
-    .slice(0, 8) // ≤ 8 tokens
-    .map((s) => s.slice(0, 40)); // each ≤ 40 chars
+    .slice(0, 8)
+    .map((s) => s.slice(0, 40));
 
   if (tokens.length === 0) return text;
 
   const pattern = tokens.map(escapeRegExp).join('|');
-  const re = new RegExp(`(?:${pattern})`, 'ig'); // non-capturing, case-insensitive
+  const re = new RegExp(`(?:${pattern})`, 'ig');
 
   const parts: React.ReactNode[] = [];
   let last = 0;
@@ -118,14 +114,12 @@ type AnyImage = {
   v1600Path?: string | null;
   origPath?: string | null;
   isPrimary?: boolean | null;
-  is_default_global?: boolean | null; // cover some schemas
+  is_default_global?: boolean | null;
 };
 
 function selectImageRecord(p: any): AnyImage | null {
-  // Explicit primary field
   if (p.primaryImage) return p.primaryImage as AnyImage;
 
-  // Common arrays
   const arrays: AnyImage[][] = [
     p.images ?? [],
     p.photos ?? [],
@@ -135,7 +129,6 @@ function selectImageRecord(p: any): AnyImage | null {
 
   for (const arr of arrays) {
     if (Array.isArray(arr) && arr.length) {
-      // prefer primary-like flags
       const pri =
         arr.find((i: AnyImage) => i?.isPrimary) ??
         arr.find((i: AnyImage) => i?.is_default_global) ??
@@ -149,14 +142,27 @@ function selectImageRecord(p: any): AnyImage | null {
 function imageUrlForCard(p: any): string | null {
   const rec = selectImageRecord(p);
   if (!rec) return null;
-
-  // prefer a medium size for cards
   const rel = rec.v800Path || rec.v320Path || rec.v1600Path || rec.origPath || null;
   if (!rel) return null;
-
-  // All paths in DB are relative to the /uploads mount
   const withPrefix = rel.startsWith('/uploads/') ? rel : `/uploads/${rel}`;
   return joinUrl(API_BASE, withPrefix);
+}
+
+/** ---------- Helpers to support dollar inputs ---------- */
+function centsToDollarInput(cents?: number): string {
+  if (typeof cents !== 'number' || !Number.isFinite(cents)) return '';
+  const whole = Math.trunc(cents);
+  // Show clean integer dollars when possible (e.g., 6500 → "65")
+  return whole % 100 === 0 ? String(whole / 100) : (whole / 100).toFixed(2);
+}
+function dollarsStrToCents(s: string): number | undefined {
+  const t = (s || '').trim();
+  if (!t) return undefined;
+  // allow "$", commas, spaces; keep first dot for decimals
+  const cleaned = t.replace(/[$,\s]/g, '');
+  const n = Number.parseFloat(cleaned);
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  return Math.round(n * 100);
 }
 
 /** ---------- Types/State ---------- */
@@ -176,8 +182,9 @@ type FormState = {
   vendorSlug: string;
   onSale: boolean;
   synthetic: boolean;
-  priceMinCents: string;
-  priceMaxCents: string;
+  /** store dollars as strings in the form; convert to cents on submit */
+  priceMinDollars: string;
+  priceMaxDollars: string;
   sort: SortValue;
   pageSize: string;
 };
@@ -186,7 +193,7 @@ export default function ProductList(): React.ReactElement {
   const [params, setParams] = useSearchParams();
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
 
-  // ⬇️ NEW: mobile collapse state
+  // mobile collapse state
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   // 🔎 Debounced keyword search (persisted in query params)
@@ -196,7 +203,7 @@ export default function ProductList(): React.ReactElement {
       const next = new URLSearchParams(params);
       if (inputQ.trim()) next.set('q', inputQ.trim());
       else next.delete('q');
-      next.set('page', '1'); // reset paging when query changes
+      next.set('page', '1');
       setParams(next, { replace: true });
     }, 300);
     return () => clearTimeout(t);
@@ -248,8 +255,8 @@ export default function ProductList(): React.ReactElement {
     vendorSlug: query.vendorSlug ?? '',
     onSale: Boolean(query.onSale),
     synthetic: Boolean(query.synthetic),
-    priceMinCents: query.priceMinCents?.toString() ?? '',
-    priceMaxCents: query.priceMaxCents?.toString() ?? '',
+    priceMinDollars: centsToDollarInput(query.priceMinCents),
+    priceMaxDollars: centsToDollarInput(query.priceMaxCents),
     sort: (query.sort ?? 'newest') as SortValue,
     pageSize: String(query.pageSize ?? 24),
   }));
@@ -260,8 +267,8 @@ export default function ProductList(): React.ReactElement {
       vendorSlug: query.vendorSlug ?? '',
       onSale: Boolean(query.onSale),
       synthetic: Boolean(query.synthetic),
-      priceMinCents: query.priceMinCents?.toString() ?? '',
-      priceMaxCents: query.priceMaxCents?.toString() ?? '',
+      priceMinDollars: centsToDollarInput(query.priceMinCents),
+      priceMaxDollars: centsToDollarInput(query.priceMaxCents),
       sort: (query.sort ?? 'newest') as SortValue,
       pageSize: String(query.pageSize ?? 24),
     });
@@ -323,19 +330,24 @@ export default function ProductList(): React.ReactElement {
         next.set(k, String(v));
       }
     }
-    if (!('page' in partial)) next.set('page', '1'); // reset when filters change
+    if (!('page' in partial)) next.set('page', '1');
     setParams(next, { replace: true });
   }
 
   function submitFilters(e: React.FormEvent) {
     e.preventDefault();
+
+    // Convert dollar strings → integer cents for URL params
+    const minCents = dollarsStrToCents(form.priceMinDollars);
+    const maxCents = dollarsStrToCents(form.priceMaxDollars);
+
     updateQuery({
       species: form.species.trim() || undefined,
       vendorSlug: form.vendorSlug.trim() || undefined,
       onSale: form.onSale ? true : undefined,
       synthetic: form.synthetic ? true : undefined,
-      priceMinCents: form.priceMinCents ? Math.max(0, Math.trunc(+form.priceMinCents)) : undefined,
-      priceMaxCents: form.priceMaxCents ? Math.max(0, Math.trunc(+form.priceMaxCents)) : undefined,
+      priceMinCents: minCents,
+      priceMaxCents: maxCents,
       sort: form.sort as ListQuery['sort'],
       pageSize: Math.max(1, Math.trunc(+form.pageSize)) || 24,
     });
@@ -406,16 +418,18 @@ export default function ProductList(): React.ReactElement {
           <input
             className="lg:col-span-1 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
             placeholder="Min $"
-            inputMode="numeric"
-            value={form.priceMinCents}
-            onChange={(e) => setForm((s) => ({ ...s, priceMinCents: e.target.value }))}
+            inputMode="decimal"
+            value={form.priceMinDollars}
+            onChange={(e) => setForm((s) => ({ ...s, priceMinDollars: e.target.value }))}
+            aria-label="Minimum price (USD)"
           />
           <input
             className="lg:col-span-1 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
-            placeholder="Max $$"
-            inputMode="numeric"
-            value={form.priceMaxCents}
-            onChange={(e) => setForm((s) => ({ ...s, priceMaxCents: e.target.value }))}
+            placeholder="Max $"
+            inputMode="decimal"
+            value={form.priceMaxDollars}
+            onChange={(e) => setForm((s) => ({ ...s, priceMaxDollars: e.target.value }))}
+            aria-label="Maximum price (USD)"
           />
           <select
             className="lg:col-span-2 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
@@ -521,7 +535,6 @@ export default function ProductList(): React.ReactElement {
                       className="h-72 w-full rounded object-cover mb-3"
                       style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
                       onError={(ev) => {
-                        // If the URL 404s, hide the broken image and let the placeholder show
                         const el = ev.currentTarget;
                         el.style.display = 'none';
                         const placeholder = el.nextElementSibling as HTMLElement | null;
@@ -529,7 +542,6 @@ export default function ProductList(): React.ReactElement {
                       }}
                     />
                   ) : null}
-                  {/* hidden placeholder that appears if img fails */}
                   <div
                     className="h-36 w-full rounded bg-[var(--theme-card-alt)] mb-3"
                     style={{ display: imgSrc ? 'none' : 'block' }}
