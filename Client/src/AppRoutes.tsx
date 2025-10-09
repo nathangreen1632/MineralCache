@@ -21,6 +21,7 @@ import AuctionCreatePage from './pages/auctions/AuctionCreatePage';
 // Vendor
 import VendorApply from './pages/VendorApply';
 import VendorDashboard from './pages/vendor/VendorDashboard';
+import VendorMainPage from './pages/vendor/VendorMainPage';
 import VendorProductsPage from './pages/vendor/VendorProductsPage';
 import VendorOrdersPage from './pages/vendor/VendorOrdersPage';
 import VendorPayoutsPage from './pages/vendor/VendorPayoutsPage.tsx';
@@ -77,6 +78,7 @@ export default function AppRoutes(): React.ReactElement {
         <Route path="products" element={<ProductList />} />
         <Route path="products/:id" element={<ProductDetail />} />
         <Route path="category/:slug" element={<CategoryPage />} />
+        <Route path="/vendors/:slug" element={<VendorMainPage />} />
 
         {/* Auctions (feature-flagged) */}
         {AUCTIONS_ENABLED && (
