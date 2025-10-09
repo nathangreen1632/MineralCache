@@ -546,7 +546,7 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       maxCents,
     } = q as any;
 
-    const now = new Date();                  // <-- use Date for operator comparisons
+    const now = new Date();
     const nowIso = now.toISOString();
     const andClauses: any[] = [{ archivedAt: { [Op.is]: null } }];
 
@@ -588,7 +588,6 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       if (isTrue) {
         andClauses.push({ [Op.and]: onSaleTrueClauses });
       } else {
-        // NOT on sale → negate the "on sale" condition
         andClauses.push({ [Op.not]: { [Op.and]: onSaleTrueClauses } });
       }
     }
@@ -661,13 +660,20 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       model: ProductImage,
       as: 'images',
       attributes: ['v320Path', 'v800Path', 'v1600Path', 'origPath', 'isPrimary', 'sortOrder'],
-      separate: true, // don't blow up row count
-      limit: 1,       // only the cover we need for the card
+      separate: true,
+      limit: 1,
       order: [
         ['isPrimary', 'DESC'],
         ['sortOrder', 'ASC'],
         ['id', 'ASC'],
       ],
+    });
+
+    // 👇 NEW: include vendor so we can surface slug/name to the client
+    include.push({
+      model: Vendor,
+      as: 'vendor',
+      attributes: ['id', 'slug'],
     });
 
     const { rows, count } = await Product.findAndCountAll({
@@ -679,7 +685,7 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       distinct: true, // keep count accurate when a join is present
     });
 
-    // Flatten a primaryImageUrl for the client (and keep images[0] if you want)
+    // Flatten a primaryImageUrl + vendorSlug/vendorName for the client
     const items = rows.map((p) => {
       const j: any = p.toJSON();
       const cover = Array.isArray(j.images) && j.images[0] ? j.images[0] : null;
@@ -689,7 +695,10 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
 
       return {
         ...j,
+        vendorSlug: j.vendor?.slug ?? null,
         primaryImageUrl: url,
+        // Optional: trim nested objects for a lean payload
+        // vendor: undefined,
         // images: undefined,
       };
     });
@@ -699,12 +708,13 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       page,
       pageSize,
       total: count,
-      totalPages: Math.ceil((count) / pageSize),
+      totalPages: Math.ceil(count / pageSize),
     });
   } catch (e: any) {
     res.status(500).json({ error: 'Failed to list products', detail: e?.message });
   }
 }
+
 
 
 /** ---------------------------------------------
