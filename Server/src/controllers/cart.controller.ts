@@ -63,7 +63,7 @@ async function validateAvailability(productIds: number[]) {
 }
 
 /** ---------------- Totals helper ----------------
- * Now enriches each line with:
+ * Enrich each line with:
  *   - imageUrl (cover image: primary → sortOrder → id)
  *   - unitPriceCents (sale-aware if instance exposes getEffectivePriceCents)
  *   - priceCents (alias of unitPriceCents for client convenience)
@@ -74,10 +74,10 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
     vendorId: number;
     title: string;
     unitPriceCents: number;
-    priceCents: number;       // ✅ alias for client
+    priceCents: number;       // alias for client
     quantity: number;
     lineTotalCents: number;
-    imageUrl: string | null;  // ✅ NEW
+    imageUrl: string | null;  // cover image
   };
 
   if (!items.length) {
@@ -182,7 +182,7 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
       vendorId,
       title: String(j.title || ''),
       unitPriceCents: unitPrice,
-      priceCents: unitPrice, // ✅ alias
+      priceCents: unitPrice, // alias
       quantity: qty,
       lineTotalCents: lineTotal,
       imageUrl,
@@ -250,7 +250,16 @@ export async function getCart(req: Request, res: Response): Promise<void> {
 
   const userId = (req as any).user.id;
   const cart = await Cart.findOne({ where: { userId } });
-  const items: Array<{ productId: number; quantity: number }> = (cart?.itemsJson as any) ?? [];
+
+  // ✅ filter out any zero/invalid quantities
+  const raw: Array<{ productId: unknown; quantity: unknown }> = (cart?.itemsJson as any) ?? [];
+  const items = raw
+    .map((x) => ({
+      productId: Number(x.productId),
+      quantity: Math.max(0, Math.trunc(Number(x.quantity ?? 0))),
+    }))
+    .filter((x) => Number.isFinite(x.productId) && x.productId > 0 && x.quantity > 0);
+
   const totals = await computeTotals(items);
 
   res.json({
@@ -262,7 +271,7 @@ export async function getCart(req: Request, res: Response): Promise<void> {
       total: totals.totalCents,
     },
     tax: {
-      enabled: taxFeatureEnabled, // ✅ fix
+      enabled: taxFeatureEnabled, // boolean, not callable
       label: totals.taxLabel ?? null,
       rateBps: Number((await getAdminSettingsCached())?.tax_rate_bps ?? 0),
     },
@@ -280,34 +289,40 @@ export async function putCart(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const userId = (req as any).user.id;
-  const items = parsed.data.items;
+  // ✅ normalize + drop zeros/invalids (treat zero as "remove")
+  const normalized: Array<{ productId: number; quantity: number }> = parsed.data.items
+    .map((x) => ({
+      productId: Number(x.productId),
+      quantity: Math.max(0, Math.trunc(Number((x as any).quantity ?? (x as any).qty ?? 0))),
+    }))
+    .filter((x) => Number.isFinite(x.productId) && x.productId > 0 && x.quantity > 0);
 
-  // Staleness guard
-  const productIds = items.map((x) => Number(x.productId)).filter((n) => Number.isFinite(n));
+  // Staleness guard on remaining ids
+  const productIds = normalized.map((x) => x.productId);
   const avail = await validateAvailability(productIds);
   if (!avail.ok) {
     res.status(409).json({
       error: 'Some items are no longer available',
       code: 'PRODUCT_UNAVAILABLE',
-      unavailable: avail.unavailable,
+      unavailable: avail.unavailable, // [{ productId, reason }]
     });
     return;
   }
 
-  const totals = await computeTotals(items);
+  const userId = (req as any).user.id;
+  const totals = await computeTotals(normalized);
 
-  // Upsert items for req.user.id
+  // Upsert normalized items
   const now = new Date();
   const existing = await Cart.findOne({ where: { userId } });
   if (existing) {
-    (existing as any).itemsJson = items;
+    (existing as any).itemsJson = normalized;
     (existing as any).updatedAt = now;
     await (existing as any).save();
   } else {
     await Cart.create({
       userId,
-      itemsJson: items,
+      itemsJson: normalized,
       createdAt: now,
       updatedAt: now,
     } as any);
@@ -323,7 +338,7 @@ export async function putCart(req: Request, res: Response): Promise<void> {
       total: totals.totalCents,
     },
     tax: {
-      enabled: taxFeatureEnabled, // ✅ fix
+      enabled: taxFeatureEnabled,
       label: totals.taxLabel ?? null,
       rateBps: Number((await getAdminSettingsCached())?.tax_rate_bps ?? 0),
     },
@@ -343,10 +358,18 @@ export async function checkout(req: Request, res: Response): Promise<void> {
   // Compute real totals from the user’s cart — rule-based
   const userId = (req as any).user.id;
   const cart = await Cart.findOne({ where: { userId } });
-  const items: Array<{ productId: number; quantity: number }> = (cart?.itemsJson as any) ?? [];
+
+  // ✅ same sanitize as getCart()
+  const raw: Array<{ productId: unknown; quantity: unknown }> = (cart?.itemsJson as any) ?? [];
+  const items = raw
+    .map((x) => ({
+      productId: Number(x.productId),
+      quantity: Math.max(0, Math.trunc(Number(x.quantity ?? 0))),
+    }))
+    .filter((x) => Number.isFinite(x.productId) && x.productId > 0 && x.quantity > 0);
 
   // Staleness guard before totals/PI
-  const productIds = items.map((x) => Number(x.productId)).filter((n) => Number.isFinite(n));
+  const productIds = items.map((x) => x.productId);
   const avail = await validateAvailability(productIds);
   if (!avail.ok) {
     res.status(409).json({
@@ -381,7 +404,7 @@ export async function checkout(req: Request, res: Response): Promise<void> {
       total: totals.totalCents,
     },
     tax: {
-      enabled: taxFeatureEnabled, // ✅ fix
+      enabled: taxFeatureEnabled,
       label: totals.taxLabel ?? null,
       rateBps: Number((await getAdminSettingsCached())?.tax_rate_bps ?? 0),
     },
