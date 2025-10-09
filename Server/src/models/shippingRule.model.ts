@@ -16,17 +16,16 @@ export class ShippingRule extends Model<
   declare vendorId: number | null;            // null → global scope
   declare label: string;                      // e.g., "Flat + per item"
 
-  // NOTE: use attribute "active", but map to existing DB column "isActive"
-  declare active: boolean;                    // single active rule per scope (recommended)
-  declare priority: number;                   // lower = chosen first
-  declare isDefaultGlobal: boolean;           // only one global default at a time
+  declare active: boolean;                    // maps → isActive
+  declare priority: number;
+  declare isDefaultGlobal: boolean;           // maps → is_default_global
 
-  declare baseCents: number;                  // flat per vendor/order
-  declare perItemCents: number;               // per item (quantity)
-  declare perWeightCents: number;             // per weight-unit (optional; 0 = off)
-  declare minCents: number | null;            // clamp floor (optional)
-  declare maxCents: number | null;            // clamp ceiling (optional)
-  declare freeThresholdCents: number | null;  // if subtotal ≥ threshold → free (legacy/optional)
+  declare baseCents: number;
+  declare perItemCents: number;
+  declare perWeightCents: number;
+  declare minCents: number | null;
+  declare maxCents: number | null;
+  declare freeThresholdCents: number | null;
 
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
@@ -36,7 +35,6 @@ const sequelize = db.instance();
 
 if (!sequelize) {
   if (process.env.NODE_ENV !== 'production') {
-    // eslint-disable-next-line no-console
     console.warn('[db] DATABASE_URL not set — ShippingRule model not initialized');
   }
 } else {
@@ -46,10 +44,17 @@ if (!sequelize) {
       vendorId: { type: DataTypes.BIGINT, allowNull: true },
       label: { type: DataTypes.STRING(120), allowNull: false, defaultValue: 'Shipping' },
 
-      // Map attribute "active" -> DB column "isActive" to preserve existing data
+      // ✅ field mapping preserved
       active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true, field: 'isActive' },
       priority: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 100 },
-      isDefaultGlobal: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+
+      // ✅ IMPORTANT: map camelCase → actual DB column
+      isDefaultGlobal: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: 'is_default_global',
+      },
 
       baseCents: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       perItemCents: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
@@ -71,7 +76,6 @@ if (!sequelize) {
         { name: 'shipping_rules_vendor_active_idx', fields: ['vendorId', 'active', 'priority'] },
         { fields: ['isDefaultGlobal'] },
         { fields: ['priority'] },
-        // Postgres-only partial index (safe to keep; ignored by other dialects)
         {
           name: 'shipping_rules_global_active_idx',
           fields: ['active', 'isDefaultGlobal', 'priority', 'id'],

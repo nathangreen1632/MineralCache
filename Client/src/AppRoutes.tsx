@@ -13,6 +13,11 @@ import ProductList from './pages/products/ProductList';
 import ProductDetail from './pages/products/ProductDetail';
 import CategoryPage from './pages/CategoryPage'; // ← NEW
 
+// Auctions (public + vendor create)
+import AuctionsListPage from './pages/auctions/AuctionsListPage';
+import AuctionDetailPage from './pages/auctions/AuctionDetailPage';
+import AuctionCreatePage from './pages/auctions/AuctionCreatePage';
+
 // Vendor
 import VendorApply from './pages/VendorApply';
 import VendorDashboard from './pages/vendor/VendorDashboard';
@@ -48,6 +53,9 @@ import AgeGateNotice from './components/AgeGateNotice';
 import RequireAuth from './routes/RequireAuth';
 import RequireRole from './routes/RequireRole';
 
+const AUCTIONS_ENABLED =
+  String(import.meta.env.VITE_AUCTIONS_ENABLED || '').toLowerCase() === 'true';
+
 function WithAgeGate(): React.ReactElement {
   return (
     <>
@@ -69,6 +77,15 @@ export default function AppRoutes(): React.ReactElement {
         <Route path="products" element={<ProductList />} />
         <Route path="products/:id" element={<ProductDetail />} />
         <Route path="category/:slug" element={<CategoryPage />} />
+
+        {/* Auctions (feature-flagged) */}
+        {AUCTIONS_ENABLED && (
+          <>
+            <Route path="auctions" element={<AuctionsListPage />} />
+            <Route path="auctions/:id" element={<AuctionDetailPage />} />
+          </>
+        )}
+
         <Route path="cart" element={<CartPage />} />
         <Route path="checkout" element={<CheckoutPage />} />
 
@@ -109,6 +126,17 @@ export default function AppRoutes(): React.ReactElement {
             </RequireRole>
           }
         />
+        {/* Vendor auction create (guarded & feature-flagged) */}
+        {AUCTIONS_ENABLED && (
+          <Route
+            path="vendor/auctions/new"
+            element={
+              <RequireRole role="vendor">
+                <AuctionCreatePage />
+              </RequireRole>
+            }
+          />
+        )}
         <Route
           path="vendor/products"
           element={

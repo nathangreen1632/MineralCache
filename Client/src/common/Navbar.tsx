@@ -144,10 +144,20 @@ function NavContent(): React.ReactElement {
       ) : (
         <SideNavLink to="/products" end label="Shop" Icon={Store} />
       )}
+
+      {/* Auctions */}
+      {AUCTIONS_ENABLED && isAuthed && (
+        <SideNavLink to="/auctions" end label="Auctions" Icon={ClipboardList} />
+      )}
+
       {isVendor && (
         <NavGroup baseTo="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard}>
           <SideNavLink to="/vendor/products" label="Products" Icon={Store} />
           <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
+          {/* Vendor: create auction */}
+          {AUCTIONS_ENABLED && (
+            <SideNavLink to="/vendor/auctions/new" label="New Auction" Icon={PlusCircle} />
+          )}
           <SideNavLink to="/vendor/orders" label="Orders" Icon={Package} />
           <SideNavLink to="/vendor/payouts" label="Payouts" Icon={Banknote} />
         </NavGroup>
@@ -249,7 +259,7 @@ export default function Navbar(): React.ReactElement {
         aria-controls="mobile-nav-panel"
         onClick={() => setOpen((v) => !v)}
       >
-        {open ? <X className="h-4 w-4" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
+        {open ? <X className="h-2 w-2" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
       </button>
 
       {/* Floating overlay panel: only render at ≤1024px */}

@@ -7,6 +7,7 @@ import type { Transaction } from 'sequelize';
 import { db } from '../models/sequelize.js';
 import { Auction } from '../models/auction.model.js';
 import { Product } from '../models/product.model.js';
+import { ProductImage } from '../models/productImage.model.js'; // ⬅️ NEW
 
 import { placeBidTx, minimumAcceptableBid } from '../services/auction.service.js';
 import { bidBodySchema, bidParamsSchema } from '../validation/auctions.schema.js';
@@ -54,9 +55,104 @@ function parsePositiveInt(v: unknown): number | null {
 /** ------------------------------------------------------------------------
  * Public reads
  * -----------------------------------------------------------------------*/
-export async function listAuctions(_req: Request, res: Response): Promise<void> {
-  // Minimal scaffold; extend with paging/filters later.
-  res.json({ items: [], total: 0 });
+export async function listAuctions(req: Request, res: Response): Promise<void> {
+  // If DB isn’t configured or reachable in dev, return an empty list
+  const sequelize = db.instance();
+  if (!sequelize) {
+    res.json({ items: [], total: 0 });
+    return;
+  }
+  const ping = await db.ping();
+  if (!ping.ok) {
+    (obs as any)?.info?.('auctions.list.db_unavailable', { error: ping.error });
+    res.json({ items: [], total: 0 });
+    return;
+  }
+
+  try {
+    // Build a safe options object
+    const where: Record<string, unknown> = {};
+
+    // Optional status filter (?status=live|scheduled|ended|canceled|draft)
+    const qStatus = typeof req.query?.status === 'string' ? req.query.status.trim().toLowerCase() : '';
+    if (qStatus.length > 0) {
+      where.status = qStatus;
+    }
+
+    // Optional limit (?limit=N) with cap
+    const rawLimit = typeof req.query?.limit !== 'undefined' ? String(req.query.limit) : '';
+    const parsedLimit = Number.parseInt(rawLimit, 10);
+    let limit = 24;
+    if (Number.isFinite(parsedLimit) && parsedLimit > 0) {
+      limit = Math.min(parsedLimit, 100);
+    }
+
+    // ---- NEW: include product + primary image and shape a lean payload ----
+    const UPLOADS_PUBLIC_ROUTE = process.env.UPLOADS_PUBLIC_ROUTE ?? '/uploads';
+    function toPublicUrl(rel?: string | null): string | null {
+      if (!rel) return null;
+      const s = String(rel).replace(/^\/+/, '');
+      return `${UPLOADS_PUBLIC_ROUTE}/${encodeURI(s)}`;
+    }
+
+    const rows = await Auction.findAll({
+      where,
+      order: [
+        ['endAt', 'ASC'],
+        ['id', 'ASC'],
+      ],
+      limit,
+      include: [
+        {
+          model: Product,
+          as: 'product',
+          attributes: ['id', 'title'],
+          include: [
+            {
+              model: ProductImage,
+              as: 'images',
+              attributes: ['id', 'isPrimary', 'sortOrder', 'v320Path', 'v800Path', 'v1600Path', 'origPath'],
+              required: false,
+              separate: true, // ensure limit/order apply on hasMany
+              limit: 1,
+              order: [['isPrimary', 'DESC'], ['sortOrder', 'ASC'], ['id', 'ASC']],
+            },
+          ],
+        },
+      ],
+    });
+
+    const items = rows.map((a: any) => {
+      const p = a.product;
+      const img = p?.images?.[0] ?? null;
+      const imageUrl =
+        toPublicUrl(img?.v800Path ?? img?.v320Path ?? img?.v1600Path ?? img?.origPath ?? null);
+
+      return {
+        id: Number(a.id),
+        title: a.title ?? null,
+        status: a.status,
+        startAt: a.startAt,
+        endAt: a.endAt,
+        productId: p ? Number(p.id) : Number(a.productId),
+        vendorId: Number(a.vendorId),
+        startingBidCents: Number(a.startPriceCents ?? a.startingBidCents ?? 0),
+        highBidCents: a.highBidCents != null ? Number(a.highBidCents) : null,
+        highBidUserId: a.highBidUserId != null ? Number(a.highBidUserId) : null,
+        productTitle: p?.title ?? null, // 👈 NEW
+        imageUrl,                       // 👈 NEW
+      };
+    });
+
+    res.json({ items, total: items.length });
+  } catch (err: unknown) {
+    obs.error(req, 'auctions.list.error', err);
+    res.status(500).json({
+      ok: false,
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Failed to list auctions',
+    });
+  }
 }
 
 export async function getAuction(req: Request, res: Response): Promise<void> {
@@ -113,7 +209,6 @@ export async function placeBid(req: Request, res: Response): Promise<void> {
       ? Math.max(0, Math.trunc(bz.data.maxProxyCents))
       : null;
 
-  // ✅ Fix TS2339: use your db.instance() helper instead of db.sequelize
   const sequelize = db.instance();
   if (!sequelize) {
     res.status(503).json({ error: 'Database unavailable' });
@@ -121,9 +216,8 @@ export async function placeBid(req: Request, res: Response): Promise<void> {
   }
 
   try {
-    // ✅ Fix TS7006: annotate tx as Transaction
     const result = await sequelize.transaction(async (tx: Transaction) => {
-      // Lock auction row (use generic lock: true to satisfy typings across dialects)
+      // Lock auction row
       const a = await Auction.findByPk(auctionId, { transaction: tx, lock: true });
       if (!a) return { ok: false as const, error: 'Auction not found' };
 
@@ -144,15 +238,9 @@ export async function placeBid(req: Request, res: Response): Promise<void> {
         return { ok: false as const, error: `Bid must be at least ${minAcceptable}` };
       }
 
-      // Core: persist bid / resolve proxies / update auction atomically
-      return placeBidTx({
-        auctionId,
-        userId: Number((req as any).user.id),
-        amountCents,
-        maxProxyCents,
-        now,
-        tx,
-      });
+      // ✅ Correct positional call (tx, auction, userId, amountCents, maxProxyCents)
+      const userId = Number((req as any).user.id);
+      return placeBidTx(tx, a, userId, amountCents, maxProxyCents);
     });
 
     if (!result.ok) {
@@ -180,7 +268,6 @@ export async function placeBid(req: Request, res: Response): Promise<void> {
       }
     }
 
-    // ✅ Fix TS2339 on obs.info by casting to any (since your obs doesn't declare info())
     (obs as any)?.info?.('auction.bid', {
       requestId: (req as any).context?.requestId,
       userId: (req as any).user?.id,
@@ -201,7 +288,6 @@ export async function placeBid(req: Request, res: Response): Promise<void> {
       },
     });
   } catch (err: unknown) {
-    // ✅ Fix TS2554: your obs.error signature is (req, event, err)
     obs.error(req, 'auction.bid.error', err);
     res.status(500).json({ error: 'Failed to place bid' });
   }
@@ -215,7 +301,6 @@ export async function buyNow(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
   if (!ensureAdult(req, res)) return;
 
-  // With routes: POST /api/auctions/:id/buy-now
   const auctionId = parsePositiveInt((req.params as any)?.id);
   if (auctionId == null) {
     res.status(400).json({ error: 'Invalid auctionId' });
@@ -223,7 +308,6 @@ export async function buyNow(req: Request, res: Response): Promise<void> {
   }
 
   // TODO: validate; lock auction; create reserved checkout; persist
-
   const io = getIO(req);
   if (io) {
     emitAuctionEnded(io, auctionId, { reason: 'buy-now' });

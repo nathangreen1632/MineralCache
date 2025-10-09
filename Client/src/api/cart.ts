@@ -7,7 +7,9 @@ export type CartItem = {
   productId: number;
   title: string;
   priceCents: number;
-  qty: number;
+  // Server may return either; make both optional for compatibility
+  qty?: number;
+  quantity?: number;
   imageUrl?: string | null;
 };
 
@@ -22,9 +24,9 @@ export type CartResponse = {
   totals: CartTotals;
 };
 
-export type PutCartBody = {
-  items: Array<{ productId: number; qty: number }>;
-};
+// 🔧 Server expects `quantity` on PUT
+export type PutCartItem = { productId: number; quantity: number };
+export type PutCartBody = { items: PutCartItem[] };
 
 export type CheckoutResponse =
   | { clientSecret: string }
@@ -61,4 +63,55 @@ export async function setCartShippingRule(ruleId: number | string) {
 // POST /api/cart/checkout
 export function startCheckout(amountCents: number) {
   return post<CheckoutResponse, { amountCents: number }>('/cart/checkout', { amountCents });
+}
+
+/**
+ * Add-to-cart convenience:
+ * - Loads current cart
+ * - Merges/inserts using `quantity`
+ * - Saves via saveCart (emits EV_CART_CHANGED)
+ */
+export async function addToCart(productId: number, addQty = 1) {
+  const res = await getCart();
+  const { data, error, status } = res as {
+    data: CartResponse | null;
+    error?: string | null;
+    status?: number;
+  };
+
+  if (status === 401) {
+    return { data: null, error: 'AUTH_REQUIRED', status };
+  }
+  if (error) {
+    return { data: null, error, status };
+  }
+
+  // Build PUT payload with `quantity`
+  const items: PutCartItem[] = [];
+  if (data && Array.isArray(data.items)) {
+    for (const it of data.items) {
+      const pid = Number(it.productId);
+      const qRaw = (it.quantity ?? it.qty ?? 0);
+      const qNum = Math.trunc(Number(qRaw));
+      const safe = Number.isFinite(qNum) ? Math.max(0, qNum) : 0;
+      items.push({ productId: pid, quantity: safe });
+    }
+  }
+
+  const clamp = (n: number) => {
+    const t = Math.trunc(Number(n));
+    if (!Number.isFinite(t)) return 1;
+    if (t < 1) return 1;
+    if (t > 99) return 99;
+    return t;
+  };
+
+  const idx = items.findIndex((it) => it.productId === productId);
+  if (idx >= 0) {
+    items[idx] = { productId, quantity: clamp(items[idx].quantity + addQty) };
+  } else {
+    items.push({ productId, quantity: clamp(addQty) });
+  }
+
+  return await saveCart({ items });
 }

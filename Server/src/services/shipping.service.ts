@@ -28,29 +28,67 @@ export type ShippingRuleSnapshot = {
   freeThresholdCents: number | null;
 };
 
+/* -------------------------------------------------------------------------- */
+/*  Internal helpers                                                          */
+/* -------------------------------------------------------------------------- */
+
+function warnShipping(event: string, extra?: Record<string, unknown>) {
+  // Structured warning; avoids importing obs; safe in all envs
+  // eslint-disable-next-line no-console
+  console.warn({
+    ts: new Date().toISOString(),
+    level: 'warn',
+    area: 'shipping',
+    event,
+    ...(extra ?? {}),
+  });
+}
+
+function saneDefaultPolicy(): ShippingRuleSnapshot {
+  return {
+    ruleId: null,
+    source: 'sane_default',
+    label: 'Default Shipping',
+    baseCents: 1200,
+    perItemCents: 0,
+    perWeightCents: 0,
+    minCents: null,
+    maxCents: null,
+    freeThresholdCents: null,
+  };
+}
+
 /** Pick vendor-specific active rule, else global active default, else any active global. */
 export async function chooseRuleForVendor(vendorId: number): Promise<ShippingRule | null> {
-  const vendorRule = await ShippingRule.findOne({
-    where: { vendorId, active: true },
-    order: [['priority', 'ASC'], ['id', 'ASC']],
-  });
-  if (vendorRule) return vendorRule;
+  try {
+    const vendorRule = await ShippingRule.findOne({
+      where: { vendorId, active: true },
+      order: [['priority', 'ASC'], ['id', 'ASC']],
+    });
+    if (vendorRule) return vendorRule;
 
-  const globalDefault = await ShippingRule.findOne({
-    where: { vendorId: { [Op.is]: null } as any, active: true, isDefaultGlobal: true },
-  });
-  if (globalDefault) return globalDefault;
+    const globalDefault = await ShippingRule.findOne({
+      where: { vendorId: { [Op.is]: null } as any, active: true, isDefaultGlobal: true },
+    });
+    if (globalDefault) return globalDefault;
 
-  const anyGlobal = await ShippingRule.findOne({
-    where: { vendorId: { [Op.is]: null } as any, active: true },
-    order: [['priority', 'ASC'], ['id', 'ASC']],
-  });
-  return anyGlobal || null;
+    const anyGlobal = await ShippingRule.findOne({
+      where: { vendorId: { [Op.is]: null } as any, active: true },
+      order: [['priority', 'ASC'], ['id', 'ASC']],
+    });
+    return anyGlobal || null;
+  } catch (err: any) {
+    warnShipping('choose_rule.fail', { vendorId, err: String(err) });
+    return null;
+  }
 }
 
 /** Load shipping defaults from AdminSettings when no rule exists. */
 async function loadAdminDefaults(): Promise<ShippingRuleSnapshot | null> {
-  const settings = await AdminSettings.findOne();
+  const settings = await AdminSettings.findOne().catch((err) => {
+    warnShipping('admin_defaults.load.fail', { err: String(err) });
+    return null;
+  });
   if (!settings) return null;
 
   const anySettings = settings as any;
@@ -73,88 +111,79 @@ async function loadAdminDefaults(): Promise<ShippingRuleSnapshot | null> {
 }
 
 /** Resolve an active policy for a vendor with fallbacks: vendor → global default → any global → admin defaults → sane default. */
-export async function resolveShippingPolicyForVendor(vendorId: number | null): Promise<ShippingRuleSnapshot> {
-  if (typeof vendorId === 'number') {
-    const vendorRule = await ShippingRule.findOne({
-      where: { vendorId, active: true },
-      order: [['priority', 'ASC'], ['id', 'ASC']],
+export async function resolveShippingPolicyForVendor(
+  vendorId: number | null
+): Promise<ShippingRuleSnapshot> {
+  try {
+    if (typeof vendorId === 'number') {
+      const vendorRule = await ShippingRule.findOne({
+        where: { vendorId, active: true },
+        order: [['priority', 'ASC'], ['id', 'ASC']],
+      });
+      if (vendorRule) {
+        return {
+          ruleId: Number(vendorRule.id),
+          source: 'vendor',
+          label: String((vendorRule as any).label || 'Shipping'),
+          baseCents: Number((vendorRule as any).baseCents || 0),
+          perItemCents: Number((vendorRule as any).perItemCents || 0),
+          perWeightCents: Number((vendorRule as any).perWeightCents || 0),
+          minCents: (vendorRule as any).minCents == null ? null : Number((vendorRule as any).minCents),
+          maxCents: (vendorRule as any).maxCents == null ? null : Number((vendorRule as any).maxCents),
+          freeThresholdCents:
+            (vendorRule as any).freeThresholdCents == null ? null : Number((vendorRule as any).freeThresholdCents),
+        };
+      }
+    }
+
+    const globalDefault = await ShippingRule.findOne({
+      where: { vendorId: { [Op.is]: null } as any, active: true, isDefaultGlobal: true },
     });
-    if (vendorRule) {
+    if (globalDefault) {
       return {
-        ruleId: Number(vendorRule.id),
-        source: 'vendor',
-        label: String((vendorRule as any).label || 'Shipping'),
-        baseCents: Number((vendorRule as any).baseCents || 0),
-        perItemCents: Number((vendorRule as any).perItemCents || 0),
-        perWeightCents: Number((vendorRule as any).perWeightCents || 0),
-        minCents: (vendorRule as any).minCents == null ? null : Number((vendorRule as any).minCents),
-        maxCents: (vendorRule as any).maxCents == null ? null : Number((vendorRule as any).maxCents),
+        ruleId: Number(globalDefault.id),
+        source: 'global',
+        label: String((globalDefault as any).label || 'Shipping'),
+        baseCents: Number((globalDefault as any).baseCents || 0),
+        perItemCents: Number((globalDefault as any).perItemCents || 0),
+        perWeightCents: Number((globalDefault as any).perWeightCents || 0),
+        minCents: (globalDefault as any).minCents == null ? null : Number((globalDefault as any).minCents),
+        maxCents: (globalDefault as any).maxCents == null ? null : Number((globalDefault as any).maxCents),
         freeThresholdCents:
-          (vendorRule as any).freeThresholdCents == null ? null : Number((vendorRule as any).freeThresholdCents),
+          (globalDefault as any).freeThresholdCents == null ? null : Number((globalDefault as any).freeThresholdCents),
       };
     }
+
+    const anyGlobal = await ShippingRule.findOne({
+      where: { vendorId: { [Op.is]: null } as any, active: true },
+      order: [['priority', 'ASC'], ['id', 'ASC']],
+    });
+    if (anyGlobal) {
+      return {
+        ruleId: Number(anyGlobal.id),
+        source: 'global',
+        label: String((anyGlobal as any).label || 'Shipping'),
+        baseCents: Number((anyGlobal as any).baseCents || 0),
+        perItemCents: Number((anyGlobal as any).perItemCents || 0),
+        perWeightCents: Number((anyGlobal as any).perWeightCents || 0),
+        minCents: (anyGlobal as any).minCents == null ? null : Number((anyGlobal as any).minCents),
+        maxCents: (anyGlobal as any).maxCents == null ? null : Number((anyGlobal as any).maxCents),
+        freeThresholdCents:
+          (anyGlobal as any).freeThresholdCents == null ? null : Number((anyGlobal as any).freeThresholdCents),
+      };
+    }
+  } catch (err: any) {
+    // Swallow lookup/runtime issues (e.g., missing columns) and fall back
+    warnShipping('policy.resolve.fail', { vendorId, err: String(err) });
   }
 
-  const globalDefault = await ShippingRule.findOne({
-    where: { vendorId: { [Op.is]: null } as any, active: true, isDefaultGlobal: true },
-  });
-  if (globalDefault) {
-    return {
-      ruleId: Number(globalDefault.id),
-      source: 'global',
-      label: String((globalDefault as any).label || 'Shipping'),
-      baseCents: Number((globalDefault as any).baseCents || 0),
-      perItemCents: Number((globalDefault as any).perItemCents || 0),
-      perWeightCents: Number((globalDefault as any).perWeightCents || 0),
-      minCents: (globalDefault as any).minCents == null ? null : Number((globalDefault as any).minCents),
-      maxCents: (globalDefault as any).maxCents == null ? null : Number((globalDefault as any).maxCents),
-      freeThresholdCents:
-        (globalDefault as any).freeThresholdCents == null ? null : Number((globalDefault as any).freeThresholdCents),
-    };
-  }
-
-  const anyGlobal = await ShippingRule.findOne({
-    where: { vendorId: { [Op.is]: null } as any, active: true },
-    order: [['priority', 'ASC'], ['id', 'ASC']],
-  });
-  if (anyGlobal) {
-    return {
-      ruleId: Number(anyGlobal.id),
-      source: 'global',
-      label: String((anyGlobal as any).label || 'Shipping'),
-      baseCents: Number((anyGlobal as any).baseCents || 0),
-      perItemCents: Number((anyGlobal as any).perItemCents || 0),
-      perWeightCents: Number((anyGlobal as any).perWeightCents || 0),
-      minCents: (anyGlobal as any).minCents == null ? null : Number((anyGlobal as any).minCents),
-      maxCents: (anyGlobal as any).maxCents == null ? null : Number((anyGlobal as any).maxCents),
-      freeThresholdCents:
-        (anyGlobal as any).freeThresholdCents == null ? null : Number((anyGlobal as any).freeThresholdCents),
-    };
-  }
-
-  // Local structured warning instead of obs.warn (since obs has no 'warn')
-  // eslint-disable-next-line no-console
-  console.warn({
-    ts: new Date().toISOString(),
-    level: 'warn',
-    event: 'shipping.no_rule_fallback',
-    area: 'shipping',
-  });
+  // Local structured warning for true "no rule" path as well
+  warnShipping('shipping.no_rule_fallback');
 
   const adminDefaults = await loadAdminDefaults();
   if (adminDefaults) return adminDefaults;
 
-  return {
-    ruleId: null,
-    source: 'sane_default',
-    label: 'Default Shipping',
-    baseCents: 1200,
-    perItemCents: 0,
-    perWeightCents: 0,
-    minCents: null,
-    maxCents: null,
-    freeThresholdCents: null,
-  };
+  return saneDefaultPolicy();
 }
 
 /** Compute shipping for a vendor group given subtotal and item count (backward-compatible signature). */
@@ -163,7 +192,13 @@ export async function computeVendorShipping(args: {
   subtotalCents: number;
   itemCount: number;
 }): Promise<AppliedShipping> {
-  const policy = await resolveShippingPolicyForVendor(args.vendorId);
+  let policy: ShippingRuleSnapshot;
+  try {
+    policy = await resolveShippingPolicyForVendor(args.vendorId);
+  } catch (err: any) {
+    warnShipping('compute.simple.fail', { vendorId: args.vendorId, err: String(err) });
+    policy = saneDefaultPolicy();
+  }
 
   const base = Number(policy.baseCents || 0);
   const perItem = Number(policy.perItemCents || 0);
@@ -206,7 +241,13 @@ export async function computeVendorShippingByLines(opts: {
   vendorId: number | null;
   items: Array<{ product: Product; quantity: number }>;
 }): Promise<{ shippingCents: number; snapshot: ShippingRuleSnapshot }> {
-  const policy = await resolveShippingPolicyForVendor(opts.vendorId ?? null);
+  let policy: ShippingRuleSnapshot;
+  try {
+    policy = await resolveShippingPolicyForVendor(opts.vendorId ?? null);
+  } catch (err: any) {
+    warnShipping('compute.lines.fail', { vendorId: opts.vendorId, err: String(err) });
+    policy = saneDefaultPolicy();
+  }
 
   let itemCount = 0;
   let totalWeight = 0;

@@ -3,8 +3,9 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { require18Plus } from '../middleware/ageGate.middleware.js';
 import { validateBody, validateParams } from '../middleware/validate.middleware.js';
-import { bidBodySchema, bidParamsSchema } from '../validation/auctions.schema.js';
-import { createAuction, getAuction, listAuctions, placeBid, buyNow } from '../controllers/auctions.controller.js';
+import { bidBodySchema, bidParamsSchema, createAuctionBodySchema } from '../validation/auctions.schema.js';
+import { createAuction, watchAuction, unwatchAuction } from '../controllers/auctionsReadWrite.controller.js';
+import { buyNow, placeBid, listAuctions, getAuction } from '../controllers/auctions.controller.js';
 import { biddingRateLimit } from '../middleware/rateLimit.middleware.js';
 
 const router: Router = Router();
@@ -14,25 +15,14 @@ router.get('/', listAuctions);
 router.get('/:id', validateParams(bidParamsSchema), getAuction);
 
 // Vendor create (auth required; 18+ not required for creating)
-router.post('/', requireAuth, createAuction);
+router.post('/', requireAuth, validateBody(createAuctionBodySchema), createAuction);
 
 // Bidding & Buy Now (auth + 18+ required)
-router.post(
-  '/:id/bid',
-  requireAuth,
-  require18Plus,
-  biddingRateLimit,                 // small burst guard
-  validateParams(bidParamsSchema),  // validate :id
-  validateBody(bidBodySchema),      // validate body
-  placeBid
-);
+router.post('/:id/bid', requireAuth, require18Plus, biddingRateLimit, validateParams(bidParamsSchema), validateBody(bidBodySchema), placeBid);
+router.post('/:id/buy-now', requireAuth, require18Plus, validateParams(bidParamsSchema), buyNow);
 
-router.post(
-  '/:id/buy-now',
-  requireAuth,
-  require18Plus,
-  validateParams(bidParamsSchema),
-  buyNow
-);
+// Watchlist (auth required)
+router.post('/:id/watch', requireAuth, validateParams(bidParamsSchema), watchAuction);
+router.delete('/:id/watch', requireAuth, validateParams(bidParamsSchema), unwatchAuction);
 
 export default router;

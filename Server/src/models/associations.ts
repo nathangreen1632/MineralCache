@@ -4,6 +4,7 @@ import { OrderVendor } from './orderVendor.model.js';
 import { OrderItem } from './orderItem.model.js';
 import { Product } from './product.model.js';
 import { ProductImage } from './productImage.model.js';
+import { Auction } from './auction.model.js'; // 👈 NEW
 
 // NEW: Category models
 import { Category } from './category.model.js';
@@ -19,7 +20,10 @@ OrderItem.belongsTo(Order, { as: 'order', foreignKey: { name: 'orderId', field: 
 Product.hasMany(ProductImage, { as: 'images', foreignKey: { name: 'productId', field: 'productId' } });
 ProductImage.belongsTo(Product, { foreignKey: { name: 'productId', field: 'productId' } });
 
+// 👇 NEW: Auction ↔ Product (for listing auctions with product details/images)
+Auction.belongsTo(Product, { as: 'product', foreignKey: { name: 'productId', field: 'productId' } });
+Product.hasMany(Auction, { as: 'auctions', foreignKey: { name: 'productId', field: 'productId' } });
+
 // ✅ Product ↔ Category (many-to-many; enforced "one" today via unique index on product_categories.productId)
 Product.belongsToMany(Category, { through: ProductCategory, foreignKey: { name: 'productId', field: 'productId' }, otherKey: { name: 'categoryId', field: 'categoryId' }, as: 'categories' });
-
 Category.belongsToMany(Product, { through: ProductCategory, foreignKey: { name: 'categoryId', field: 'categoryId' }, otherKey: { name: 'productId', field: 'productId' }, as: 'products' });

@@ -215,7 +215,7 @@ export default function HomePage(): React.ReactElement {
           Welcome to Mineral<span className="italic">Cache</span>
         </span>
         <span className="block mt-1 text-md md:text-2xl text-[var(--theme-muted)]">
-          The multi-vendor mineral & fossil marketplace
+          Buy. Sell. Discover. The Mineral and Fossil Marketplace.
         </span>
       </header>
 
