@@ -23,7 +23,7 @@ import VendorApply from './pages/VendorApply';
 import VendorDashboard from './pages/vendor/VendorDashboard';
 import VendorProductsPage from './pages/vendor/VendorProductsPage';
 import VendorOrdersPage from './pages/vendor/VendorOrdersPage';
-import PayoutsPage from './pages/vendor/PayoutsPage';
+import VendorPayoutsPage from './pages/vendor/VendorPayoutsPage.tsx';
 
 // Admin
 import AdminVendorApps from './pages/admin/AdminVendorApps';
@@ -157,7 +157,7 @@ export default function AppRoutes(): React.ReactElement {
           path="vendor/payouts"
           element={
             <RequireRole role="vendor">
-              <PayoutsPage />
+              <VendorPayoutsPage />
             </RequireRole>
           }
         />
