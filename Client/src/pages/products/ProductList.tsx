@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { listProducts, type ListQuery, type Product } from '../../api/products';
 import { searchProducts } from '../../api/search';
+import { ChevronDown } from 'lucide-react'; // ⬅️ NEW
 
 // Allow an optional runtime-injected API base (e.g., set on window at boot)
 declare global {
@@ -185,6 +186,9 @@ export default function ProductList(): React.ReactElement {
   const [params, setParams] = useSearchParams();
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
 
+  // ⬇️ NEW: mobile collapse state
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
   // 🔎 Debounced keyword search (persisted in query params)
   const [inputQ, setInputQ] = useState<string>(params.get('q') ?? '');
   useEffect(() => {
@@ -355,96 +359,114 @@ export default function ProductList(): React.ReactElement {
     <section className="mx-auto max-w-12xl px-4 py-8 space-y-6">
       <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Catalog</h1>
 
-      {/* Search + Filters */}
-      <form
-        onSubmit={submitFilters}
-        className="rounded-xl border p-4 grid gap-3 md:grid-cols-12"
-        style={card}
-      >
-        {/* 🔎 Keyword search (debounced -> query param) */}
-        <input
-          className="md:col-span-4 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
-          placeholder="Search title/species/locality…"
-          value={inputQ}
-          onChange={(e) => setInputQ(e.target.value)}
-          aria-label="Search"
-        />
-
-        <input
-          className="md:col-span-3 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
-          placeholder="Species"
-          value={form.species}
-          onChange={(e) => setForm((s) => ({ ...s, species: e.target.value }))}
-        />
-        <input
-          className="md:col-span-3 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
-          placeholder="Vendor name"
-          value={form.vendorSlug}
-          onChange={(e) => setForm((s) => ({ ...s, vendorSlug: e.target.value }))}
-        />
-        <input
-          className="md:col-span-1 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
-          placeholder="Min ¢"
-          inputMode="numeric"
-          value={form.priceMinCents}
-          onChange={(e) => setForm((s) => ({ ...s, priceMinCents: e.target.value }))}
-        />
-        <input
-          className="md:col-span-1 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
-          placeholder="Max ¢"
-          inputMode="numeric"
-          value={form.priceMaxCents}
-          onChange={(e) => setForm((s) => ({ ...s, priceMaxCents: e.target.value }))}
-        />
-        <select
-          className="md:col-span-2 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
-          value={form.sort}
-          onChange={(e) => setForm((s) => ({ ...s, sort: e.target.value as SortValue }))}
+      {/* Search + Filters (collapsible 0–1023px; always open at 1024px+) */}
+      <div className="w-full rounded-xl border" style={card}>
+        {/* Toggle header — visible only below lg */}
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((v) => !v)}
+          className="w-full lg:hidden flex items-center justify-between px-4 py-3"
+          aria-expanded={filtersOpen}
+          aria-controls="filters-panel"
         >
-          <option value="newest">Newest</option>
-          <option value="price_asc">Price ↑</option>
-          <option value="price_desc">Price ↓</option>
-        </select>
+          <span className="font-semibold">Search & Filters</span>
+          <ChevronDown
+            aria-hidden="true"
+            className={`h-5 w-5 transition-transform duration-200 ${filtersOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
 
-        <div className="md:col-span-12 flex flex-wrap items-center gap-4">
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.onSale}
-              onChange={(e) => setForm((s) => ({ ...s, onSale: e.target.checked }))}
-            />
-            <span>On sale (now)</span>
-          </label>
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.synthetic}
-              onChange={(e) => setForm((s) => ({ ...s, synthetic: e.target.checked }))}
-            />
-            <span>Synthetic</span>
-          </label>
+        {/* The form: hidden below lg when collapsed; always grid at lg+ */}
+        <form
+          id="filters-panel"
+          onSubmit={submitFilters}
+          className={`p-4 grid gap-3 lg:grid-cols-12 ${filtersOpen ? 'grid' : 'hidden'} lg:grid`}
+        >
+          {/* 🔎 Keyword search (debounced -> query param) */}
+          <input
+            className="lg:col-span-4 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
+            placeholder="Search title/species/locality…"
+            value={inputQ}
+            onChange={(e) => setInputQ(e.target.value)}
+            aria-label="Search"
+          />
+
+          <input
+            className="lg:col-span-3 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
+            placeholder="Species"
+            value={form.species}
+            onChange={(e) => setForm((s) => ({ ...s, species: e.target.value }))}
+          />
+          <input
+            className="lg:col-span-3 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
+            placeholder="Vendor name"
+            value={form.vendorSlug}
+            onChange={(e) => setForm((s) => ({ ...s, vendorSlug: e.target.value }))}
+          />
+          <input
+            className="lg:col-span-1 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
+            placeholder="Min $"
+            inputMode="numeric"
+            value={form.priceMinCents}
+            onChange={(e) => setForm((s) => ({ ...s, priceMinCents: e.target.value }))}
+          />
+          <input
+            className="lg:col-span-1 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
+            placeholder="Max $$"
+            inputMode="numeric"
+            value={form.priceMaxCents}
+            onChange={(e) => setForm((s) => ({ ...s, priceMaxCents: e.target.value }))}
+          />
           <select
-            className="rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
-            value={form.pageSize}
-            onChange={(e) => setForm((s) => ({ ...s, pageSize: e.target.value }))}
-            title="Per page"
+            className="lg:col-span-2 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
+            value={form.sort}
+            onChange={(e) => setForm((s) => ({ ...s, sort: e.target.value as SortValue }))}
           >
-            {['12', '24', '48'].map((n) => (
-              <option key={`pp-${n}`} value={n}>
-                {n} / page
-              </option>
-            ))}
+            <option value="newest">Newest</option>
+            <option value="price_asc">Price ↑</option>
+            <option value="price_desc">Price ↓</option>
           </select>
 
-          <button
-            type="submit"
-            className="ml-auto inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold"
-            style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
-          >
-            Apply
-          </button>
-        </div>
-      </form>
+          <div className="lg:col-span-12 flex flex-wrap items-center gap-4">
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.onSale}
+                onChange={(e) => setForm((s) => ({ ...s, onSale: e.target.checked }))}
+              />
+              <span>On sale (now)</span>
+            </label>
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.synthetic}
+                onChange={(e) => setForm((s) => ({ ...s, synthetic: e.target.checked }))}
+              />
+              <span>Synthetic</span>
+            </label>
+            <select
+              className="rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
+              value={form.pageSize}
+              onChange={(e) => setForm((s) => ({ ...s, pageSize: e.target.value }))}
+              title="Per page"
+            >
+              {['12', '24', '48'].map((n) => (
+                <option key={`pp-${n}`} value={n}>
+                  {n} / page
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="submit"
+              className="ml-auto inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold"
+              style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
+            >
+              Apply
+            </button>
+          </div>
+        </form>
+      </div>
 
       {/* Results */}
       {state.kind === 'loading' && (
