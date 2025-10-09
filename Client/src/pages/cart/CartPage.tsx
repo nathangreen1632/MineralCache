@@ -11,6 +11,53 @@ type LoadState =
   | { kind: 'loaded'; items: CartItem[]; subtotal: number; shipping: number; total: number }
   | { kind: 'error'; message: string };
 
+/** Safely coerce cents → USD string */
+function centsToUsd(cents: unknown) {
+  const n =
+    typeof cents === 'number'
+      ? cents
+      : typeof cents === 'string'
+        ? Number(cents)
+        : 0;
+  const v = Number.isFinite(n) ? n : 0;
+  return `$${(v / 100).toFixed(2)}`;
+}
+
+/** Try multiple possible price fields emitted by the API */
+function resolvePriceCents(it: CartItem): number {
+  const a = it as any;
+  const candidates = [
+    a.priceCents,
+    a.unitPriceCents,
+    a.unit_price_cents,
+    a.unitCents,
+    a.price, // sometimes APIs send a cents number here
+  ];
+  for (const c of candidates) {
+    const n = typeof c === 'string' ? Number(c) : c;
+    if (typeof n === 'number' && Number.isFinite(n)) return n;
+  }
+  return 0;
+}
+
+/** Try multiple possible image fields emitted by the API */
+function resolveImageUrl(it: CartItem): string | null {
+  const a = it as any;
+  const candidates = [
+    a.imageUrl,
+    a.photoUrl,
+    a.thumbnailUrl,
+    a.thumbUrl,
+    a.primaryImageUrl,
+    a.primaryPhotoUrl,
+    a.image, // sometimes just "image"
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim().length > 0) return c;
+  }
+  return null;
+}
+
 export default function CartPage(): React.ReactElement {
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
   const [busy, setBusy] = useState(false);
@@ -82,22 +129,19 @@ export default function CartPage(): React.ReactElement {
     setBusy(true);
     setMsg(null);
 
-    // ✅ Guard undefined qty and use correct API field name `quantity`
-    const body = {
-      items: state.items.map((i) => ({
-        productId: i.productId,
-        quantity: Math.max(0, Math.trunc(Number(i.qty ?? 0))),
-      })),
-    };
+    const items = state.items.map((i) => {
+      const q = Math.max(0, Math.trunc(Number(i.qty ?? 0)));
+      // send both keys so we're compatible with either shape
+      return { productId: i.productId, qty: q, quantity: q };
+    });
+
+    // derive the expected type from the API function to satisfy TS
+    const body: Parameters<typeof saveCart>[0] = { items };
 
     const { error } = await saveCart(body);
     setBusy(false);
     setMsg(error || 'Saved.');
-    // No manual refetch — saveCart emits EV_CART_CHANGED which triggers our listener.
-  }
-
-  function centsToUsd(cents: number) {
-    return `$${(cents / 100).toFixed(2)}`;
+    // saveCart emits EV_CART_CHANGED; our listener will refresh.
   }
 
   // styles
@@ -143,29 +187,36 @@ export default function CartPage(): React.ReactElement {
             </div>
           )}
 
-          {items.map((it) => (
-            <div key={it.productId} className="rounded-xl border p-3 flex items-center gap-3" style={card}>
-              <div className="h-16 w-16 rounded-lg bg-[var(--theme-card-alt)] overflow-hidden">
-                {it.imageUrl ? <img src={it.imageUrl} alt="" className="h-full w-full object-cover" /> : null}
+          {items.map((it) => {
+            const imgSrc = resolveImageUrl(it);
+            const priceCents = resolvePriceCents(it);
+
+            return (
+              <div key={it.productId} className="rounded-xl border p-3 flex items-center gap-3" style={card}>
+                <div className="h-16 w-16 rounded-lg bg-[var(--theme-card-alt)] overflow-hidden">
+                  {imgSrc ? (
+                    <img src={imgSrc} alt={it.title ?? 'Product image'} className="h-full w-full object-cover" />
+                  ) : null}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="truncate font-semibold">{(it as any).title ?? 'Untitled item'}</div>
+                  <div className="text-sm opacity-80">{centsToUsd(priceCents)}</div>
+                </div>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <span className="opacity-80">Qty</span>
+                  <input
+                    inputMode="numeric"
+                    className="w-16 rounded border px-2 py-1 bg-[var(--theme-textbox)]"
+                    style={borderOnly}
+                    value={String((it as any).qty ?? 1)}
+                    onChange={(e) =>
+                      setQty(it.productId, Math.max(0, Math.trunc(+e.target.value || 0)))
+                    }
+                  />
+                </label>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="truncate font-semibold">{it.title}</div>
-                <div className="text-sm opacity-80">{centsToUsd(it.priceCents)}</div>
-              </div>
-              <label className="inline-flex items-center gap-2 text-sm">
-                <span className="opacity-80">Qty</span>
-                <input
-                  inputMode="numeric"
-                  className="w-16 rounded border px-2 py-1 bg-[var(--theme-textbox)]"
-                  style={borderOnly}
-                  value={String(it.qty ?? 1)}
-                  onChange={(e) =>
-                    setQty(it.productId, Math.max(0, Math.trunc(+e.target.value || 0)))
-                  }
-                />
-              </label>
-            </div>
-          ))}
+            );
+          })}
 
           {items.length > 0 && (
             <div className="flex gap-2">
