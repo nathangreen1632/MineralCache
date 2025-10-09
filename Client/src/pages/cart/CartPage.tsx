@@ -214,7 +214,7 @@ export default function CartPage(): React.ReactElement {
                   onClick={() => remove(it.productId)}
                   disabled={busy}
                   className="inline-flex items-center rounded-lg px-3 py-1.5 text-sm font-semibold ring-1 ring-inset disabled:opacity-60"
-                  style={{ ...borderOnly, background: 'var(--theme-surface)', color: 'var(--theme-text)' }}
+                  style={{ ...borderOnly, background: 'var(--theme-button-error)', color: 'var(--theme-text)' }}
                   aria-label={`Remove ${it.title ?? 'item'} from cart`}
                 >
                   Remove
