@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from 'react';
+// Client/src/pages/cart/CartPage.tsx
+import React, { useCallback, useEffect, useState } from 'react';
 import { getCart, saveCart, type CartItem, removeFromCart } from '../../api/cart';
 import { on } from '../../lib/eventBus';
 import { EV_CART_CHANGED, EV_SHIPPING_CHANGED } from '../../lib/events';
 import { useCartTotals } from '../../hooks/useCartTotals';
+
+type Flash = { kind: 'info' | 'error' | 'success'; text: string };
 
 type LoadState =
   | { kind: 'idle' }
@@ -10,21 +13,15 @@ type LoadState =
   | { kind: 'loaded'; items: CartItem[]; subtotal: number; shipping: number; total: number }
   | { kind: 'error'; message: string };
 
-/** Safely coerce cents → USD string (no nested ternary) */
 function centsToUsd(cents: unknown) {
   let n: number;
-  if (typeof cents === 'number') {
-    n = cents;
-  } else if (typeof cents === 'string') {
-    n = Number(cents);
-  } else {
-    n = 0;
-  }
+  if (typeof cents === 'number') n = cents;
+  else if (typeof cents === 'string') n = Number(cents);
+  else n = 0;
   if (!Number.isFinite(n)) n = 0;
   return `$${(n / 100).toFixed(2)}`;
 }
 
-/** Try multiple possible price fields emitted by the API */
 function resolvePriceCents(it: CartItem): number {
   const a = it as any;
   const candidates = [a.priceCents, a.unitPriceCents, a.unit_price_cents, a.unitCents, a.price];
@@ -35,31 +32,40 @@ function resolvePriceCents(it: CartItem): number {
   return 0;
 }
 
-/** Try multiple possible image fields emitted by the API */
 function resolveImageUrl(it: CartItem): string | null {
   const a = it as any;
-  const candidates = [
-    a.imageUrl,
-    a.photoUrl,
-    a.thumbnailUrl,
-    a.thumbUrl,
-    a.primaryImageUrl,
-    a.primaryPhotoUrl,
-    a.image,
-  ];
+  const candidates = [a.imageUrl, a.photoUrl, a.thumbnailUrl, a.thumbUrl, a.primaryImageUrl, a.primaryPhotoUrl, a.image];
   for (const c of candidates) {
     if (typeof c === 'string' && c.trim().length > 0) return c;
   }
   return null;
 }
 
+/** map flash kind → colored styles (switch/case) */
+function flashClasses(kind: Flash['kind']) {
+  switch (kind) {
+    case 'success':
+      return 'border-green-600/40 text-green-700 dark:text-green-400';
+    case 'error':
+      return 'border-red-600/40 text-red-600 dark:text-red-400';
+    case 'info':
+    default:
+      return 'border-amber-500/40 text-amber-700 dark:text-amber-400';
+  }
+}
+
 export default function CartPage(): React.ReactElement {
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [flash, setFlash] = useState<Flash | null>(null);
+  const [dirty, setDirty] = useState(false);
 
-  // shared totals hook (server-sourced + auto-refresh)
   const { state: totalsState } = useCartTotals();
+
+  const showFlash = useCallback((f: Flash) => {
+    setFlash(f);
+    window.setTimeout(() => setFlash(null), 4000);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -79,12 +85,11 @@ export default function CartPage(): React.ReactElement {
         shipping: data.totals?.shipping ?? 0,
         total: data.totals?.total ?? 0,
       });
+      setDirty(false);
     }
 
-    // initial load
     fetchCart();
 
-    // auto-refresh items when cart or shipping changes anywhere in the app
     const offCart = on(EV_CART_CHANGED, fetchCart);
     const offShip = on(EV_SHIPPING_CHANGED, fetchCart);
 
@@ -97,7 +102,6 @@ export default function CartPage(): React.ReactElement {
 
   const items = state.kind === 'loaded' ? state.items : [];
 
-  // ——— simple derived totals (no useMemo → no deps warning) ———
   const subtotal = state.kind === 'loaded' ? state.subtotal : 0;
   const shipping = state.kind === 'loaded' ? state.shipping : 0;
   let total = state.kind === 'loaded' ? state.total : 0;
@@ -108,37 +112,49 @@ export default function CartPage(): React.ReactElement {
     if (state.kind !== 'loaded') return;
     const next = state.items.map((it) => (it.productId === productId ? { ...it, qty } : it));
     setState({ ...state, items: next });
+    if (!dirty) {
+      setDirty(true);
+      showFlash({ kind: 'info', text: 'Quantity updated. Click "Save Cart" before checkout.' });
+    }
   }
 
   async function persist() {
     if (state.kind !== 'loaded') return;
     setBusy(true);
-    setMsg(null);
 
     const items = state.items.map((i) => {
       const q = Math.max(0, Math.trunc(Number(i.qty ?? 0)));
-      // send both keys so we're compatible with either shape
       return { productId: i.productId, qty: q, quantity: q };
     });
 
     const body: Parameters<typeof saveCart>[0] = { items };
     const { error } = await saveCart(body);
     setBusy(false);
-    setMsg(error || 'Saved.');
+
+    if (!error) {
+      setDirty(false);
+      showFlash({ kind: 'success', text: 'Cart saved.' });
+    } else {
+      showFlash({ kind: 'error', text: 'Could not save your cart.' });
+    }
   }
 
-  /** Remove a line immediately (sends quantity: 0 via API helper) */
   async function remove(productId: number) {
     if (busy) return;
     setBusy(true);
-    setMsg(null);
-    const { error } = await removeFromCart(productId); // now actually used
+    const { error } = await removeFromCart(productId);
     setBusy(false);
-    setMsg(error || 'Removed.');
-    // EV_CART_CHANGED from the API call will re-fetch and update UI
+    if (error) showFlash({ kind: 'error', text: 'Could not remove item.' });
+    else showFlash({ kind: 'success', text: 'Item removed.' });
   }
 
-  // styles
+  function onCheckoutClick(e: React.MouseEvent<HTMLAnchorElement>) {
+    if (dirty) {
+      e.preventDefault();
+      showFlash({ kind: 'error', text: 'Please click "Save Cart" before proceeding to checkout.' });
+    }
+  }
+
   const card = { background: 'var(--theme-card)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' } as const;
   const borderOnly = { borderColor: 'var(--theme-border)' } as const;
 
@@ -162,19 +178,24 @@ export default function CartPage(): React.ReactElement {
     );
   }
 
-  // loaded
   return (
     <section className="mx-auto max-w-5xl px-4 py-8 space-y-6">
       <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Your Cart</h1>
 
-      {msg && (
-        <div className="rounded-md border px-3 py-2 text-sm" style={{ ...card }}>
-          {msg}
-        </div>
-      )}
-
       <div className="grid gap-6 md:grid-cols-3">
+        {/* LEFT column — same width as item cards */}
         <div className="md:col-span-2 space-y-3">
+          {/* Flash bar sized to the left column */}
+          {flash && (
+            <div
+              role="text"
+              aria-live="polite"
+              className={`rounded-xl border p-3 bg-[var(--theme-card)] ${flashClasses(flash.kind)}`}
+            >
+              {flash.text}
+            </div>
+          )}
+
           {items.length === 0 && (
             <div className="rounded-xl border p-4" style={card}>
               Your cart is empty.
@@ -208,7 +229,6 @@ export default function CartPage(): React.ReactElement {
                   />
                 </label>
 
-                {/* Remove button */}
                 <button
                   type="button"
                   onClick={() => remove(it.productId)}
@@ -236,6 +256,7 @@ export default function CartPage(): React.ReactElement {
               </button>
               <a
                 href="/checkout"
+                onClick={onCheckoutClick}
                 className="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold ring-1 ring-inset"
                 style={{ ...borderOnly, background: 'var(--theme-surface)', color: 'var(--theme-text)' }}
               >
@@ -245,6 +266,7 @@ export default function CartPage(): React.ReactElement {
           )}
         </div>
 
+        {/* RIGHT column — totals */}
         <aside className="rounded-xl border p-4 space-y-2 h-fit" style={card}>
           <div className="flex justify-between text-sm">
             <span>Subtotal</span>
