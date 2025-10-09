@@ -173,3 +173,30 @@ export async function addToCart(productId: number, addQty = 1) {
 
   return await saveCart({ items });
 }
+
+/** Remove a single product from the cart */
+export async function removeFromCart(productId: number) {
+  const res = await getCart();
+  const { data, error, status } = res as {
+    data: CartResponse | null;
+    error?: string | null;
+    status?: number;
+  };
+
+  if (status === 401) return { data: null, error: 'AUTH_REQUIRED', status };
+  if (error || !data) return { data: null, error: error ?? 'LOAD_FAILED', status };
+
+  const items = (data.items ?? [])
+    .filter((it) => Number(it.productId) !== Number(productId))
+    .map((it) => ({
+      productId: Number(it.productId),
+      quantity: Math.max(0, Math.trunc(Number(it.quantity ?? it.qty ?? 0))),
+    }));
+
+  return await saveCart({ items });
+}
+
+/** Remove all items */
+export async function clearCart() {
+  return await saveCart({ items: [] });
+}
