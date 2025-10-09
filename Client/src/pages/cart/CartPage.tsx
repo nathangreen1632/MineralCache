@@ -1,6 +1,5 @@
-// Client/src/pages/cart/CartPage.tsx
-import React, { useEffect, useMemo, useState } from 'react';
-import { getCart, saveCart, type CartItem } from '../../api/cart';
+import React, { useEffect, useState } from 'react';
+import { getCart, saveCart, type CartItem, removeFromCart } from '../../api/cart';
 import { on } from '../../lib/eventBus';
 import { EV_CART_CHANGED, EV_SHIPPING_CHANGED } from '../../lib/events';
 import { useCartTotals } from '../../hooks/useCartTotals';
@@ -11,28 +10,24 @@ type LoadState =
   | { kind: 'loaded'; items: CartItem[]; subtotal: number; shipping: number; total: number }
   | { kind: 'error'; message: string };
 
-/** Safely coerce cents → USD string */
+/** Safely coerce cents → USD string (no nested ternary) */
 function centsToUsd(cents: unknown) {
-  const n =
-    typeof cents === 'number'
-      ? cents
-      : typeof cents === 'string'
-        ? Number(cents)
-        : 0;
-  const v = Number.isFinite(n) ? n : 0;
-  return `$${(v / 100).toFixed(2)}`;
+  let n: number;
+  if (typeof cents === 'number') {
+    n = cents;
+  } else if (typeof cents === 'string') {
+    n = Number(cents);
+  } else {
+    n = 0;
+  }
+  if (!Number.isFinite(n)) n = 0;
+  return `$${(n / 100).toFixed(2)}`;
 }
 
 /** Try multiple possible price fields emitted by the API */
 function resolvePriceCents(it: CartItem): number {
   const a = it as any;
-  const candidates = [
-    a.priceCents,
-    a.unitPriceCents,
-    a.unit_price_cents,
-    a.unitCents,
-    a.price, // sometimes APIs send a cents number here
-  ];
+  const candidates = [a.priceCents, a.unitPriceCents, a.unit_price_cents, a.unitCents, a.price];
   for (const c of candidates) {
     const n = typeof c === 'string' ? Number(c) : c;
     if (typeof n === 'number' && Number.isFinite(n)) return n;
@@ -50,7 +45,7 @@ function resolveImageUrl(it: CartItem): string | null {
     a.thumbUrl,
     a.primaryImageUrl,
     a.primaryPhotoUrl,
-    a.image, // sometimes just "image"
+    a.image,
   ];
   for (const c of candidates) {
     if (typeof c === 'string' && c.trim().length > 0) return c;
@@ -63,7 +58,7 @@ export default function CartPage(): React.ReactElement {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  // ✅ Use shared totals hook so totals auto-refresh when cart/shipping change elsewhere
+  // shared totals hook (server-sourced + auto-refresh)
   const { state: totalsState } = useCartTotals();
 
   useEffect(() => {
@@ -102,25 +97,16 @@ export default function CartPage(): React.ReactElement {
 
   const items = state.kind === 'loaded' ? state.items : [];
 
-  // Prefer totals from the shared hook (server-sourced + auto-refresh).
-  // Fall back to the page's local fetch if hook is not yet loaded.
-  const totals = useMemo(() => {
-    const subtotal = state.kind === 'loaded' ? state.subtotal : 0;
-    const shipping = state.kind === 'loaded' ? state.shipping : 0;
-
-    let total = state.kind === 'loaded' ? state.total : 0;
-    if (totalsState.kind === 'loaded') {
-      total = totalsState.totalCents;
-    }
-
-    return { subtotal, shipping, total };
-  }, [state, totalsState]);
+  // ——— simple derived totals (no useMemo → no deps warning) ———
+  const subtotal = state.kind === 'loaded' ? state.subtotal : 0;
+  const shipping = state.kind === 'loaded' ? state.shipping : 0;
+  let total = state.kind === 'loaded' ? state.total : 0;
+  if (totalsState.kind === 'loaded') total = totalsState.totalCents;
+  const totals = { subtotal, shipping, total };
 
   function setQty(productId: number, qty: number) {
     if (state.kind !== 'loaded') return;
-    const next = state.items.map((it) =>
-      it.productId === productId ? { ...it, qty } : it
-    );
+    const next = state.items.map((it) => (it.productId === productId ? { ...it, qty } : it));
     setState({ ...state, items: next });
   }
 
@@ -135,13 +121,21 @@ export default function CartPage(): React.ReactElement {
       return { productId: i.productId, qty: q, quantity: q };
     });
 
-    // derive the expected type from the API function to satisfy TS
     const body: Parameters<typeof saveCart>[0] = { items };
-
     const { error } = await saveCart(body);
     setBusy(false);
     setMsg(error || 'Saved.');
-    // saveCart emits EV_CART_CHANGED; our listener will refresh.
+  }
+
+  /** Remove a line immediately (sends quantity: 0 via API helper) */
+  async function remove(productId: number) {
+    if (busy) return;
+    setBusy(true);
+    setMsg(null);
+    const { error } = await removeFromCart(productId); // now actually used
+    setBusy(false);
+    setMsg(error || 'Removed.');
+    // EV_CART_CHANGED from the API call will re-fetch and update UI
   }
 
   // styles
@@ -202,6 +196,7 @@ export default function CartPage(): React.ReactElement {
                   <div className="truncate font-semibold">{(it as any).title ?? 'Untitled item'}</div>
                   <div className="text-sm opacity-80">{centsToUsd(priceCents)}</div>
                 </div>
+
                 <label className="inline-flex items-center gap-2 text-sm">
                   <span className="opacity-80">Qty</span>
                   <input
@@ -209,11 +204,21 @@ export default function CartPage(): React.ReactElement {
                     className="w-16 rounded border px-2 py-1 bg-[var(--theme-textbox)]"
                     style={borderOnly}
                     value={String((it as any).qty ?? 1)}
-                    onChange={(e) =>
-                      setQty(it.productId, Math.max(0, Math.trunc(+e.target.value || 0)))
-                    }
+                    onChange={(e) => setQty(it.productId, Math.max(0, Math.trunc(+e.target.value || 0)))}
                   />
                 </label>
+
+                {/* Remove button */}
+                <button
+                  type="button"
+                  onClick={() => remove(it.productId)}
+                  disabled={busy}
+                  className="inline-flex items-center rounded-lg px-3 py-1.5 text-sm font-semibold ring-1 ring-inset disabled:opacity-60"
+                  style={{ ...borderOnly, background: 'var(--theme-surface)', color: 'var(--theme-text)' }}
+                  aria-label={`Remove ${it.title ?? 'item'} from cart`}
+                >
+                  Remove
+                </button>
               </div>
             );
           })}
