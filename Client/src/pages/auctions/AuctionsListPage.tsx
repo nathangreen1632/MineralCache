@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import AuctionCard from '../../components/auctions/AuctionCard';
 import { listAuctions, type AuctionListItem } from '../../api/auctions';
 
@@ -78,16 +79,24 @@ export default function AuctionsListPage(): React.ReactElement {
             />
             <div className="flex items-center gap-2">
               <label htmlFor="sort" className="text-sm">Sort</label>
-              <select
-                id="sort"
-                aria-label="Sort auctions"
-                value={sort}
-                onChange={(e) => setSort(e.target.value as 'ending' | 'newest')}
-                className="rounded-xl border bg-[var(--theme-surface)] border-[var(--theme-border)] px-3 py-2"
-              >
-                <option value="ending">Ending soon</option>
-                <option value="newest">Newest</option>
-              </select>
+
+              <div className="relative">
+                <select
+                  id="sort"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value as 'ending' | 'newest')}
+                  className="appearance-none rounded-xl border bg-[var(--theme-surface)] border-[var(--theme-border)] px-3 py-2 pr-9 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-focus)]"
+                >
+                  <option value="ending">Ending soon</option>
+                  <option value="newest">Newest</option>
+                </select>
+
+                {/* overlay chevron */}
+                <ChevronDown
+                  aria-hidden="true"
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--theme-text)] opacity-70"
+                />
+              </div>
             </div>
           </div>
         </header>
