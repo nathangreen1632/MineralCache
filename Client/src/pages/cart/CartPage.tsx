@@ -71,7 +71,9 @@ export default function CartPage(): React.ReactElement {
 
   function setQty(productId: number, qty: number) {
     if (state.kind !== 'loaded') return;
-    const next = state.items.map((it) => (it.productId === productId ? { ...it, qty } : it));
+    const next = state.items.map((it) =>
+      it.productId === productId ? { ...it, qty } : it
+    );
     setState({ ...state, items: next });
   }
 
@@ -79,11 +81,19 @@ export default function CartPage(): React.ReactElement {
     if (state.kind !== 'loaded') return;
     setBusy(true);
     setMsg(null);
-    const body = { items: state.items.map((i) => ({ productId: i.productId, qty: Math.max(0, Math.trunc(i.qty)) })) };
+
+    // ✅ Guard undefined qty and use correct API field name `quantity`
+    const body = {
+      items: state.items.map((i) => ({
+        productId: i.productId,
+        quantity: Math.max(0, Math.trunc(Number(i.qty ?? 0))),
+      })),
+    };
+
     const { error } = await saveCart(body);
     setBusy(false);
     setMsg(error || 'Saved.');
-    // No manual refetch here—saveCart emits EV_CART_CHANGED which triggers our listener to refresh totals/items.
+    // No manual refetch — saveCart emits EV_CART_CHANGED which triggers our listener.
   }
 
   function centsToUsd(cents: number) {
@@ -148,8 +158,10 @@ export default function CartPage(): React.ReactElement {
                   inputMode="numeric"
                   className="w-16 rounded border px-2 py-1 bg-[var(--theme-textbox)]"
                   style={borderOnly}
-                  value={String(it.qty)}
-                  onChange={(e) => setQty(it.productId, Math.max(0, Math.trunc(+e.target.value || 0)))}
+                  value={String(it.qty ?? 0)}
+                  onChange={(e) =>
+                    setQty(it.productId, Math.max(0, Math.trunc(+e.target.value || 0)))
+                  }
                 />
               </label>
             </div>
