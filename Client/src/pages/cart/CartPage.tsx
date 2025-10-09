@@ -158,7 +158,7 @@ export default function CartPage(): React.ReactElement {
                   inputMode="numeric"
                   className="w-16 rounded border px-2 py-1 bg-[var(--theme-textbox)]"
                   style={borderOnly}
-                  value={String(it.qty ?? 0)}
+                  value={String(it.qty ?? 1)}
                   onChange={(e) =>
                     setQty(it.productId, Math.max(0, Math.trunc(+e.target.value || 0)))
                   }
