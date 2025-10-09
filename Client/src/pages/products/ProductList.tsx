@@ -1,6 +1,6 @@
 // Client/src/pages/products/ProductList.tsx
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { listProducts, type ListQuery, type Product } from '../../api/products';
 import { searchProducts } from '../../api/search';
 import { ChevronDown } from 'lucide-react'; // ⬅️ mobile collapse icon
@@ -55,6 +55,13 @@ function effectivePriceCents(p: Product): number {
 /** Escape user text for safe RegExp use */
 function escapeRegExp(str: string) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Pull vendor fields from a few likely shapes */
+function getVendorFromProduct(p: any): { slug: string | null; name: string | null } {
+  const slug = p.vendorSlug ?? p.vendor_slug ?? p.vendor?.slug ?? null;
+  const name = p.vendorName ?? p.vendor_name ?? p.vendor?.name ?? null;
+  return { slug: slug ?? null, name: name ?? null };
 }
 
 /** Highlight tokens from the query safely (bounded → no catastrophic backtracking). */
@@ -192,6 +199,7 @@ type FormState = {
 export default function ProductList(): React.ReactElement {
   const [params, setParams] = useSearchParams();
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
+  const navigate = useNavigate(); // used by card click → vendor
 
   // mobile collapse state
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -520,28 +528,55 @@ export default function ProductList(): React.ReactElement {
               );
 
               const imgSrc = imageUrlForCard(p);
+              const { slug: vendorSlug, name: vendorName } = getVendorFromProduct(p);
+              const vendorLabel = vendorName || vendorSlug || '';
+
+              // Card acts like a link to vendor (when slug exists)
+              const onCardClick = vendorSlug ? () => navigate(`/vendors/${vendorSlug}`) : undefined;
+              const onCardKeyDown = vendorSlug
+                ? (e: React.KeyboardEvent) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    navigate(`/vendors/${vendorSlug}`);
+                  }
+                }
+                : undefined;
 
               return (
-                <Link
+                <div
                   key={(p as any).id}
-                  to={`/products/${(p as any).id}`}
-                  className="rounded-xl border p-3 hover:shadow"
+                  role={vendorSlug ? 'link' : undefined}
+                  tabIndex={vendorSlug ? 0 : -1}
+                  onClick={onCardClick}
+                  onKeyDown={onCardKeyDown}
+                  className={`rounded-xl border p-3 hover:shadow ${vendorSlug ? 'cursor-pointer' : ''}`}
                   style={card}
+                  aria-label={vendorSlug ? `View vendor storefront: ${vendorLabel}` : undefined}
+                  title={vendorSlug ? `View vendor: ${vendorLabel}` : undefined}
                 >
+                  {/* Image → product detail (stopPropagation so wrapper doesn’t fire) */}
                   {imgSrc ? (
-                    <img
-                      src={imgSrc}
-                      alt={(p as any).title}
-                      className="h-72 w-full rounded object-cover mb-3"
-                      style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
-                      onError={(ev) => {
-                        const el = ev.currentTarget;
-                        el.style.display = 'none';
-                        const placeholder = el.nextElementSibling as HTMLElement | null;
-                        if (placeholder) placeholder.style.display = 'block';
-                      }}
-                    />
+                    <Link
+                      to={`/products/${(p as any).id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="block"
+                      aria-label={`View product: ${(p as any).title}`}
+                    >
+                      <img
+                        src={imgSrc}
+                        alt={(p as any).title}
+                        className="h-72 w-full rounded object-cover mb-3"
+                        style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
+                        onError={(ev) => {
+                          const el = ev.currentTarget;
+                          el.style.display = 'none';
+                          const placeholder = el.nextElementSibling as HTMLElement | null;
+                          if (placeholder) placeholder.style.display = 'block';
+                        }}
+                      />
+                    </Link>
                   ) : null}
+
                   <div
                     className="h-36 w-full rounded bg-[var(--theme-card-alt)] mb-3"
                     style={{ display: imgSrc ? 'none' : 'block' }}
@@ -550,7 +585,23 @@ export default function ProductList(): React.ReactElement {
                   <div className="truncate font-semibold">
                     {highlight((p as any).title, qStr)}
                   </div>
+
                   {priceEl}
+
+                  {/* Vendor line (right after price) */}
+                  {vendorSlug ? (
+                    <div className="text-xs opacity-70">
+                      <Link
+                        to={`/vendors/${vendorSlug}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
+                        aria-label={`View vendor storefront: ${vendorLabel}`}
+                      >
+                        {vendorLabel}
+                      </Link>
+                    </div>
+                  ) : null}
+
                   {(p as any).species ? (
                     <div className="text-xs opacity-70">
                       {highlight((p as any).species, qStr)}
@@ -561,7 +612,7 @@ export default function ProductList(): React.ReactElement {
                       {highlight((p as any).locality, qStr)}
                     </div>
                   ) : null}
-                </Link>
+                </div>
               );
             })}
           </div>
