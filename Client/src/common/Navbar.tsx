@@ -243,7 +243,6 @@ export default function Navbar(): React.ReactElement {
 
   return (
     <>
-      {/* Hamburger: visible at ≤1024px, hidden when >1024px */}
       <button
         ref={buttonRef}
         type="button"
@@ -264,7 +263,7 @@ export default function Navbar(): React.ReactElement {
 
       {/* Floating overlay panel: only render at ≤1024px */}
       {open && (
-        <div className="hidden max-[1024px]:block fixed inset-0 z-40">
+        <div className="hidden max-[1025px]:block fixed inset-0 z-40">
           <div
             id="mobile-nav-panel"
             ref={panelRef}
