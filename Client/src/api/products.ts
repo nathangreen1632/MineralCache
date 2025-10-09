@@ -67,6 +67,9 @@ export type Product = {
   locality: string | null;
   synthetic: boolean;
 
+  vendorSlug?: string | null;
+  vendorName?: string | null;
+
   lengthCm: number | null;
   widthCm: number | null;
   heightCm: number | null;
