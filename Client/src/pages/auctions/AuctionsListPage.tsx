@@ -63,7 +63,7 @@ export default function AuctionsListPage(): React.ReactElement {
       <div className="mx-auto max-w-12xl px-6 py-14 grid gap-10">
         {/* Standalone, left-aligned page title */}
         <div>
-          <h1 className="text-2xl font-bold">Auctions</h1>
+          <h1 className="text-4xl font-bold">Auctions</h1>
         </div>
 
         {/* Header with centered controls */}
@@ -102,10 +102,9 @@ export default function AuctionsListPage(): React.ReactElement {
           </div>
         )}
 
-        {/* 2 @ md, 3 @ lg, 4 @ xl+ */}
         <section
           aria-label="Auction results"
-          className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6"
         >
           {(filtered ?? []).map((a) => (
             <AuctionCard
