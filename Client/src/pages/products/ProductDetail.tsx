@@ -4,6 +4,8 @@ import { useParams, Link } from 'react-router-dom';
 import { getProduct, type Product } from '../../api/products';
 import ImageCarousel from '../../components/products/ImageCarousel';
 import AuctionPanel from '../../components/auctions/AuctionPanel';
+import { addToCart } from '../../api/cart';
+import toast from 'react-hot-toast';
 
 function centsToUsd(cents: number | null | undefined): string {
   const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
@@ -55,6 +57,7 @@ export default function ProductDetail(): React.ReactElement {
   const { id } = useParams<{ id: string }>();
   const pid = Number(id);
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     if (!Number.isFinite(pid) || pid <= 0) {
@@ -190,15 +193,41 @@ export default function ProductDetail(): React.ReactElement {
         </dl>
 
         <div className="flex items-center gap-2">
-          {/* TODO(cart): wire up add-to-cart */}
+          {/* Add to Cart */}
           <button
             type="button"
-            className="rounded-lg px-4 py-2 text-sm font-semibold"
-            style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
-            onClick={() => alert('TODO: add to cart')}
+            aria-label="Add this item to your cart"
+            aria-busy={adding ? 'true' : 'false'}
+            disabled={adding}
+            className="inline-flex rounded-xl px-4 py-2 font-semibold
+                       bg-[var(--theme-button)] text-[var(--theme-text-white)]
+                       hover:bg-[var(--theme-button-hover)]
+                       focus-visible:ring-2 focus-visible:ring-offset-2
+                       focus-visible:ring-[var(--theme-focus)]
+                       focus-visible:ring-offset-[var(--theme-surface)]"
+            onClick={async () => {
+              try {
+                setAdding(true);
+                const r = await addToCart(pid, 1);
+                if (r?.error === 'AUTH_REQUIRED') {
+                  toast.error('Please log in to add items to your cart.');
+                  return;
+                }
+                if (r?.error) {
+                  toast.error(r.error || 'Could not add to cart.');
+                  return;
+                }
+                toast.success('Added to cart');
+              } catch {
+                toast.error('Could not add to cart.');
+              } finally {
+                setAdding(false);
+              }
+            }}
           >
-            Add to Cart
+            {adding ? 'Adding…' : 'Add to Cart'}
           </button>
+
           <Link
             to="/products"
             className="rounded-lg px-3 py-2 text-sm font-medium ring-1 ring-inset"
