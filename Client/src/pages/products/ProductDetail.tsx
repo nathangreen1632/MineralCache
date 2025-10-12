@@ -166,6 +166,18 @@ export default function ProductDetail(): React.ReactElement {
           {p.locality ? ` · ${p.locality}` : ''}
         </div>
 
+        {(p as any).vendorSlug ? (
+          <div className="text-xs opacity-70">
+            <Link
+              to={`/vendors/${(p as any).vendorSlug}`}
+              className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link)]"
+              aria-label={`View vendor storefront: ${(p as any).vendorSlug}`}
+            >
+              {(p as any).vendorSlug}
+            </Link>
+          </div>
+        ) : null}
+
         <div className="text-xl font-bold text-[var(--theme-text)]">{priceEl}</div>
 
         {/* Auctions: render panel when auctionId is present */}

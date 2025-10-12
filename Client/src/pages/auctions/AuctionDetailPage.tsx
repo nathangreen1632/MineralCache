@@ -29,12 +29,18 @@ export default function AuctionDetailPage(): React.ReactElement | null {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Accept preload from <Link state={{ imageUrl, productTitle }}>
-  const preload = (location.state as { imageUrl?: string | null; productTitle?: string | null } | null) ?? null;
+  // ✅ Accept preload from <Link state={{ imageUrl, productTitle, vendorSlug }}>
+  const preload = (location.state as {
+    imageUrl?: string | null;
+    productTitle?: string | null;
+    vendorSlug?: string | null;
+  } | null) ?? null;
 
   const [auction, setAuction] = useState<AuctionDto | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(preload?.imageUrl ?? null);
   const [productTitle, setProductTitle] = useState<string | null>(preload?.productTitle ?? null);
+  // ✅ NEW: vendor slug state (optional)
+  const [vendorSlug, setVendorSlug] = useState<string | null>(preload?.vendorSlug ?? null);
 
   const [minNext, setMinNext] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -80,6 +86,16 @@ export default function AuctionDetailPage(): React.ReactElement | null {
           const extra = payload.data as any;
           if (typeof extra.imageUrl === 'string') setImageUrl(extra.imageUrl);
           if (typeof extra.productTitle === 'string') setProductTitle(extra.productTitle);
+
+          // ✅ Try to derive vendor slug from common shapes (optional, non-breaking)
+          if (!vendorSlug) {
+            const vslug =
+              extra?.vendorSlug ??
+              extra?.product?.vendorSlug ??
+              extra?.vendor?.slug ??
+              null;
+            if (typeof vslug === 'string' && vslug.length > 0) setVendorSlug(vslug);
+          }
         } else {
           setAuction(null);
         }
@@ -91,7 +107,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
     return () => {
       isMounted = false;
     };
-  }, [id]);
+  }, [id]); // intentionally not including vendorSlug to avoid loop
 
   // sockets: join room and listen for updates
   useEffect(() => {
@@ -259,6 +275,19 @@ export default function AuctionDetailPage(): React.ReactElement | null {
           </div>
 
           <h1 className="text-2xl font-bold">{headerTitle}</h1>
+
+          {/* ✅ NEW: Vendor slug, placed between headerTitle and productTitle */}
+          {vendorSlug ? (
+            <div className="text-sm">
+              <Link
+                to={`/vendors/${vendorSlug}`}
+                className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
+                aria-label={`View vendor storefront: ${vendorSlug}`}
+              >
+                {vendorSlug}
+              </Link>
+            </div>
+          ) : null}
 
           {productTitle && (
             <div className="text-lg text-[var(--theme-muted)]">

@@ -105,7 +105,7 @@ export default function CheckoutPage(): React.ReactElement {
   }
 
   return (
-    <section className="mx-auto max-w-3xl px-6 py-14 space-y-6">
+    <section className="mx-auto max-w-6xl px-6 py-14 space-y-6">
       <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Checkout</h1>
 
       <div className="rounded-2xl border p-6 grid gap-4" style={card}>

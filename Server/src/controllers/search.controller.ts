@@ -101,10 +101,19 @@ export async function searchProducts(req: Request, res: Response): Promise<void>
             ['id', 'ASC'],
           ],
         },
+        // 👇 NEW: include vendor so we can surface slug/name to the client
+        {
+          model: Vendor,
+          as: 'vendor',
+          attributes: ['id', 'slug'],
+        },
       ],
+      // distinct not required here because images is separate:true and vendor is 1:1,
+      // but harmless to add if you later expand includes that could duplicate rows.
+      // distinct: true,
     });
 
-    // Flatten primaryImageUrl so the cards can render a photo
+    // Flatten primaryImageUrl + vendorSlug/vendorName so the cards can render both
     const items = rows.map((p) => {
       const j: any = p.toJSON();
       const cover = Array.isArray(j.images) && j.images[0] ? j.images[0] : null;
@@ -114,8 +123,10 @@ export async function searchProducts(req: Request, res: Response): Promise<void>
 
       return {
         ...j,
+        vendorSlug: j.vendor?.slug ?? null,
         primaryImageUrl: url,
-        // If you don’t want to ship the nested array:
+        // If you don’t want to ship the nested objects:
+        // vendor: undefined,
         // images: undefined,
       };
     });

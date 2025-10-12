@@ -1,8 +1,9 @@
 // Client/src/pages/products/ProductList.tsx
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { listProducts, type ListQuery, type Product } from '../../api/products';
 import { searchProducts } from '../../api/search';
+import { ChevronDown } from 'lucide-react'; // ⬅️ mobile collapse icon
 
 // Allow an optional runtime-injected API base (e.g., set on window at boot)
 declare global {
@@ -13,11 +14,8 @@ declare global {
 
 /** --- CONFIG: where the API is serving /uploads from (prod = same origin) --- */
 const API_BASE =
-  // env (Vite)
   ((import.meta as any)?.env?.VITE_API_BASE as string | undefined) ??
-  // optionally injected at runtime
   (typeof window !== 'undefined' ? window.__API_BASE__ : undefined) ??
-  // default: same origin
   '';
 
 /** Join base + path without using regex (no S5852 risk). */
@@ -59,20 +57,26 @@ function escapeRegExp(str: string) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Pull vendor fields from a few likely shapes */
+function getVendorFromProduct(p: any): { slug: string | null; name: string | null } {
+  const slug = p.vendorSlug ?? p.vendor_slug ?? p.vendor?.slug ?? null;
+  const name = p.vendorName ?? p.vendor_name ?? p.vendor?.name ?? null;
+  return { slug: slug ?? null, name: name ?? null };
+}
+
 /** Highlight tokens from the query safely (bounded → no catastrophic backtracking). */
 function highlight(text: string, q: string): React.ReactNode {
   const t = (q || '').trim();
   if (!t) return text;
 
-  // Bound number/size of tokens to keep regex simple & fast
   const tokens = Array.from(new Set(t.split(/\s+/g).filter(Boolean)))
-    .slice(0, 8) // ≤ 8 tokens
-    .map((s) => s.slice(0, 40)); // each ≤ 40 chars
+    .slice(0, 8)
+    .map((s) => s.slice(0, 40));
 
   if (tokens.length === 0) return text;
 
   const pattern = tokens.map(escapeRegExp).join('|');
-  const re = new RegExp(`(?:${pattern})`, 'ig'); // non-capturing, case-insensitive
+  const re = new RegExp(`(?:${pattern})`, 'ig');
 
   const parts: React.ReactNode[] = [];
   let last = 0;
@@ -117,14 +121,12 @@ type AnyImage = {
   v1600Path?: string | null;
   origPath?: string | null;
   isPrimary?: boolean | null;
-  is_default_global?: boolean | null; // cover some schemas
+  is_default_global?: boolean | null;
 };
 
 function selectImageRecord(p: any): AnyImage | null {
-  // Explicit primary field
   if (p.primaryImage) return p.primaryImage as AnyImage;
 
-  // Common arrays
   const arrays: AnyImage[][] = [
     p.images ?? [],
     p.photos ?? [],
@@ -134,7 +136,6 @@ function selectImageRecord(p: any): AnyImage | null {
 
   for (const arr of arrays) {
     if (Array.isArray(arr) && arr.length) {
-      // prefer primary-like flags
       const pri =
         arr.find((i: AnyImage) => i?.isPrimary) ??
         arr.find((i: AnyImage) => i?.is_default_global) ??
@@ -148,14 +149,27 @@ function selectImageRecord(p: any): AnyImage | null {
 function imageUrlForCard(p: any): string | null {
   const rec = selectImageRecord(p);
   if (!rec) return null;
-
-  // prefer a medium size for cards
   const rel = rec.v800Path || rec.v320Path || rec.v1600Path || rec.origPath || null;
   if (!rel) return null;
-
-  // All paths in DB are relative to the /uploads mount
   const withPrefix = rel.startsWith('/uploads/') ? rel : `/uploads/${rel}`;
   return joinUrl(API_BASE, withPrefix);
+}
+
+/** ---------- Helpers to support dollar inputs ---------- */
+function centsToDollarInput(cents?: number): string {
+  if (typeof cents !== 'number' || !Number.isFinite(cents)) return '';
+  const whole = Math.trunc(cents);
+  // Show clean integer dollars when possible (e.g., 6500 → "65")
+  return whole % 100 === 0 ? String(whole / 100) : (whole / 100).toFixed(2);
+}
+function dollarsStrToCents(s: string): number | undefined {
+  const t = (s || '').trim();
+  if (!t) return undefined;
+  // allow "$", commas, spaces; keep first dot for decimals
+  const cleaned = t.replace(/[$,\s]/g, '');
+  const n = Number.parseFloat(cleaned);
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  return Math.round(n * 100);
 }
 
 /** ---------- Types/State ---------- */
@@ -175,8 +189,9 @@ type FormState = {
   vendorSlug: string;
   onSale: boolean;
   synthetic: boolean;
-  priceMinCents: string;
-  priceMaxCents: string;
+  /** store dollars as strings in the form; convert to cents on submit */
+  priceMinDollars: string;
+  priceMaxDollars: string;
   sort: SortValue;
   pageSize: string;
 };
@@ -184,6 +199,10 @@ type FormState = {
 export default function ProductList(): React.ReactElement {
   const [params, setParams] = useSearchParams();
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
+  const navigate = useNavigate(); // used by card click → vendor
+
+  // mobile collapse state
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // 🔎 Debounced keyword search (persisted in query params)
   const [inputQ, setInputQ] = useState<string>(params.get('q') ?? '');
@@ -192,7 +211,7 @@ export default function ProductList(): React.ReactElement {
       const next = new URLSearchParams(params);
       if (inputQ.trim()) next.set('q', inputQ.trim());
       else next.delete('q');
-      next.set('page', '1'); // reset paging when query changes
+      next.set('page', '1');
       setParams(next, { replace: true });
     }, 300);
     return () => clearTimeout(t);
@@ -244,8 +263,8 @@ export default function ProductList(): React.ReactElement {
     vendorSlug: query.vendorSlug ?? '',
     onSale: Boolean(query.onSale),
     synthetic: Boolean(query.synthetic),
-    priceMinCents: query.priceMinCents?.toString() ?? '',
-    priceMaxCents: query.priceMaxCents?.toString() ?? '',
+    priceMinDollars: centsToDollarInput(query.priceMinCents),
+    priceMaxDollars: centsToDollarInput(query.priceMaxCents),
     sort: (query.sort ?? 'newest') as SortValue,
     pageSize: String(query.pageSize ?? 24),
   }));
@@ -256,8 +275,8 @@ export default function ProductList(): React.ReactElement {
       vendorSlug: query.vendorSlug ?? '',
       onSale: Boolean(query.onSale),
       synthetic: Boolean(query.synthetic),
-      priceMinCents: query.priceMinCents?.toString() ?? '',
-      priceMaxCents: query.priceMaxCents?.toString() ?? '',
+      priceMinDollars: centsToDollarInput(query.priceMinCents),
+      priceMaxDollars: centsToDollarInput(query.priceMaxCents),
       sort: (query.sort ?? 'newest') as SortValue,
       pageSize: String(query.pageSize ?? 24),
     });
@@ -319,19 +338,24 @@ export default function ProductList(): React.ReactElement {
         next.set(k, String(v));
       }
     }
-    if (!('page' in partial)) next.set('page', '1'); // reset when filters change
+    if (!('page' in partial)) next.set('page', '1');
     setParams(next, { replace: true });
   }
 
   function submitFilters(e: React.FormEvent) {
     e.preventDefault();
+
+    // Convert dollar strings → integer cents for URL params
+    const minCents = dollarsStrToCents(form.priceMinDollars);
+    const maxCents = dollarsStrToCents(form.priceMaxDollars);
+
     updateQuery({
       species: form.species.trim() || undefined,
       vendorSlug: form.vendorSlug.trim() || undefined,
       onSale: form.onSale ? true : undefined,
       synthetic: form.synthetic ? true : undefined,
-      priceMinCents: form.priceMinCents ? Math.max(0, Math.trunc(+form.priceMinCents)) : undefined,
-      priceMaxCents: form.priceMaxCents ? Math.max(0, Math.trunc(+form.priceMaxCents)) : undefined,
+      priceMinCents: minCents,
+      priceMaxCents: maxCents,
       sort: form.sort as ListQuery['sort'],
       pageSize: Math.max(1, Math.trunc(+form.pageSize)) || 24,
     });
@@ -355,96 +379,116 @@ export default function ProductList(): React.ReactElement {
     <section className="mx-auto max-w-12xl px-4 py-8 space-y-6">
       <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Catalog</h1>
 
-      {/* Search + Filters */}
-      <form
-        onSubmit={submitFilters}
-        className="rounded-xl border p-4 grid gap-3 md:grid-cols-12"
-        style={card}
-      >
-        {/* 🔎 Keyword search (debounced -> query param) */}
-        <input
-          className="md:col-span-4 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
-          placeholder="Search title/species/locality…"
-          value={inputQ}
-          onChange={(e) => setInputQ(e.target.value)}
-          aria-label="Search"
-        />
-
-        <input
-          className="md:col-span-3 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
-          placeholder="Species"
-          value={form.species}
-          onChange={(e) => setForm((s) => ({ ...s, species: e.target.value }))}
-        />
-        <input
-          className="md:col-span-3 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
-          placeholder="Vendor name"
-          value={form.vendorSlug}
-          onChange={(e) => setForm((s) => ({ ...s, vendorSlug: e.target.value }))}
-        />
-        <input
-          className="md:col-span-1 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
-          placeholder="Min ¢"
-          inputMode="numeric"
-          value={form.priceMinCents}
-          onChange={(e) => setForm((s) => ({ ...s, priceMinCents: e.target.value }))}
-        />
-        <input
-          className="md:col-span-1 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
-          placeholder="Max ¢"
-          inputMode="numeric"
-          value={form.priceMaxCents}
-          onChange={(e) => setForm((s) => ({ ...s, priceMaxCents: e.target.value }))}
-        />
-        <select
-          className="md:col-span-2 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
-          value={form.sort}
-          onChange={(e) => setForm((s) => ({ ...s, sort: e.target.value as SortValue }))}
+      {/* Search + Filters (collapsible 0–1023px; always open at 1024px+) */}
+      <div className="w-full rounded-xl border" style={card}>
+        {/* Toggle header — visible only below lg */}
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((v) => !v)}
+          className="w-full lg:hidden flex items-center justify-between px-4 py-3"
+          aria-expanded={filtersOpen}
+          aria-controls="filters-panel"
         >
-          <option value="newest">Newest</option>
-          <option value="price_asc">Price ↑</option>
-          <option value="price_desc">Price ↓</option>
-        </select>
+          <span className="font-semibold">Search & Filters</span>
+          <ChevronDown
+            aria-hidden="true"
+            className={`h-5 w-5 transition-transform duration-200 ${filtersOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
 
-        <div className="md:col-span-12 flex flex-wrap items-center gap-4">
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.onSale}
-              onChange={(e) => setForm((s) => ({ ...s, onSale: e.target.checked }))}
-            />
-            <span>On sale (now)</span>
-          </label>
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.synthetic}
-              onChange={(e) => setForm((s) => ({ ...s, synthetic: e.target.checked }))}
-            />
-            <span>Synthetic</span>
-          </label>
+        {/* The form: hidden below lg when collapsed; always grid at lg+ */}
+        <form
+          id="filters-panel"
+          onSubmit={submitFilters}
+          className={`p-4 grid gap-3 lg:grid-cols-12 ${filtersOpen ? 'grid' : 'hidden'} lg:grid`}
+        >
+          {/* 🔎 Keyword search (debounced -> query param) */}
+          <input
+            className="lg:col-span-4 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
+            placeholder="Search title/species/locality…"
+            value={inputQ}
+            onChange={(e) => setInputQ(e.target.value)}
+            aria-label="Search"
+          />
+
+          <input
+            className="lg:col-span-3 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
+            placeholder="Species"
+            value={form.species}
+            onChange={(e) => setForm((s) => ({ ...s, species: e.target.value }))}
+          />
+          <input
+            className="lg:col-span-3 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
+            placeholder="Vendor name"
+            value={form.vendorSlug}
+            onChange={(e) => setForm((s) => ({ ...s, vendorSlug: e.target.value }))}
+          />
+          <input
+            className="lg:col-span-1 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
+            placeholder="Min $"
+            inputMode="decimal"
+            value={form.priceMinDollars}
+            onChange={(e) => setForm((s) => ({ ...s, priceMinDollars: e.target.value }))}
+            aria-label="Minimum price (USD)"
+          />
+          <input
+            className="lg:col-span-1 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
+            placeholder="Max $"
+            inputMode="decimal"
+            value={form.priceMaxDollars}
+            onChange={(e) => setForm((s) => ({ ...s, priceMaxDollars: e.target.value }))}
+            aria-label="Maximum price (USD)"
+          />
           <select
-            className="rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
-            value={form.pageSize}
-            onChange={(e) => setForm((s) => ({ ...s, pageSize: e.target.value }))}
-            title="Per page"
+            className="lg:col-span-2 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
+            value={form.sort}
+            onChange={(e) => setForm((s) => ({ ...s, sort: e.target.value as SortValue }))}
           >
-            {['12', '24', '48'].map((n) => (
-              <option key={`pp-${n}`} value={n}>
-                {n} / page
-              </option>
-            ))}
+            <option value="newest">Newest</option>
+            <option value="price_asc">Price ↑</option>
+            <option value="price_desc">Price ↓</option>
           </select>
 
-          <button
-            type="submit"
-            className="ml-auto inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold"
-            style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
-          >
-            Apply
-          </button>
-        </div>
-      </form>
+          <div className="lg:col-span-12 flex flex-wrap items-center gap-4">
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.onSale}
+                onChange={(e) => setForm((s) => ({ ...s, onSale: e.target.checked }))}
+              />
+              <span>On sale (now)</span>
+            </label>
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.synthetic}
+                onChange={(e) => setForm((s) => ({ ...s, synthetic: e.target.checked }))}
+              />
+              <span>Synthetic</span>
+            </label>
+            <select
+              className="rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
+              value={form.pageSize}
+              onChange={(e) => setForm((s) => ({ ...s, pageSize: e.target.value }))}
+              title="Per page"
+            >
+              {['12', '24', '48'].map((n) => (
+                <option key={`pp-${n}`} value={n}>
+                  {n} / page
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="submit"
+              className="ml-auto inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold"
+              style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
+            >
+              Apply
+            </button>
+          </div>
+        </form>
+      </div>
 
       {/* Results */}
       {state.kind === 'loading' && (
@@ -467,7 +511,7 @@ export default function ProductList(): React.ReactElement {
 
       {state.kind === 'loaded' && (
         <>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
             {state.data.items.map((p) => {
               const onSaleNow = isSaleActive(p);
               const eff = effectivePriceCents(p);
@@ -484,30 +528,55 @@ export default function ProductList(): React.ReactElement {
               );
 
               const imgSrc = imageUrlForCard(p);
+              const { slug: vendorSlug, name: vendorName } = getVendorFromProduct(p);
+              const vendorLabel = vendorName || vendorSlug || '';
+
+              // Card acts like a link to vendor (when slug exists)
+              const onCardClick = vendorSlug ? () => navigate(`/vendors/${vendorSlug}`) : undefined;
+              const onCardKeyDown = vendorSlug
+                ? (e: React.KeyboardEvent) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    navigate(`/vendors/${vendorSlug}`);
+                  }
+                }
+                : undefined;
 
               return (
-                <Link
+                <div
                   key={(p as any).id}
-                  to={`/products/${(p as any).id}`}
-                  className="rounded-xl border p-3 hover:shadow"
+                  role={vendorSlug ? 'link' : undefined}
+                  tabIndex={vendorSlug ? 0 : -1}
+                  onClick={onCardClick}
+                  onKeyDown={onCardKeyDown}
+                  className={`rounded-xl border p-3 hover:shadow ${vendorSlug ? 'cursor-pointer' : ''}`}
                   style={card}
+                  aria-label={vendorSlug ? `View vendor storefront: ${vendorLabel}` : undefined}
+                  title={vendorSlug ? `View vendor: ${vendorLabel}` : undefined}
                 >
+                  {/* Image → product detail (stopPropagation so wrapper doesn’t fire) */}
                   {imgSrc ? (
-                    <img
-                      src={imgSrc}
-                      alt={(p as any).title}
-                      className="h-72 w-full rounded object-cover mb-3"
-                      style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
-                      onError={(ev) => {
-                        // If the URL 404s, hide the broken image and let the placeholder show
-                        const el = ev.currentTarget;
-                        el.style.display = 'none';
-                        const placeholder = el.nextElementSibling as HTMLElement | null;
-                        if (placeholder) placeholder.style.display = 'block';
-                      }}
-                    />
+                    <Link
+                      to={`/products/${(p as any).id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="block"
+                      aria-label={`View product: ${(p as any).title}`}
+                    >
+                      <img
+                        src={imgSrc}
+                        alt={(p as any).title}
+                        className="h-72 w-full rounded object-cover mb-3"
+                        style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
+                        onError={(ev) => {
+                          const el = ev.currentTarget;
+                          el.style.display = 'none';
+                          const placeholder = el.nextElementSibling as HTMLElement | null;
+                          if (placeholder) placeholder.style.display = 'block';
+                        }}
+                      />
+                    </Link>
                   ) : null}
-                  {/* hidden placeholder that appears if img fails */}
+
                   <div
                     className="h-36 w-full rounded bg-[var(--theme-card-alt)] mb-3"
                     style={{ display: imgSrc ? 'none' : 'block' }}
@@ -516,7 +585,23 @@ export default function ProductList(): React.ReactElement {
                   <div className="truncate font-semibold">
                     {highlight((p as any).title, qStr)}
                   </div>
+
                   {priceEl}
+
+                  {/* Vendor line (right after price) */}
+                  {vendorSlug ? (
+                    <div className="text-xs opacity-70">
+                      <Link
+                        to={`/vendors/${vendorSlug}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
+                        aria-label={`View vendor storefront: ${vendorLabel}`}
+                      >
+                        {vendorLabel}
+                      </Link>
+                    </div>
+                  ) : null}
+
                   {(p as any).species ? (
                     <div className="text-xs opacity-70">
                       {highlight((p as any).species, qStr)}
@@ -527,7 +612,7 @@ export default function ProductList(): React.ReactElement {
                       {highlight((p as any).locality, qStr)}
                     </div>
                   ) : null}
-                </Link>
+                </div>
               );
             })}
           </div>

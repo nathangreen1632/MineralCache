@@ -14,6 +14,9 @@ export type AuctionDto = {
   startingBidCents: number;
   reserveCents: number | null;
   buyNowCents?: number | null;         // optional: Buy It Now (if configured)
+
+  // ✅ optional, for UI convenience
+  vendorSlug?: string | null;
 };
 
 /** List-card DTO used by list screens. */
@@ -32,6 +35,9 @@ export type AuctionListItem = {
   // NEW (optional, server-provided for list views)
   productTitle?: string | null;
   imageUrl?: string | null;
+
+  // ✅ optional; if server includes or we can infer
+  vendorSlug?: string | null;
 };
 
 export type PlaceBidRes = {
@@ -58,9 +64,39 @@ export type CreateAuctionInput = {
   incrementLadderJson?: { upToCents: number | null; incrementCents: number }[];
 };
 
+// ——— helpers ———
+function pickVendorSlug(x: any): string | null {
+  const v =
+    x?.vendorSlug ??
+    x?.vendor_slug ??
+    x?.vendor?.slug ??
+    x?.product?.vendorSlug ??
+    x?.product?.vendor_slug ??
+    null;
+  return typeof v === 'string' && v.trim().length > 0 ? v : null;
+}
+
 // NOTE: your lib/api auto-prefixes /api, so paths below must NOT start with /api
-export function getAuction(auctionId: number) {
-  return get<{ data: AuctionDto }>(`/auctions/${auctionId}`);
+export async function getAuction(auctionId: number) {
+  // Allow vendorSlug in the typed payload (optional)
+  const res = await get<{ data: AuctionDto & { [k: string]: any } }>(`/auctions/${auctionId}`);
+
+  // Pass through errors untouched
+  if ((res as any)?.error) return res as any;
+
+  // Inject a flat vendorSlug onto data.data if we can infer one
+  const body: any = (res as any)?.data;
+  if (body && body.data) {
+    const raw = body.data;
+    const slug = pickVendorSlug(raw);
+    if (slug && raw.vendorSlug !== slug) {
+      return {
+        ...res,
+        data: { ...body, data: { ...raw, vendorSlug: slug } },
+      };
+    }
+  }
+  return res as any;
 }
 
 export function getMinimumBid(auctionId: number) {
@@ -141,11 +177,17 @@ export async function listAuctions(params?: {
   let items: AuctionListItem[] = [];
   const isArray = Array.isArray(payload);
   if (isArray) {
-    items = payload as AuctionListItem[];
+    items = (payload).map((it) => ({
+      ...it,
+      vendorSlug: pickVendorSlug(it),
+    }));
   } else {
     const maybeItems = payload?.items;
     if (Array.isArray(maybeItems)) {
-      items = maybeItems as AuctionListItem[];
+      items = (maybeItems).map((it) => ({
+        ...it,
+        vendorSlug: pickVendorSlug(it),
+      }));
     }
   }
 
@@ -160,6 +202,8 @@ export async function listActiveAuctions() {
   }
 
   const dataAny = (res as any).data;
-  const items: AuctionDto[] = Array.isArray(dataAny) ? dataAny : dataAny?.items || [];
+  const itemsRaw: any[] = Array.isArray(dataAny) ? dataAny : dataAny?.items || [];
+  // Normalize vendorSlug on the way out (optional)
+  const items = itemsRaw.map((a) => ({ ...a, vendorSlug: pickVendorSlug(a) })) as AuctionDto[];
   return { data: items, error: null as string | null };
 }

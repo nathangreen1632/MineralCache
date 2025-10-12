@@ -6,7 +6,7 @@ function cents(n: number) {
   return `$${(n / 100).toFixed(2)}`;
 }
 
-export default function PayoutsPage(): React.ReactElement {
+export default function VendorPayoutsPage(): React.ReactElement {
   const [rows, setRows] = useState<VendorPayoutRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);

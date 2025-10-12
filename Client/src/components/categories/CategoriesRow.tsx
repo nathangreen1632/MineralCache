@@ -76,7 +76,7 @@ export default function CategoriesRow(): React.ReactElement {
   return (
     <section
       aria-label="Browse by category"
-      className="mx-auto max-w-6xl px-6 mt-8"
+      className="mx-auto max-w-7xl px-6 mt-8"
     >
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-xl font-bold text-[var(--theme-text)]">Categories</h2>
