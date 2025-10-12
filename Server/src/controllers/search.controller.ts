@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { Op, type Order } from 'sequelize';
+import { Op, col, fn, where, type Order } from 'sequelize';
 import { z, type ZodError } from 'zod';
 import { Product } from '../models/product.model.js';
 import { ProductImage } from '../models/productImage.model.js';
@@ -48,10 +48,10 @@ export async function searchProducts(req: Request, res: Response): Promise<void>
 
   // Tokenize query; require all terms (AND), each term can match any field (OR).
   const tokens = q.split(/\s+/).map((t) => t.trim()).filter(Boolean).slice(0, 5);
-  const where: any = { archivedAt: { [Op.is]: null } };
+  const whereClause: any = { archivedAt: { [Op.is]: null } };
 
   if (tokens.length) {
-    where[Op.and] = tokens.map((t) => ({
+    whereClause[Op.and] = tokens.map((t) => ({
       [Op.or]: [
         { title: { [Op.iLike]: `%${t}%` } },
         { species: { [Op.iLike]: `%${t}%` } },
@@ -61,17 +61,37 @@ export async function searchProducts(req: Request, res: Response): Promise<void>
     }));
   }
 
-  // Optional vendor scoping
+  // Optional vendor scoping (accepts exact slug, dashed slug, or space/dash-free lowercase)
   if (vendorId || vendorSlug) {
     const v = vendorId
       ? await Vendor.findByPk(vendorId, { attributes: ['id'] })
-      : await Vendor.findOne({ where: { slug: vendorSlug }, attributes: ['id'] });
+      : await (async () => {
+        const raw = String(vendorSlug ?? '');
+        const folded = raw.trim().toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+        const dashed = folded
+          .replace(/[^a-z0-9\s-]/g, '')
+          .replace(/[\s_]+/g, '-')
+          .replace(/-+/g, '-');
+        const noDashLower = folded.replace(/[^a-z0-9]/g, '');
+
+        return Vendor.findOne({
+          attributes: ['id'],
+          where: {
+            [Op.or]: [
+              { slug: raw },       // exact (legacy)
+              { slug: dashed },    // "one guy productions" → "one-guy-productions"
+              // lower(replace(slug,'-','')) == space/dash-free lowered input
+              where(fn('REPLACE', fn('LOWER', col('slug')), '-', ''), noDashLower),
+            ],
+          },
+        });
+      })();
 
     if (!v) {
       res.json({ items: [], page, pageSize, total: 0, totalPages: 0 });
       return;
     }
-    where.vendorId = v.id;
+    whereClause.vendorId = v.id;
   }
 
   // Sorting (parity with products list)
@@ -84,7 +104,7 @@ export async function searchProducts(req: Request, res: Response): Promise<void>
 
   try {
     const { rows, count } = await Product.findAndCountAll({
-      where,
+      where: whereClause,
       order,
       offset,
       limit: pageSize,
@@ -101,7 +121,7 @@ export async function searchProducts(req: Request, res: Response): Promise<void>
             ['id', 'ASC'],
           ],
         },
-        // 👇 NEW: include vendor so we can surface slug/name to the client
+        // include vendor so we can surface slug/name to the client
         {
           model: Vendor,
           as: 'vendor',
@@ -113,7 +133,7 @@ export async function searchProducts(req: Request, res: Response): Promise<void>
       // distinct: true,
     });
 
-    // Flatten primaryImageUrl + vendorSlug/vendorName so the cards can render both
+    // Flatten primaryImageUrl + vendorSlug for the cards
     const items = rows.map((p) => {
       const j: any = p.toJSON();
       const cover = Array.isArray(j.images) && j.images[0] ? j.images[0] : null;
@@ -125,7 +145,6 @@ export async function searchProducts(req: Request, res: Response): Promise<void>
         ...j,
         vendorSlug: j.vendor?.slug ?? null,
         primaryImageUrl: url,
-        // If you don’t want to ship the nested objects:
         // vendor: undefined,
         // images: undefined,
       };
