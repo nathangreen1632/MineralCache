@@ -8,6 +8,7 @@ import { db } from '../models/sequelize.js';
 import { Auction } from '../models/auction.model.js';
 import { Product } from '../models/product.model.js';
 import { ProductImage } from '../models/productImage.model.js'; // ⬅️ NEW
+import { Vendor } from '../models/vendor.model.js'; // ⬅️ NEW (to expose vendor.slug)
 
 import { placeBidTx, minimumAcceptableBid } from '../services/auction.service.js';
 import { bidBodySchema, bidParamsSchema } from '../validation/auctions.schema.js';
@@ -87,7 +88,7 @@ export async function listAuctions(req: Request, res: Response): Promise<void> {
       limit = Math.min(parsedLimit, 100);
     }
 
-    // ---- NEW: include product + primary image and shape a lean payload ----
+    // ---- include product + primary image + vendor slug; shape a lean payload ----
     const UPLOADS_PUBLIC_ROUTE = process.env.UPLOADS_PUBLIC_ROUTE ?? '/uploads';
     function toPublicUrl(rel?: string | null): string | null {
       if (!rel) return null;
@@ -103,6 +104,11 @@ export async function listAuctions(req: Request, res: Response): Promise<void> {
       ],
       limit,
       include: [
+        {
+          model: Vendor,
+          as: 'vendor',
+          attributes: ['id', 'slug'],
+        },
         {
           model: Product,
           as: 'product',
@@ -139,8 +145,9 @@ export async function listAuctions(req: Request, res: Response): Promise<void> {
         startingBidCents: Number(a.startPriceCents ?? a.startingBidCents ?? 0),
         highBidCents: a.highBidCents != null ? Number(a.highBidCents) : null,
         highBidUserId: a.highBidUserId != null ? Number(a.highBidUserId) : null,
-        productTitle: p?.title ?? null, // 👈 NEW
-        imageUrl,                       // 👈 NEW
+        productTitle: p?.title ?? null, // 👈 present for list views
+        imageUrl,                       // 👈 present for list views
+        vendorSlug: a.vendor?.slug ?? null, // 👈 NEW: flat vendorSlug for the client helper
       };
     });
 
@@ -161,12 +168,41 @@ export async function getAuction(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'Invalid auction id' });
     return;
   }
-  const a = await Auction.findByPk(id);
+
+  // Include vendor so we can surface vendorSlug directly
+  const a: any = await Auction.findByPk(id, {
+    include: [
+      {
+        model: Vendor,
+        as: 'vendor',
+        attributes: ['id', 'slug'],
+      },
+    ],
+  });
+
   if (!a) {
     res.status(404).json({ error: 'Auction not found' });
     return;
   }
-  res.json({ data: a });
+
+  // Shape to the DTO the client expects (keeping field names consistent with your API)
+  const data = {
+    id: Number(a.id),
+    title: a.title ?? null,
+    status: a.status,
+    startAt: a.startAt ?? null,
+    endAt: a.endAt ?? null,
+    productId: a.productId != null ? Number(a.productId) : undefined,
+    vendorId: a.vendorId != null ? Number(a.vendorId) : undefined,
+    highBidCents: a.highBidCents != null ? Number(a.highBidCents) : null,
+    highBidUserId: a.highBidUserId != null ? Number(a.highBidUserId) : null,
+    startingBidCents: Number(a.startPriceCents ?? a.startingBidCents ?? 0),
+    reserveCents: a.reservePriceCents != null ? Number(a.reservePriceCents) : null,
+    buyNowCents: a.buyNowPriceCents != null ? Number(a.buyNowPriceCents) : null,
+    vendorSlug: a.vendor?.slug ?? null, // 👈 NEW: flat vendorSlug for client convenience
+  };
+
+  res.json({ data });
 }
 
 /** ------------------------------------------------------------------------
