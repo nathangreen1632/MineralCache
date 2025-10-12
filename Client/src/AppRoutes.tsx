@@ -17,6 +17,7 @@ import CategoryPage from './pages/CategoryPage'; // ← NEW
 import AuctionsListPage from './pages/auctions/AuctionsListPage';
 import AuctionDetailPage from './pages/auctions/AuctionDetailPage';
 import AuctionCreatePage from './pages/auctions/AuctionCreatePage';
+import EditAuctionPage from './pages/auctions/EditAuctionPage';
 
 // Vendor
 import VendorApply from './pages/VendorApply';
@@ -31,7 +32,7 @@ import AdminVendorApps from './pages/admin/AdminVendorApps';
 import AdminOrders from './pages/admin/AdminOrders';
 import AdminOrderDetail from './pages/admin/AdminOrderDetail';
 import AdminSettings from './pages/admin/AdminSettings';
-import AdminAuctionsPage from './pages/admin/AdminAuctionsPage'; // ✅ NEW
+import AdminAuctionsPage from './pages/admin/AdminAuctionsPage';
 
 // Vendor product CRUD
 import ProductCreate from './pages/products/ProductCreate';
@@ -50,7 +51,7 @@ import OrderDetailPage from './pages/orders/OrderDetailPage';
 // Age gate banner (mounted globally)
 import AgeGateNotice from './components/AgeGateNotice';
 
-// ✅ Guards
+// Guards
 import RequireAuth from './routes/RequireAuth';
 import RequireRole from './routes/RequireRole';
 
@@ -70,7 +71,6 @@ export default function AppRoutes(): React.ReactElement {
   return (
     <Routes>
       <Route element={<WithAgeGate />}>
-        {/* Public */}
         <Route index element={<HomePage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
@@ -80,18 +80,17 @@ export default function AppRoutes(): React.ReactElement {
         <Route path="category/:slug" element={<CategoryPage />} />
         <Route path="/vendors/:slug" element={<VendorMainPage />} />
 
-        {/* Auctions (feature-flagged) */}
         {AUCTIONS_ENABLED && (
           <>
             <Route path="auctions" element={<AuctionsListPage />} />
             <Route path="auctions/:id" element={<AuctionDetailPage />} />
+            <Route path="auctions/:id/edit" element={<EditAuctionPage />} />
           </>
         )}
 
         <Route path="cart" element={<CartPage />} />
         <Route path="checkout" element={<CheckoutPage />} />
 
-        {/* Orders */}
         <Route path="orders/confirmation" element={<OrderConfirmationPage />} />
         <Route
           path="account/orders"
@@ -111,7 +110,6 @@ export default function AppRoutes(): React.ReactElement {
         />
         <Route path="/orders/:id/receipt" element={<Receipt />} />
 
-        {/* Vendor */}
         <Route
           path="vendor/apply"
           element={
@@ -128,7 +126,6 @@ export default function AppRoutes(): React.ReactElement {
             </RequireRole>
           }
         />
-        {/* Vendor auction create (guarded & feature-flagged) */}
         {AUCTIONS_ENABLED && (
           <Route
             path="vendor/auctions/new"
@@ -164,7 +161,6 @@ export default function AppRoutes(): React.ReactElement {
           }
         />
 
-        {/* Admin */}
         <Route
           path="admin/vendor-apps"
           element={
@@ -206,7 +202,6 @@ export default function AppRoutes(): React.ReactElement {
           }
         />
 
-        {/* Vendor product CRUD */}
         <Route
           path="products/new"
           element={
@@ -223,8 +218,6 @@ export default function AppRoutes(): React.ReactElement {
             </RequireRole>
           }
         />
-
-        {/* Fallback */}
         <Route path="*" element={<div>Not found.</div>} />
       </Route>
     </Routes>
