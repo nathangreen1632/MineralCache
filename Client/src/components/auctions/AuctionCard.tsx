@@ -18,6 +18,8 @@ type Props = Readonly<{
   endAt: string | Date | null;
   imageUrl?: string | null;       // NEW
   productTitle?: string | null;   // NEW (optional subtitle)
+  // NEW (optional): pass to show "Closed"/"Canceled" pill
+  status?: 'draft' | 'scheduled' | 'live' | 'ended' | 'canceled';
 }>;
 
 export default function AuctionCard(props: Props): React.ReactElement {
@@ -35,6 +37,11 @@ export default function AuctionCard(props: Props): React.ReactElement {
     imageUrl: props.imageUrl ?? null,
     productTitle: props.productTitle ?? (props.title || `Auction #${props.id}`),
   };
+
+  // NEW: compute a label if this card is final
+  let statusLabel: string | null = null;
+  if (props.status === 'ended') statusLabel = 'Closed';
+  else if (props.status === 'canceled') statusLabel = 'Canceled';
 
   return (
     <article
@@ -66,6 +73,13 @@ export default function AuctionCard(props: Props): React.ReactElement {
           {displayTitle}
         </Link>
       </h3>
+
+      {/* NEW: status pill under the title (shown only when final) */}
+      {statusLabel && (
+        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-[var(--theme-card)] border border-[var(--theme-border)]">
+          {statusLabel}
+        </span>
+      )}
 
       {props.productTitle && (
         <div className="text-sm text-[var(--theme-muted)]">{props.productTitle}</div>
