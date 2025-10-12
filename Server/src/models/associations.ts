@@ -25,6 +25,10 @@ ProductImage.belongsTo(Product, { foreignKey: { name: 'productId', field: 'produ
 Auction.belongsTo(Product, { as: 'product', foreignKey: { name: 'productId', field: 'productId' } });
 Product.hasMany(Auction, { as: 'auctions', foreignKey: { name: 'productId', field: 'productId' } });
 
+// 👇 NEW: Auction ↔ Vendor (to expose vendor.slug → vendorSlug in API)
+Auction.belongsTo(Vendor, { as: 'vendor', foreignKey: { name: 'vendorId', field: 'vendorId' } });
+Vendor.hasMany(Auction, { as: 'auctions', foreignKey: { name: 'vendorId', field: 'vendorId' } });
+
 // ✅ Product ↔ Category (many-to-many; enforced "one" today via unique index on product_categories.productId)
 Product.belongsToMany(Category, { through: ProductCategory, foreignKey: { name: 'productId', field: 'productId' }, otherKey: { name: 'categoryId', field: 'categoryId' }, as: 'categories' });
 Category.belongsToMany(Product, { through: ProductCategory, foreignKey: { name: 'categoryId', field: 'categoryId' }, otherKey: { name: 'productId', field: 'productId' }, as: 'products' });
