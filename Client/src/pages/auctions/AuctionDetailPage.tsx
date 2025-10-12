@@ -8,6 +8,7 @@ import {
   placeBid,
   watchAuction,
   unwatchAuction,
+  buyNow, // ✅ ADDED
   type AuctionDto,
   type PlaceBidRes,
 } from '../../api/auctions';
@@ -49,6 +50,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
   const [amount, setAmount] = useState<string>('');
   const [proxy, setProxy] = useState<string>('');
   const [watching, setWatching] = useState(false);
+  const [buyBusy, setBuyBusy] = useState(false); // ✅ ADDED
 
   // Back button handler with safe fallback
   const onBack = useCallback(() => {
@@ -191,6 +193,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
 
         if ((apiRes as any)?.error) {
           showFlash({ kind: 'error', text: 'Bid failed.' });
+          // no-op
         } else {
           const body = (apiRes as any).data as PlaceBidRes | null | undefined;
           if (body?.data) {
@@ -231,6 +234,37 @@ export default function AuctionDetailPage(): React.ReactElement | null {
       showFlash({ kind: 'error', text: 'Could not update watchlist.' });
     }
   }, [auction, watching, showFlash]);
+
+  // ✅ ADDED: Buy Now handler
+  const onBuyNow = useCallback(async () => {
+    if (!auction || auction.status !== 'live') return;
+    const ok = window.confirm('Buy this item now? This will end the auction immediately.');
+    if (!ok) return;
+
+    try {
+      setBuyBusy(true);
+      const res = await buyNow(auction.id);
+      if ((res as any)?.error) {
+        showFlash({ kind: 'error', text: 'Buy Now failed.' });
+        return;
+      }
+      const okFlag = (res as any)?.data?.ok === true;
+      if (!okFlag) {
+        const code = (res as any)?.data?.code ?? 'ERROR';
+        showFlash({ kind: 'error', text: `Buy Now failed (${code}).` });
+        return;
+      }
+      showFlash({ kind: 'success', text: 'Purchased via Buy Now.' });
+      // Refresh details to reflect final state
+      const reload = await getAuction(auction.id);
+      if (!(reload)?.error) {
+        const payload = (reload).data as { data?: AuctionDto } | null | undefined;
+        if (payload?.data) setAuction(payload.data);
+      }
+    } finally {
+      setBuyBusy(false);
+    }
+  }, [auction, showFlash]);
 
   if (!auction) return null;
 
@@ -430,6 +464,20 @@ export default function AuctionDetailPage(): React.ReactElement | null {
                   >
                     {watching ? 'Watching ✓' : 'Watch'}
                   </button>
+
+                  {/* ✅ ADDED: Buy Now button (visible when live and configured) */}
+                  {auction.buyNowCents != null && auction.status === 'live' && (
+                    <button
+                      type="button"
+                      onClick={onBuyNow}
+                      disabled={buyBusy}
+                      className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)] disabled:opacity-60"
+                    >
+                      {buyBusy
+                        ? 'Processing…'
+                        : `Buy Now (${(auction.buyNowCents / 100).toLocaleString(undefined, { style: 'currency', currency: 'USD' })})`}
+                    </button>
+                  )}
                 </div>
               </form>
             </div>
