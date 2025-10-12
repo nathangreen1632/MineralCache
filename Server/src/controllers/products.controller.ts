@@ -436,6 +436,13 @@ export async function getProduct(req: Request, res: Response): Promise<void> {
 
     const product = await Product.findOne({
       where: { id, archivedAt: { [Op.is]: null } as any },
+      include: [
+        {
+          model: Vendor,
+          as: 'vendor',
+          attributes: ['slug'], // only slug; 'name' column doesn't exist
+        },
+      ],
     });
     if (!product) {
       res.status(404).json({ error: 'Not found' });
@@ -485,11 +492,17 @@ export async function getProduct(req: Request, res: Response): Promise<void> {
     const primary = photos.find((p) => p.isPrimary) ?? photos[0] ?? null;
     (json as any).primaryImageUrl = primary?.url ?? null;
 
+    // NEW: flatten vendor slug for client consumption
+    (json as any).vendorSlug = (json as any).vendor?.slug ?? null;
+    // Optional: drop nested vendor object to keep payload lean
+    // delete (json as any).vendor;
+
     res.json({ product: json });
   } catch (e: any) {
     res.status(500).json({ error: 'Failed to load product', detail: e?.message });
   }
 }
+
 
 
 /** ---------------------------------------------
