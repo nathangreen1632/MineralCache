@@ -222,8 +222,7 @@ export async function endAuctionTx(
 
   if (a.status !== 'live' && a.status !== 'scheduled') {
     logWarn('auction.end.invalid_state', { auctionId, status: a.status });
-    const err = Object.assign(new Error('Invalid state transition'), { code: 'INVALID_STATE' as const });
-    throw err;
+    throw Object.assign(new Error('Invalid state transition'), {code: 'INVALID_STATE' as const});
   }
 
   a.status = 'ended';
