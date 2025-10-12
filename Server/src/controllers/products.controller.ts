@@ -567,7 +567,31 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
     if (vendorId) {
       andClauses.push({ vendorId: Number(vendorId) });
     } else if (vendorSlug) {
-      const v = await Vendor.findOne({ where: { slug: vendorSlug }, attributes: ['id'] });
+      // 🔎 NEW: accept “one guy productions” OR “one-guy-productions”
+      const raw = String(vendorSlug ?? '');
+      const folded = raw
+        .trim()
+        .toLowerCase()
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, ''); // strip accents
+      const dashed = folded
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/[\s_]+/g, '-')
+        .replace(/-+/g, '-');
+      const noDashLower = folded.replace(/[^a-z0-9]/g, '');
+
+      const v = await Vendor.findOne({
+        attributes: ['id'],
+        where: {
+          [Op.or]: [
+            { slug: raw },    // exact match (legacy behavior)
+            { slug: dashed }, // spacey input normalized to slug
+            // lower(replace(slug,'-','')) == space/dash-free lowered input
+            where(fn('REPLACE', fn('LOWER', col('slug')), '-', ''), noDashLower),
+          ],
+        },
+      });
+
       if (!v) {
         res.json({ items: [], page, pageSize, total: 0, totalPages: 0 });
         return;
@@ -682,7 +706,7 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       ],
     });
 
-    // 👇 NEW: include vendor so we can surface slug/name to the client
+    // 👇 include vendor so we can surface slug/name to the client
     include.push({
       model: Vendor,
       as: 'vendor',
@@ -727,6 +751,7 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
     res.status(500).json({ error: 'Failed to list products', detail: e?.message });
   }
 }
+
 
 
 
