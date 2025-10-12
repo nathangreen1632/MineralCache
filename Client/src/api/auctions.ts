@@ -19,6 +19,9 @@ export type AuctionDto = {
   vendorSlug?: string | null;
 };
 
+/** Export a handy union for consumers (e.g., components). */
+export type AuctionStatus = AuctionDto['status'];
+
 /** List-card DTO used by list screens. */
 export type AuctionListItem = {
   id: number;
@@ -206,4 +209,20 @@ export async function listActiveAuctions() {
   // Normalize vendorSlug on the way out (optional)
   const items = itemsRaw.map((a) => ({ ...a, vendorSlug: pickVendorSlug(a) })) as AuctionDto[];
   return { data: items, error: null as string | null };
+}
+
+/** Close an auction now (vendor owner or admin). */
+export function closeAuction(auctionId: number) {
+  return post<
+    { ok: boolean; code?: string; auction: { id: number; status: AuctionStatus; endAt: string | null; highBidCents: number | null } },
+    Record<string, never>
+  >(`/auctions/${auctionId}/close`, {});
+}
+
+/** Cancel an auction (vendor owner or admin). */
+export function cancelAuction(auctionId: number) {
+  return post<
+    { ok: boolean; code?: string; auction: { id: number; status: AuctionStatus; endAt: string | null; highBidCents: number | null } },
+    Record<string, never>
+  >(`/auctions/${auctionId}/cancel`, {});
 }
