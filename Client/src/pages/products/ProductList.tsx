@@ -35,6 +35,19 @@ function joinUrl(base: string, path: string) {
   return p ? `${b}/${p}` : b;
 }
 
+function normalizeVendorToSlugish(input: string): string {
+  const s = (input ?? '').trim().toLowerCase();
+  if (!s) return '';
+  // strip accents
+  const noAccents = s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+  // keep letters, numbers, spaces, and dashes → then collapse to single dashes
+  return noAccents
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/[\s_]+/g, '-')   // spaces/underscores → dashes
+    .replace(/-+/g, '-');      // collapse multiple dashes
+}
+
+
 function centsToUsd(cents?: number | null): string {
   const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
   return `$${(n / 100).toFixed(2)}`;
@@ -351,7 +364,7 @@ export default function ProductList(): React.ReactElement {
 
     updateQuery({
       species: form.species.trim() || undefined,
-      vendorSlug: form.vendorSlug.trim() || undefined,
+      vendorSlug: normalizeVendorToSlugish(form.vendorSlug) || undefined,
       onSale: form.onSale ? true : undefined,
       synthetic: form.synthetic ? true : undefined,
       priceMinCents: minCents,
