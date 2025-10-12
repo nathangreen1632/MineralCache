@@ -12,6 +12,7 @@ import {
   type PlaceBidRes,
 } from '../../api/auctions';
 import Countdown from '../../components/auctions/Countdown';
+import AuctionActions from '../../components/auctions/AuctionActions'; // ✅ ADDED
 
 function cents(v: number | null | undefined): string {
   let n = 0;
@@ -69,12 +70,12 @@ export default function AuctionDetailPage(): React.ReactElement | null {
       .then((res) => {
         if (!isMounted) return;
 
-        if ((res as any)?.error) {
+        if ((res)?.error) {
           setAuction(null);
           return;
         }
 
-        const payload = (res as any).data as {
+        const payload = (res).data as {
           data?: AuctionDto & { imageUrl?: string | null; productTitle?: string | null };
         } | null | undefined;
 
@@ -274,7 +275,38 @@ export default function AuctionDetailPage(): React.ReactElement | null {
             </button>
           </div>
 
-          <h1 className="text-2xl font-bold">{headerTitle}</h1>
+          {/* UPDATED: add status pill next to the title */}
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            {headerTitle}
+            {auction.status === 'ended' && (
+              <span className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-[var(--theme-card)] border border-[var(--theme-border)]">
+                Closed
+              </span>
+            )}
+            {auction.status === 'canceled' && (
+              <span className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-[var(--theme-card)] border border-[var(--theme-border)]">
+                Canceled
+              </span>
+            )}
+          </h1>
+
+          {/* ✅ ADDED: vendor/admin action buttons (no deletion of existing lines) */}
+          {typeof auction.vendorId === 'number' && (
+            <div className="flex justify-end">
+              <AuctionActions
+                auction={{
+                  id: auction.id,
+                  vendorId: auction.vendorId,
+                  status: auction.status,
+                  endAt: auction.endAt,
+                }}
+                onStatusChange={(next) =>
+                  setAuction((a) => (a ? { ...a, status: next } : a))
+                }
+                className="ml-4"
+              />
+            </div>
+          )}
 
           {/* ✅ NEW: Vendor slug, placed between headerTitle and productTitle */}
           {vendorSlug ? (
