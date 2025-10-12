@@ -48,3 +48,7 @@ export const createAuctionBodySchema = z.object({
 /** ── Back-compat aliases (remove once callers are updated) ── */
 export const auctionIdParamSchema = bidParamsSchema;
 export const placeBidSchema = bidBodySchema;
+
+/** ── NEW: pluralized alias + type for param-only routes (non-breaking) ── */
+export const auctionIdParamsSchema = bidParamsSchema;
+export type AuctionIdParams = z.infer<typeof bidParamsSchema>;
