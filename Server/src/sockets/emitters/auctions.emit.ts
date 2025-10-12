@@ -2,24 +2,6 @@
 import type { Server } from 'socket.io';
 import { auctionRoomName } from '../../utils/rooms.util.js';
 
-/**
- * Generic: a bid was placed (raw event). Your UI may ignore this in favor of
- * the normalized "high-bid" event below.
- */
-export function emitAuctionNewBid(
-  io: Server,
-  auctionId: number | string,
-  payload: {
-    amountCents: number;
-    userId: number;
-    ts?: number;
-  }
-) {
-  const rn = auctionRoomName(auctionId);
-  const ts = payload.ts ?? Date.now();
-  io.to(rn).emit('auction:new-bid', { auctionId, ...payload, ts });
-}
-
 /** Auction ended broadcast (reason optional, e.g. "time" or "canceled"). */
 export function emitAuctionEnded(
   io: Server,
@@ -34,7 +16,8 @@ export function emitAuctionEnded(
  * NEW: Standardized room-aware emitters used by the Auctions MVP
  * ===================================================================================== */
 export function roomForAuction(id: number): string {
-  return `auction:${id}`;
+  // Delegate to the shared util to avoid room-name drift
+  return auctionRoomName(id);
 }
 /**
  * High-bid update: definitive event with the current leader and the minimum next bid.
@@ -91,50 +74,6 @@ export function emitTimeExtended(
     auctionId,
     msExtended,
     ts: Date.now(),
-  });
-}
-
-/* =====================================================================================
- * Back-compat scaffold emitters (kept to match existing style/callers)
- * ===================================================================================== */
-
-/**
- * Leading bid update (legacy helper). Prefer emitHighBid() for normalized payload.
- */
-export function emitAuctionLeadingBid(
-  io: Server,
-  auctionId: number | string,
-  payload: {
-    amountCents: number;
-    userId: number | null;
-    ts?: number;
-  }
-) {
-  const rn = auctionRoomName(auctionId);
-  const ts = payload.ts ?? Date.now();
-  io.to(rn).emit('auction:leading-bid', { auctionId, ...payload, ts });
-}
-
-/**
- * Outbid (legacy helper). Emits the standardized 'auction:outbid' payload shape.
- * Maps previousUserId -> outbidUserId and amountCents -> highBidCents.
- */
-export function emitAuctionOutbid(
-  io: Server,
-  auctionId: number | string,
-  payload: {
-    previousUserId: number | null;
-    amountCents: number;
-    ts?: number;
-  }
-) {
-  const rn = auctionRoomName(auctionId);
-  const ts = payload.ts ?? Date.now();
-  io.to(rn).emit('auction:outbid', {
-    auctionId,
-    outbidUserId: payload.previousUserId ?? 0,
-    highBidCents: payload.amountCents,
-    ts,
   });
 }
 
