@@ -9,6 +9,7 @@ import { useCartTotals } from '../../hooks/useCartTotals';
 import { emit } from '../../lib/eventBus';
 import { EV_CART_CHANGED } from '../../lib/events';
 import CommissionPreview from "../../components/cart/CommissionPreview.tsx";
+import AcceptedCards from "../../components/payment/AcceptedCards.tsx";
 
 type LoadHealth =
   | { kind: 'idle' }
@@ -208,6 +209,11 @@ function CardForm({ totalCents }: Readonly<{ totalCents: number }>) {
     <form onSubmit={onSubmit} className="grid gap-4">
       <div className="rounded-xl border p-3" style={cardBox}>
         <CardElement options={{ hidePostalCode: true }} />
+      </div>
+
+      <div className="mt-3">
+        <span className="text-xs"> Accepted Payment Methods:</span>{''}
+        <AcceptedCards size="sm" brands={['visa','mastercard','amex','discover']} />
       </div>
 
       {msg ? (
