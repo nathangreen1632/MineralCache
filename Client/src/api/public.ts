@@ -13,8 +13,6 @@ export type OnSaleProduct = {
 
 type ListResponse<T> = { items: T };
 
-/* -------------------- NEW: Categories + Category Products -------------------- */
-
 export type PublicCategory = {
   id: number;
   name: string;
@@ -40,6 +38,8 @@ export type ListProductsParams = {
   vendorId?: number;
   onSale?: boolean;
   q?: string;
+  species?: string;
+  synthetic?: boolean;
 };
 
 export type ListProductsResponse<T = any> = {
@@ -61,8 +61,9 @@ export async function listProductsByCategory<T = any>(
   if (params.sort) usp.set('sort', params.sort);
   if (typeof params.vendorId === 'number') usp.set('vendorId', String(params.vendorId));
   if (params.q) usp.set('q', params.q);
+  if (params.species) usp.set('species', params.species);
+  if (typeof params.synthetic === 'boolean') usp.set('synthetic', String(params.synthetic));
 
-  // dollars -> cents; omit when not provided
   if (typeof params.priceMin === 'number') {
     usp.set('priceMinCents', String(Math.round(params.priceMin * 100)));
   }
@@ -70,7 +71,6 @@ export async function listProductsByCategory<T = any>(
     usp.set('priceMaxCents', String(Math.round(params.priceMax * 100)));
   }
 
-  // Only send onSale when TRUE (checkbox checked)
   if (params.onSale === true) usp.set('onSale', 'true');
 
   const { data, error } = await get<ListProductsResponse<T>>(
@@ -80,8 +80,6 @@ export async function listProductsByCategory<T = any>(
   return data as ListProductsResponse<T>;
 }
 
-/* -------------------- Existing helpers (kept) -------------------- */
-
 export async function getFeaturedPhotos(): Promise<string[]> {
   const { data, error } = await get<ListResponse<string[]>>(
     '/public/featured-photos?primary=true&size=1600'
@@ -90,9 +88,11 @@ export async function getFeaturedPhotos(): Promise<string[]> {
   return (data?.items ?? []).map((u) => String(u));
 }
 
-/** Get on-sale products; optionally increase the server limit for paging on Home */
 export async function getOnSaleProducts(opts?: { limit?: number }): Promise<OnSaleProduct[]> {
-  const qs = opts?.limit ? `?limit=${encodeURIComponent(opts.limit)}` : '';
+  let qs = '';
+  if (opts && typeof opts.limit === 'number') {
+    qs = `?limit=${encodeURIComponent(opts.limit)}`;
+  }
   const { data, error } = await get<ListResponse<OnSaleProduct[]>>(`/public/on-sale${qs}`);
   if (error) throw new Error(error);
   return data?.items ?? [];
