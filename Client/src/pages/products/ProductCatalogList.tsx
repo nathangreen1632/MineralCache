@@ -47,7 +47,6 @@ function normalizeVendorToSlugish(input: string): string {
     .replace(/-+/g, '-');      // collapse multiple dashes
 }
 
-
 function centsToUsd(cents?: number | null): string {
   const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
   return `$${(n / 100).toFixed(2)}`;
@@ -209,7 +208,7 @@ type FormState = {
   pageSize: string;
 };
 
-export default function ProductList(): React.ReactElement {
+export default function ProductCatalogList(): React.ReactElement {
   const [params, setParams] = useSearchParams();
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
   const navigate = useNavigate(); // used by card click → vendor
@@ -365,8 +364,8 @@ export default function ProductList(): React.ReactElement {
     updateQuery({
       species: form.species.trim() || undefined,
       vendorSlug: normalizeVendorToSlugish(form.vendorSlug) || undefined,
-      onSale: form.onSale ? true : undefined,
-      synthetic: form.synthetic ? true : undefined,
+      onSale: form.onSale || undefined,        // no boolean literal
+      synthetic: form.synthetic || undefined,  // no boolean literal
       priceMinCents: minCents,
       priceMaxCents: maxCents,
       sort: form.sort as ListQuery['sort'],
@@ -567,33 +566,56 @@ export default function ProductList(): React.ReactElement {
                   aria-label={vendorSlug ? `View vendor storefront: ${vendorLabel}` : undefined}
                   title={vendorSlug ? `View vendor: ${vendorLabel}` : undefined}
                 >
-                  {/* Image → product detail (stopPropagation so wrapper doesn’t fire) */}
+                  {/* Image → product detail (with in-link fallback placeholder and On Sale badge) */}
                   {imgSrc ? (
                     <Link
                       to={`/products/${(p as any).id}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="block"
+                      className="block relative mb-3"
                       aria-label={`View product: ${(p as any).title}`}
                     >
                       <img
                         src={imgSrc}
                         alt={(p as any).title}
-                        className="h-72 w-full rounded object-cover mb-3"
+                        className="h-72 w-full rounded object-cover"
                         style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
                         onError={(ev) => {
                           const el = ev.currentTarget;
                           el.style.display = 'none';
                           const placeholder = el.nextElementSibling as HTMLElement | null;
-                          if (placeholder) placeholder.style.display = 'block';
+                          if (placeholder) placeholder.style.display = 'grid';
                         }}
                       />
+                      {/* hidden fallback placeholder (revealed by onError above) */}
+                      <div
+                        className="absolute inset-0 hidden place-items-center rounded bg-[var(--theme-card-alt)] text-xs opacity-70"
+                      >
+                        No image
+                      </div>
+                      {/* On Sale badge */}
+                      {onSaleNow && (
+                        <span
+                          className="absolute left-3 top-3 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold shadow"
+                          style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
+                          aria-label="On sale"
+                        >
+                          On Sale
+                        </span>
+                      )}
                     </Link>
-                  ) : null}
-
-                  <div
-                    className="h-36 w-full rounded bg-[var(--theme-card-alt)] mb-3"
-                    style={{ display: imgSrc ? 'none' : 'block' }}
-                  />
+                  ) : (
+                    <div className="relative mb-3 h-72 w-full rounded bg-[var(--theme-card-alt)]">
+                      {onSaleNow && (
+                        <span
+                          className="absolute left-3 top-3 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold shadow"
+                          style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
+                          aria-label="On sale"
+                        >
+                          On Sale
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   <div className="truncate font-semibold">
                     {highlight((p as any).title, qStr)}
@@ -602,8 +624,9 @@ export default function ProductList(): React.ReactElement {
                   {priceEl}
 
                   {/* Vendor line (right after price) */}
+                  <div className="mt-0.5 text-xs text-[var(--theme-text)]">
+                    <span className="opacity-75">Sold by:</span>{' '}
                   {vendorSlug ? (
-                    <div className="text-xs opacity-70">
                       <Link
                         to={`/vendors/${vendorSlug}`}
                         onClick={(e) => e.stopPropagation()}
@@ -612,8 +635,8 @@ export default function ProductList(): React.ReactElement {
                       >
                         {vendorLabel}
                       </Link>
-                    </div>
                   ) : null}
+                  </div>
 
                   {(p as any).species ? (
                     <div className="text-xs opacity-70">
