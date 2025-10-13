@@ -4,6 +4,7 @@ import { getCart, saveCart, type CartItem, removeFromCart } from '../../api/cart
 import { on } from '../../lib/eventBus';
 import { EV_CART_CHANGED, EV_SHIPPING_CHANGED } from '../../lib/events';
 import { useCartTotals } from '../../hooks/useCartTotals';
+import CommissionPreview from "../../components/cart/CommissionPreview.tsx";
 
 type Flash = { kind: 'info' | 'error' | 'success'; text: string };
 
@@ -280,7 +281,9 @@ export default function CartPage(): React.ReactElement {
             <span>Total</span>
             <span>{centsToUsd(totals.total)}</span>
           </div>
+          <CommissionPreview />
         </aside>
+
       </div>
     </section>
   );
