@@ -752,15 +752,12 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
   }
 }
 
-
-
-
 /** ---------------------------------------------
  * Images attach — generates 320/800/1600 and stores DB rows
  * --------------------------------------------*/
 
 // One place to control the listing quota (env overridable)
-const MAX_IMAGES_PER_LISTING = Number(process.env.UPLOAD_MAX_IMAGES_PER_LISTING ?? 4);
+const MAX_IMAGES_PER_LISTING = Number(process.env.UPLOAD_MAX_IMAGES_PER_LISTING ?? 6);
 
 export async function attachImages(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
