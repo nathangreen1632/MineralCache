@@ -1,6 +1,7 @@
 // Server/src/controllers/public.controller.ts
 import type { Request, Response } from 'express';
 import { getFeaturedPhotosSvc, getOnSaleProductsSvc } from '../services/public.service.js';
+import { getPublicConfigSvc } from '../services/publicConfig.service.js';
 import { Category } from '../models/category.model.js';
 import { Product } from '../models/product.model.js';
 import { ProductImage } from '../models/productImage.model.js';
@@ -274,5 +275,14 @@ export async function listPublicProductsCtrl(req: Request, res: Response) {
   } catch (e: any) {
     console.error('listPublicProductsCtrl error:', e?.message || e);
     res.status(500).json({ error: 'Failed to load products' });
+  }
+}
+
+export async function getPublicConfigCtrl(_req: Request, res: Response) {
+  try {
+    const config = await getPublicConfigSvc();
+    res.json({ config });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Failed to load config' });
   }
 }
