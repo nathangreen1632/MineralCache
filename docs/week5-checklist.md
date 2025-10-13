@@ -12,7 +12,7 @@
 - **Refunds**: Admin refunds flow scaffolded (`controllers/admin/orders.controller.ts`) calling Stripe refunds; route is wired.
 - **Tax (basic)**: `tax.service.ts` + `TAX_ENABLED` support; `taxCents` on `Order`; Client shows tax on Orders/Cart.
 - **Vendor payouts (snapshots)**: `order_vendor` model + `/vendors/me/payouts` with CSV option on the API side; Client has `VendorPayoutsPage.tsx` (table, no CSV button yet).
-- **Search perf**: catalog indexes and trigram indexes landed; search controller (`/api/search`) with pagination and **keyword highlighting** in `ProductList.tsx`.
+- **Search perf**: catalog indexes and trigram indexes landed; search controller (`/api/search`) with pagination and **keyword highlighting** in `ProductCatalogList.tsx`.
 - **Security/PII**: centralized redaction in `log.service.ts`; webhook idempotency via `webhook_events`.
 - **Rate limiting**: `POST /checkout/intent` guarded.
 - **Auctions (server)**: models, services, socket emitters & ticker are present; Client UI still minimal.
