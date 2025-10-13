@@ -20,7 +20,7 @@ function centsToUsd(cents: number) {
 }
 
 function useStripePk(): { pk: string | null; error: string | null } {
-  const pk = (import.meta as any)?.env?.VITE_STRIPE_PUBLISHABLE_KEY ?? null;
+  const pk = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY ?? null;
   if (typeof pk === 'string' && pk.trim().length > 0) return { pk, error: null };
   return { pk: null, error: 'Missing VITE_STRIPE_PUBLISHABLE_KEY' };
 }
