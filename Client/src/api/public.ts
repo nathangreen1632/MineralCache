@@ -4,10 +4,11 @@ import { get } from '../lib/api';
 export type OnSaleProduct = {
   id: number;
   slug?: string | null;
-  name: string;               // Product.title (server maps)
-  price: number;              // dollars
-  salePrice?: number | null;  // dollars
-  imageUrl?: string | null;   // /uploads/...
+  name: string;
+  price: number;
+  salePrice?: number | null;
+  imageUrl?: string | null;
+  vendorSlug?: string | null;
 };
 
 type ListResponse<T> = { items: T };
@@ -34,8 +35,8 @@ export type ListProductsParams = {
   page?: number;
   pageSize?: number;
   sort?: 'newest' | 'oldest' | 'price_asc' | 'price_desc';
-  priceMin?: number;      // dollars
-  priceMax?: number;      // dollars
+  priceMin?: number;
+  priceMax?: number;
   vendorId?: number;
   onSale?: boolean;
   q?: string;
