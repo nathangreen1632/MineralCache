@@ -5,6 +5,7 @@ import { on } from '../../lib/eventBus';
 import { EV_CART_CHANGED, EV_SHIPPING_CHANGED } from '../../lib/events';
 import { useCartTotals } from '../../hooks/useCartTotals';
 import CommissionPreview from "../../components/cart/CommissionPreview.tsx";
+import AcceptedCards from "../../components/payment/AcceptedCards.tsx";
 
 type Flash = { kind: 'info' | 'error' | 'success'; text: string };
 
@@ -282,6 +283,10 @@ export default function CartPage(): React.ReactElement {
             <span>{centsToUsd(totals.total)}</span>
           </div>
           <CommissionPreview />
+          <div className="mt-3">
+            <span className="text-xs"> Accepted Payment Methods:</span>{''}
+            <AcceptedCards size="sm" brands={['visa','mastercard','amex','discover']} />
+          </div>
         </aside>
 
       </div>
