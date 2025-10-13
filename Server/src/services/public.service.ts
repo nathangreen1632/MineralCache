@@ -2,6 +2,7 @@
 import { Op, literal } from 'sequelize';
 import { Product } from '../models/product.model.js';
 import { ProductImage } from '../models/productImage.model.js';
+import { Vendor } from '../models/vendor.model.js';
 import { UPLOADS_PUBLIC_ROUTE } from '../controllers/products.controller.js';
 
 // ------- Helpers -------
@@ -49,14 +50,14 @@ export async function getFeaturedPhotosSvc(limit = 10): Promise<string[]> {
   return urls;
 }
 
-// ------- On-sale products (prefer primary v1600) -------
 type OnSaleItem = {
   id: number;
   slug?: string | null;
-  name: string;               // from Product.title
-  price: number;              // dollars
-  salePrice?: number | null;  // dollars
-  imageUrl?: string | null;   // primary v1600 when available
+  name: string;
+  price: number;
+  salePrice?: number | null;
+  imageUrl?: string | null;
+  vendorSlug?: string | null;
 };
 
 export async function getOnSaleProductsSvc(limit = 24): Promise<OnSaleItem[]> {
@@ -80,6 +81,12 @@ export async function getOnSaleProductsSvc(limit = 24): Promise<OnSaleItem[]> {
         attributes: ['v1600Path', 'isPrimary'],
         paranoid: true,
       },
+      {
+        model: Vendor,
+        as: 'vendor',
+        required: false,
+        attributes: ['id', 'slug'],
+      },
     ],
     order: [['updatedAt', 'DESC']],
     limit,
@@ -96,6 +103,8 @@ export async function getOnSaleProductsSvc(limit = 24): Promise<OnSaleItem[]> {
       price: Number(p.priceCents ?? 0) / 100,
       salePrice: p.salePriceCents != null ? Number(p.salePriceCents) / 100 : null,
       imageUrl: imageUrl ?? null,
+      vendorSlug: p.vendor?.slug ?? null,
+      vendorName: p.vendor?.name ?? null,
     };
   });
 }
