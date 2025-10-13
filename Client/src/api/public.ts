@@ -1,4 +1,3 @@
-// Client/src/api/public.ts
 import { get } from '../lib/api';
 
 export type OnSaleProduct = {
@@ -24,8 +23,9 @@ export type PublicCategory = {
 
 export async function listCategories(): Promise<PublicCategory[]> {
   const { data, error } = await get<PublicCategory[]>('/public/categories');
-  if (error) throw new Error(error);
-  return data ?? [];
+  if (error) return [];
+  if (!Array.isArray(data)) return [];
+  return data;
 }
 
 export type ListProductsParams = {
@@ -76,16 +76,32 @@ export async function listProductsByCategory<T = any>(
   const { data, error } = await get<ListProductsResponse<T>>(
     `/public/products?${usp.toString()}`
   );
-  if (error) throw new Error(error);
-  return data as ListProductsResponse<T>;
+
+  let page = 1;
+  if (typeof params.page === 'number' && params.page > 0) page = params.page;
+
+  let pageSize = 24;
+  if (typeof params.pageSize === 'number' && params.pageSize > 0) pageSize = params.pageSize;
+
+  if (error || !data) {
+    return {
+      items: [],
+      page,
+      pageSize,
+      total: 0,
+      totalPages: 1,
+    };
+  }
+
+  return data;
 }
 
 export async function getFeaturedPhotos(): Promise<string[]> {
   const { data, error } = await get<ListResponse<string[]>>(
     '/public/featured-photos?primary=true&size=1600'
   );
-  if (error) throw new Error(error);
-  return (data?.items ?? []).map((u) => String(u));
+  if (error || !data || !Array.isArray(data.items)) return [];
+  return data.items.map((u) => String(u));
 }
 
 export async function getOnSaleProducts(opts?: { limit?: number }): Promise<OnSaleProduct[]> {
@@ -94,6 +110,34 @@ export async function getOnSaleProducts(opts?: { limit?: number }): Promise<OnSa
     qs = `?limit=${encodeURIComponent(opts.limit)}`;
   }
   const { data, error } = await get<ListResponse<OnSaleProduct[]>>(`/public/on-sale${qs}`);
-  if (error) throw new Error(error);
-  return data?.items ?? [];
+  if (error || !data || !Array.isArray(data.items)) return [];
+  return data.items;
+}
+
+export type PublicConfig = {
+  commissionBps: number;
+  minFeeCents: number;
+  shippingDefaults: {
+    baseCents: number;
+    perItemCents: number;
+    freeThresholdCents: number | null;
+  };
+};
+
+export async function getPublicConfig(): Promise<PublicConfig> {
+  const { data, error } = await get<{ config: PublicConfig }>('/public/config');
+
+  if (error || !data?.config) {
+    return {
+      commissionBps: 800,
+      minFeeCents: 75,
+      shippingDefaults: {
+        baseCents: 0,
+        perItemCents: 0,
+        freeThresholdCents: null,
+      },
+    };
+  }
+
+  return data.config;
 }
