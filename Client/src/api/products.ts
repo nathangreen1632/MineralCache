@@ -67,6 +67,7 @@ export type Product = {
   locality: string | null;
   synthetic: boolean;
 
+  // ✅ flattened vendor fields from server
   vendorSlug?: string | null;
   vendorName?: string | null;
 
@@ -92,6 +93,9 @@ export type Product = {
   saleStartAt: string | null;
   saleEndAt: string | null;
 
+  // convenience fields often included by the API
+  primaryImageUrl?: string | null;
+
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -104,14 +108,17 @@ export type Product = {
 export type ListQuery = {
   page?: number;
   pageSize?: number;
+
+  // ✅ free-text search supported by server
   q?: string;
+
   vendorId?: number;
   vendorSlug?: string;
   species?: string;
   synthetic?: boolean;
   onSale?: boolean;
 
-  // New unified filters
+  // Unified filters
   priceMinCents?: number;
   priceMaxCents?: number;
   sizeMinCm?: number;
@@ -119,7 +126,16 @@ export type ListQuery = {
   fluorescence?: string; // comma list of modes: "SW,LW"
   condition?: string;    // comma list of statuses
 
-  sort?: 'newest' | 'price_asc' | 'price_desc';
+  // Categories (server supports either)
+  category?: string;     // slug
+  categoryId?: number;
+
+  // Dollars-based range (server also accepts)
+  priceMin?: number;
+  priceMax?: number;
+
+  // ✅ include 'oldest' to match server
+  sort?: 'newest' | 'oldest' | 'price_asc' | 'price_desc';
 };
 
 export type ListResponse = {
@@ -144,6 +160,7 @@ export async function updateProduct(id: number, body: ProductInput) {
 }
 
 export async function getProduct(id: number) {
+  // Server response already includes vendorSlug (flattened) and photos array
   return get<{ product: Product }>(`/products/${id}`);
 }
 
@@ -152,6 +169,10 @@ export async function listProducts(q: ListQuery = {}) {
 
   if (typeof q.page === 'number' && q.page > 0) params.set('page', String(q.page));
   if (typeof q.pageSize === 'number' && q.pageSize > 0) params.set('pageSize', String(q.pageSize));
+
+  // ✅ include free-text search
+  if (typeof q.q === 'string' && q.q.trim().length > 0) params.set('q', q.q.trim());
+
   if (typeof q.vendorId === 'number') params.set('vendorId', String(q.vendorId));
   if (q.vendorSlug) params.set('vendorSlug', q.vendorSlug);
   if (q.species) params.set('species', q.species);
@@ -167,24 +188,14 @@ export async function listProducts(q: ListQuery = {}) {
   if (q.fluorescence) params.set('fluorescence', q.fluorescence);
   if (q.condition) params.set('condition', q.condition);
 
+  // Categories + dollars range (optional)
+  if (q.category) params.set('category', q.category);
+  if (typeof q.categoryId === 'number') params.set('categoryId', String(q.categoryId));
+  if (typeof q.priceMin === 'number') params.set('priceMin', String(q.priceMin));
+  if (typeof q.priceMax === 'number') params.set('priceMax', String(q.priceMax));
+
   if (q.sort) params.set('sort', q.sort);
 
   const qs = params.toString();
   return get<ListResponse>(`/products${qs ? `?${qs}` : ''}`);
-}
-
-/* ============================
-   Uploads (kept here)
-   ============================ */
-
-export async function uploadProductImages(id: number, files: File[]) {
-  const fd = new FormData();
-  files.slice(0, 4).forEach((f) => fd.append('photos', f));
-  const res = await fetch(`/api/products/${id}/images`, {
-    method: 'POST',
-    credentials: 'include',
-    body: fd,
-  });
-  const data = await res.json().catch(() => ({}));
-  return { ok: res.ok, data };
 }

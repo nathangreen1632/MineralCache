@@ -8,10 +8,12 @@ import {
   placeBid,
   watchAuction,
   unwatchAuction,
+  buyNow, // ✅ ADDED
   type AuctionDto,
   type PlaceBidRes,
 } from '../../api/auctions';
 import Countdown from '../../components/auctions/Countdown';
+import AuctionActions from '../../components/auctions/AuctionActions'; // ✅ ADDED
 
 function cents(v: number | null | undefined): string {
   let n = 0;
@@ -48,6 +50,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
   const [amount, setAmount] = useState<string>('');
   const [proxy, setProxy] = useState<string>('');
   const [watching, setWatching] = useState(false);
+  const [buyBusy, setBuyBusy] = useState(false); // ✅ ADDED
 
   // Back button handler with safe fallback
   const onBack = useCallback(() => {
@@ -69,12 +72,12 @@ export default function AuctionDetailPage(): React.ReactElement | null {
       .then((res) => {
         if (!isMounted) return;
 
-        if ((res as any)?.error) {
+        if ((res)?.error) {
           setAuction(null);
           return;
         }
 
-        const payload = (res as any).data as {
+        const payload = (res).data as {
           data?: AuctionDto & { imageUrl?: string | null; productTitle?: string | null };
         } | null | undefined;
 
@@ -190,6 +193,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
 
         if ((apiRes as any)?.error) {
           showFlash({ kind: 'error', text: 'Bid failed.' });
+          // no-op
         } else {
           const body = (apiRes as any).data as PlaceBidRes | null | undefined;
           if (body?.data) {
@@ -230,6 +234,37 @@ export default function AuctionDetailPage(): React.ReactElement | null {
       showFlash({ kind: 'error', text: 'Could not update watchlist.' });
     }
   }, [auction, watching, showFlash]);
+
+  // ✅ ADDED: Buy Now handler
+  const onBuyNow = useCallback(async () => {
+    if (!auction || auction.status !== 'live') return;
+    const ok = window.confirm('Buy this item now? This will end the auction immediately.');
+    if (!ok) return;
+
+    try {
+      setBuyBusy(true);
+      const res = await buyNow(auction.id);
+      if ((res as any)?.error) {
+        showFlash({ kind: 'error', text: 'Buy Now failed.' });
+        return;
+      }
+      const okFlag = (res as any)?.data?.ok === true;
+      if (!okFlag) {
+        const code = (res as any)?.data?.code ?? 'ERROR';
+        showFlash({ kind: 'error', text: `Buy Now failed (${code}).` });
+        return;
+      }
+      showFlash({ kind: 'success', text: 'Purchased via Buy Now.' });
+      // Refresh details to reflect final state
+      const reload = await getAuction(auction.id);
+      if (!(reload)?.error) {
+        const payload = (reload).data as { data?: AuctionDto } | null | undefined;
+        if (payload?.data) setAuction(payload.data);
+      }
+    } finally {
+      setBuyBusy(false);
+    }
+  }, [auction, showFlash]);
 
   if (!auction) return null;
 
@@ -274,7 +309,38 @@ export default function AuctionDetailPage(): React.ReactElement | null {
             </button>
           </div>
 
-          <h1 className="text-2xl font-bold">{headerTitle}</h1>
+          {/* UPDATED: add status pill next to the title */}
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            {headerTitle}
+            {auction.status === 'ended' && (
+              <span className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-[var(--theme-card)] border border-[var(--theme-border)]">
+                Closed
+              </span>
+            )}
+            {auction.status === 'canceled' && (
+              <span className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-[var(--theme-card)] border border-[var(--theme-border)]">
+                Canceled
+              </span>
+            )}
+          </h1>
+
+          {/* ✅ ADDED: vendor/admin action buttons (no deletion of existing lines) */}
+          {typeof auction.vendorId === 'number' && (
+            <div className="flex justify-end">
+              <AuctionActions
+                auction={{
+                  id: auction.id,
+                  vendorId: auction.vendorId,
+                  status: auction.status,
+                  endAt: auction.endAt,
+                }}
+                onStatusChange={(next) =>
+                  setAuction((a) => (a ? { ...a, status: next } : a))
+                }
+                className="ml-4"
+              />
+            </div>
+          )}
 
           {/* ✅ NEW: Vendor slug, placed between headerTitle and productTitle */}
           {vendorSlug ? (
@@ -398,6 +464,20 @@ export default function AuctionDetailPage(): React.ReactElement | null {
                   >
                     {watching ? 'Watching ✓' : 'Watch'}
                   </button>
+
+                  {/* ✅ ADDED: Buy Now button (visible when live and configured) */}
+                  {auction.buyNowCents != null && auction.status === 'live' && (
+                    <button
+                      type="button"
+                      onClick={onBuyNow}
+                      disabled={buyBusy}
+                      className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)] disabled:opacity-60"
+                    >
+                      {buyBusy
+                        ? 'Processing…'
+                        : `Buy Now (${(auction.buyNowCents / 100).toLocaleString(undefined, { style: 'currency', currency: 'USD' })})`}
+                    </button>
+                  )}
                 </div>
               </form>
             </div>

@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/auth.middleware.js';
 import { require18Plus } from '../middleware/ageGate.middleware.js';
 import { validateBody, validateParams } from '../middleware/validate.middleware.js';
 import { bidBodySchema, bidParamsSchema, createAuctionBodySchema } from '../validation/auctions.schema.js';
-import { createAuction, watchAuction, unwatchAuction } from '../controllers/auctionsReadWrite.controller.js';
+import { createAuction, watchAuction, unwatchAuction, closeAuction, cancelAuction } from '../controllers/auctionsReadWrite.controller.js';
 import { buyNow, placeBid, listAuctions, getAuction } from '../controllers/auctions.controller.js';
 import { biddingRateLimit } from '../middleware/rateLimit.middleware.js';
 
@@ -24,5 +24,9 @@ router.post('/:id/buy-now', requireAuth, require18Plus, validateParams(bidParams
 // Watchlist (auth required)
 router.post('/:id/watch', requireAuth, validateParams(bidParamsSchema), watchAuction);
 router.delete('/:id/watch', requireAuth, validateParams(bidParamsSchema), unwatchAuction);
+
+// Close / Cancel (vendor owner or admin; 18+ not required)
+router.post('/:id/close', requireAuth, validateParams(bidParamsSchema), closeAuction);
+router.post('/:id/cancel', requireAuth, validateParams(bidParamsSchema), cancelAuction);
 
 export default router;

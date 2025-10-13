@@ -1,7 +1,9 @@
 // Server/src/services/auction.service.ts
-import { Transaction } from 'sequelize';
-import { Auction, type IncrementTier } from '../models/auction.model.js';
-import { Bid } from '../models/bid.model.js';
+import {Transaction} from 'sequelize';
+import {Auction, type IncrementTier} from '../models/auction.model.js';
+import {Bid} from '../models/bid.model.js';
+import {stopAuctionTicker} from '../sockets/tickers/auctionTicker.js';
+import {logInfo, logWarn} from './log.service.js';
 
 export type Ladder = IncrementTier[];
 
@@ -170,4 +172,105 @@ export async function placeBidTx(
     prevLeaderId,
     timeExtendedMs: extendedMs || undefined,
   };
+}
+
+type EndActor =
+  | { kind: 'vendor'; vendorId: number }
+  | { kind: 'admin' };
+
+export type EndAuctionReason =
+  | 'manual_close'
+  | 'vendor_canceled'
+  | 'admin_canceled'
+  | 'natural_end';
+
+export type EndAuctionResult = {
+  auction: Auction;
+  alreadyFinal: boolean;
+  reason: EndAuctionReason;
+};
+
+/** Load an auction for mutation inside a transaction (FOR UPDATE where supported). */
+async function getAuctionForUpdate(auctionId: number, tx: Transaction): Promise<Auction | null> {
+  return Auction.findByPk(auctionId, { transaction: tx, lock: true as any });
+}
+
+/** Finalize an auction as "ended" (manual close). Idempotent. */
+export async function endAuctionTx(
+  tx: Transaction,
+  auctionId: number,
+  actor: EndActor,
+  reason: EndAuctionReason = 'manual_close',
+): Promise<EndAuctionResult> {
+  logInfo('auction.end.start', { auctionId, reason, actor: actor.kind });
+
+  const a = await getAuctionForUpdate(auctionId, tx);
+  if (!a) {
+    logWarn('auction.end.not_found', { auctionId });
+    throw Object.assign(new Error('Auction not found'), {code: 'NOT_FOUND' as const});
+  }
+
+  if (actor.kind === 'vendor' && a.vendorId !== actor.vendorId) {
+    logWarn('auction.end.forbidden_vendor_mismatch', { auctionId, vendorId: actor.vendorId, ownerVendorId: a.vendorId });
+    throw Object.assign(new Error('Forbidden'), {code: 'FORBIDDEN' as const});
+  }
+
+  if (a.status === 'ended' || a.status === 'canceled') {
+    logInfo('auction.end.already_final', { auctionId, status: a.status });
+    return { auction: a, alreadyFinal: true, reason };
+  }
+
+  if (a.status !== 'live' && a.status !== 'scheduled') {
+    logWarn('auction.end.invalid_state', { auctionId, status: a.status });
+    throw Object.assign(new Error('Invalid state transition'), {code: 'INVALID_STATE' as const});
+  }
+
+  a.status = 'ended';
+  a.endAt ??= new Date();
+  await a.save({ transaction: tx });
+
+  try { stopAuctionTicker(a.id); } catch (e) { logWarn('auction.end.stop_ticker_failed', { auctionId, err: String(e) }); }
+
+  logInfo('auction.end.success', { auctionId, status: a.status, endAt: a.endAt });
+  return { auction: a, alreadyFinal: false, reason };
+}
+
+/** Cancel an auction (vendor/admin). Idempotent. */
+export async function cancelAuctionTx(
+  tx: Transaction,
+  auctionId: number,
+  actor: EndActor,
+  reason: EndAuctionReason = actor.kind === 'admin' ? 'admin_canceled' : 'vendor_canceled',
+): Promise<EndAuctionResult> {
+  logInfo('auction.cancel.start', { auctionId, reason, actor: actor.kind });
+
+  const a = await getAuctionForUpdate(auctionId, tx);
+  if (!a) {
+    logWarn('auction.cancel.not_found', { auctionId });
+    throw Object.assign(new Error('Auction not found'), {code: 'NOT_FOUND' as const});
+  }
+
+  if (actor.kind === 'vendor' && a.vendorId !== actor.vendorId) {
+    logWarn('auction.cancel.forbidden_vendor_mismatch', { auctionId, vendorId: actor.vendorId, ownerVendorId: a.vendorId });
+    throw Object.assign(new Error('Forbidden'), {code: 'FORBIDDEN' as const});
+  }
+
+  if (a.status === 'ended' || a.status === 'canceled') {
+    logInfo('auction.cancel.already_final', { auctionId, status: a.status });
+    return { auction: a, alreadyFinal: true, reason };
+  }
+
+  if (a.status !== 'live' && a.status !== 'scheduled' && a.status !== 'draft') {
+    logWarn('auction.cancel.invalid_state', { auctionId, status: a.status });
+    throw Object.assign(new Error('Invalid state transition'), {code: 'INVALID_STATE' as const});
+  }
+
+  a.status = 'canceled';
+  a.endAt ??= new Date();
+  await a.save({ transaction: tx });
+
+  try { stopAuctionTicker(a.id); } catch (e) { logWarn('auction.cancel.stop_ticker_failed', { auctionId, err: String(e) }); }
+
+  logInfo('auction.cancel.success', { auctionId, status: a.status, endAt: a.endAt });
+  return { auction: a, alreadyFinal: false, reason };
 }

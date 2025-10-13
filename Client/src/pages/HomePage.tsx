@@ -113,7 +113,6 @@ export default function HomePage(): React.ReactElement {
   }, [onSale, page]);
 
   const canPrev = page > 1;
-  // If we got exactly `effectiveLimit` items back, there might be more → allow Next
   const canNext = (onSale?.length ?? 0) === effectiveLimit;
 
   let onSaleContent: React.ReactNode;
@@ -157,6 +156,12 @@ export default function HomePage(): React.ReactElement {
               imageUrl={p.imageUrl || undefined}
               price={p.price}
               salePrice={p.salePrice ?? undefined}
+              // NEW: pass vendor info so the card can render the vendor link
+              vendorSlug={
+                (p as any).vendorSlug ??
+                (p as any).vendor?.slug ??
+                null
+              }
             />
           ))}
         </div>

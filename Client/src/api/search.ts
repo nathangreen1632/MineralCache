@@ -6,7 +6,7 @@ export type ProductSearchParams = {
   q: string;
   page?: number;
   pageSize?: number;
-  sort?: 'newest' | 'price_asc' | 'price_desc';
+  sort?: 'newest' | 'price_asc' | 'price_desc'| 'oldest';
   vendorId?: number;
   vendorSlug?: string;
 };

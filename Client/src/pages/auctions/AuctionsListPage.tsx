@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import AuctionCard from '../../components/auctions/AuctionCard';
 import { listAuctions, type AuctionListItem } from '../../api/auctions';
+import AuctionFilters from '../../components/auctions/AuctionFilters'; // ✅ ADDED
 
 function byEndingSoon(a: AuctionListItem, b: AuctionListItem) {
   const ea = a.endAt ? new Date(a.endAt).getTime() : Number.MAX_SAFE_INTEGER;
@@ -25,12 +26,27 @@ function titleSafe(x: { title?: string | null }): string {
 export default function AuctionsListPage(): React.ReactElement {
   const [items, setItems] = useState<AuctionListItem[] | null>(null);
   const [q, setQ] = useState('');
-  const [sort, setSort] = useState<'ending' | 'newest'>('ending');
+  const [sort, setSort] = useState<'ending' | 'newest'>('newest');
   const [err, setErr] = useState<string | null>(null);
+
+  // ✅ NEW: server-side filter model (vendor/species/synthetic)
+  const [filters, setFilters] = useState<{
+    vendorId?: number | null;
+    species?: string;
+    synthetic?: boolean | null;
+  }>({ vendorId: null, species: '', synthetic: null });
 
   useEffect(() => {
     let isMounted = true;
-    listAuctions()
+
+    // ✅ re-fetch whenever query/sort/filters change (server can ignore unknown params)
+    listAuctions({
+      q,
+      sort,
+      vendorId: filters.vendorId ?? undefined,
+      species: (filters.species ?? '').trim() || undefined,
+      synthetic: filters.synthetic === null ? undefined : filters.synthetic,
+    })
       .then((json) => {
         if (!isMounted) return;
         if (json.ok) setItems(json.items);
@@ -39,10 +55,12 @@ export default function AuctionsListPage(): React.ReactElement {
       .catch(() => {
         if (isMounted) setErr('Failed to load auctions');
       });
+
     return () => {
       isMounted = false;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, sort, filters.vendorId, filters.species, filters.synthetic]); // ✅ dependencies
 
   const filtered = useMemo(() => {
     const base = items ?? [];
@@ -99,6 +117,13 @@ export default function AuctionsListPage(): React.ReactElement {
               </div>
             </div>
           </div>
+
+          {/* ✅ NEW: extra filters (vendor/species/synthetic) */}
+          <AuctionFilters
+            value={filters}
+            onChange={setFilters}
+            className="mt-2"
+          />
         </header>
 
         {err && (
@@ -125,6 +150,7 @@ export default function AuctionsListPage(): React.ReactElement {
               highBidCents={a.highBidCents}
               startingBidCents={a.startingBidCents}
               endAt={a.endAt}
+              status={a.status}
             />
           ))}
         </section>

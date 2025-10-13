@@ -1,18 +1,16 @@
-// Client/src/api/public.ts
 import { get } from '../lib/api';
 
 export type OnSaleProduct = {
   id: number;
   slug?: string | null;
-  name: string;               // Product.title (server maps)
-  price: number;              // dollars
-  salePrice?: number | null;  // dollars
-  imageUrl?: string | null;   // /uploads/...
+  name: string;
+  price: number;
+  salePrice?: number | null;
+  imageUrl?: string | null;
+  vendorSlug?: string | null;
 };
 
 type ListResponse<T> = { items: T };
-
-/* -------------------- NEW: Categories + Category Products -------------------- */
 
 export type PublicCategory = {
   id: number;
@@ -25,8 +23,9 @@ export type PublicCategory = {
 
 export async function listCategories(): Promise<PublicCategory[]> {
   const { data, error } = await get<PublicCategory[]>('/public/categories');
-  if (error) throw new Error(error);
-  return data ?? [];
+  if (error) return [];
+  if (!Array.isArray(data)) return [];
+  return data;
 }
 
 export type ListProductsParams = {
@@ -34,11 +33,13 @@ export type ListProductsParams = {
   page?: number;
   pageSize?: number;
   sort?: 'newest' | 'oldest' | 'price_asc' | 'price_desc';
-  priceMin?: number;      // dollars
-  priceMax?: number;      // dollars
+  priceMin?: number;
+  priceMax?: number;
   vendorId?: number;
   onSale?: boolean;
   q?: string;
+  species?: string;
+  synthetic?: boolean;
 };
 
 export type ListProductsResponse<T = any> = {
@@ -60,8 +61,9 @@ export async function listProductsByCategory<T = any>(
   if (params.sort) usp.set('sort', params.sort);
   if (typeof params.vendorId === 'number') usp.set('vendorId', String(params.vendorId));
   if (params.q) usp.set('q', params.q);
+  if (params.species) usp.set('species', params.species);
+  if (typeof params.synthetic === 'boolean') usp.set('synthetic', String(params.synthetic));
 
-  // dollars -> cents; omit when not provided
   if (typeof params.priceMin === 'number') {
     usp.set('priceMinCents', String(Math.round(params.priceMin * 100)));
   }
@@ -69,30 +71,73 @@ export async function listProductsByCategory<T = any>(
     usp.set('priceMaxCents', String(Math.round(params.priceMax * 100)));
   }
 
-  // Only send onSale when TRUE (checkbox checked)
   if (params.onSale === true) usp.set('onSale', 'true');
 
   const { data, error } = await get<ListProductsResponse<T>>(
     `/public/products?${usp.toString()}`
   );
-  if (error) throw new Error(error);
-  return data as ListProductsResponse<T>;
-}
 
-/* -------------------- Existing helpers (kept) -------------------- */
+  let page = 1;
+  if (typeof params.page === 'number' && params.page > 0) page = params.page;
+
+  let pageSize = 24;
+  if (typeof params.pageSize === 'number' && params.pageSize > 0) pageSize = params.pageSize;
+
+  if (error || !data) {
+    return {
+      items: [],
+      page,
+      pageSize,
+      total: 0,
+      totalPages: 1,
+    };
+  }
+
+  return data;
+}
 
 export async function getFeaturedPhotos(): Promise<string[]> {
   const { data, error } = await get<ListResponse<string[]>>(
     '/public/featured-photos?primary=true&size=1600'
   );
-  if (error) throw new Error(error);
-  return (data?.items ?? []).map((u) => String(u));
+  if (error || !data || !Array.isArray(data.items)) return [];
+  return data.items.map((u) => String(u));
 }
 
-/** Get on-sale products; optionally increase the server limit for paging on Home */
 export async function getOnSaleProducts(opts?: { limit?: number }): Promise<OnSaleProduct[]> {
-  const qs = opts?.limit ? `?limit=${encodeURIComponent(opts.limit)}` : '';
+  let qs = '';
+  if (opts && typeof opts.limit === 'number') {
+    qs = `?limit=${encodeURIComponent(opts.limit)}`;
+  }
   const { data, error } = await get<ListResponse<OnSaleProduct[]>>(`/public/on-sale${qs}`);
-  if (error) throw new Error(error);
-  return data?.items ?? [];
+  if (error || !data || !Array.isArray(data.items)) return [];
+  return data.items;
+}
+
+export type PublicConfig = {
+  commissionBps: number;
+  minFeeCents: number;
+  shippingDefaults: {
+    baseCents: number;
+    perItemCents: number;
+    freeThresholdCents: number | null;
+  };
+};
+
+export async function getPublicConfig(): Promise<PublicConfig> {
+  const { data, error } = await get<{ config: PublicConfig }>('/public/config');
+
+  if (error || !data?.config) {
+    return {
+      commissionBps: 800,
+      minFeeCents: 75,
+      shippingDefaults: {
+        baseCents: 0,
+        perItemCents: 0,
+        freeThresholdCents: null,
+      },
+    };
+  }
+
+  return data.config;
 }

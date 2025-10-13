@@ -139,10 +139,13 @@ export default function ProductDetail(): React.ReactElement {
 
   let priceEl: React.ReactNode = <span>{centsToUsd(effCents)}</span>;
   if (onSaleNow) {
+    // show sale price emphasized, original price struck through
     priceEl = (
       <>
-        <span className="line-through opacity-60 mr-2">{centsToUsd(p.priceCents)}</span>
-        <span>{centsToUsd(effCents)}</span>
+        <span className="font-bold text-[var(--theme-button)]">{centsToUsd(effCents)}</span>
+        <span className="ml-2 line-through text-[var(--theme-muted)] opacity-70">
+          {centsToUsd(p.priceCents)}
+        </span>
       </>
     );
   }
@@ -155,8 +158,19 @@ export default function ProductDetail(): React.ReactElement {
 
   return (
     <section className="mx-auto max-w-6xl px-4 py-8 grid gap-6 lg:grid-cols-2">
-      {/* Left: image carousel */}
-      <ImageCarousel images={images} label="Product images" />
+      {/* Left: image carousel with on-sale badge overlay */}
+      <div className="relative">
+        <ImageCarousel images={images} label="Product images" />
+        {onSaleNow && (
+          <span
+            className="absolute left-3 top-3 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold shadow"
+            style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
+            aria-label="On sale"
+          >
+            On Sale
+          </span>
+        )}
+      </div>
 
       {/* Right: details */}
       <div className="space-y-4">
@@ -166,8 +180,9 @@ export default function ProductDetail(): React.ReactElement {
           {p.locality ? ` · ${p.locality}` : ''}
         </div>
 
+        <div className="mt-0.5 text-xs text-[var(--theme-text)]">
+          <span className="opacity-75">Sold by:</span>{' '}
         {(p as any).vendorSlug ? (
-          <div className="text-xs opacity-70">
             <Link
               to={`/vendors/${(p as any).vendorSlug}`}
               className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link)]"
@@ -175,8 +190,8 @@ export default function ProductDetail(): React.ReactElement {
             >
               {(p as any).vendorSlug}
             </Link>
-          </div>
         ) : null}
+        </div>
 
         <div className="text-xl font-bold text-[var(--theme-text)]">{priceEl}</div>
 

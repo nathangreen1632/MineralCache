@@ -19,6 +19,9 @@ export type AuctionDto = {
   vendorSlug?: string | null;
 };
 
+/** Export a handy union for consumers (e.g., components). */
+export type AuctionStatus = AuctionDto['status'];
+
 /** List-card DTO used by list screens. */
 export type AuctionListItem = {
   id: number;
@@ -64,6 +67,16 @@ export type CreateAuctionInput = {
   incrementLadderJson?: { upToCents: number | null; incrementCents: number }[];
 };
 
+/** ✅ NEW: partial update payload for editing auctions */
+export type UpdateAuctionInput = {
+  title?: string;
+  startingBidCents?: number;
+  durationDays?: 1 | 3 | 5 | 7;
+  reserveCents?: number | null;
+  buyNowCents?: number | null;
+  incrementLadderJson?: { upToCents: number | null; incrementCents: number }[];
+};
+
 // ——— helpers ———
 function pickVendorSlug(x: any): string | null {
   const v =
@@ -86,7 +99,7 @@ export async function getAuction(auctionId: number) {
 
   // Inject a flat vendorSlug onto data.data if we can infer one
   const body: any = (res as any)?.data;
-  if (body && body.data) {
+  if (body?.data) {
     const raw = body.data;
     const slug = pickVendorSlug(raw);
     if (slug && raw.vendorSlug !== slug) {
@@ -115,6 +128,11 @@ export function createAuction(input: CreateAuctionInput) {
   return post<{ ok: boolean; id: number }, CreateAuctionInput>(`/auctions`, input);
 }
 
+/** ✅ NEW: Update an existing auction (vendor). */
+export function updateAuction(auctionId: number, input: UpdateAuctionInput) {
+  return post<{ ok: boolean; code?: string }, UpdateAuctionInput>(`/auctions/${auctionId}/edit`, input);
+}
+
 /** Buy It Now action (if enabled for the auction). */
 export function buyNow(auctionId: number) {
   return post<{ ok: boolean; code?: string }, Record<string, never>>(`/auctions/${auctionId}/buy-now`, {});
@@ -139,6 +157,10 @@ export async function listAuctions(params?: {
   vendorId?: number;
   sort?: 'ending' | 'newest';
   status?: 'draft' | 'scheduled' | 'live' | 'ended' | 'canceled';
+  /** ✅ NEW (optional) */
+  species?: string;
+  /** ✅ NEW (optional) */
+  synthetic?: boolean;
 }) {
   const search = new URLSearchParams();
 
@@ -153,6 +175,13 @@ export async function listAuctions(params?: {
   }
   if (params && typeof params.status === 'string') {
     search.set('status', params.status);
+  }
+  // ✅ NEW: optional filters
+  if (params && typeof params.species === 'string' && params.species.trim().length > 0) {
+    search.set('species', params.species.trim());
+  }
+  if (params && typeof params.synthetic === 'boolean') {
+    search.set('synthetic', params.synthetic ? '1' : '0');
   }
 
   let url = '/auctions';
@@ -206,4 +235,20 @@ export async function listActiveAuctions() {
   // Normalize vendorSlug on the way out (optional)
   const items = itemsRaw.map((a) => ({ ...a, vendorSlug: pickVendorSlug(a) })) as AuctionDto[];
   return { data: items, error: null as string | null };
+}
+
+/** Close an auction now (vendor owner or admin). */
+export function closeAuction(auctionId: number) {
+  return post<
+    { ok: boolean; code?: string; auction: { id: number; status: AuctionStatus; endAt: string | null; highBidCents: number | null } },
+    Record<string, never>
+  >(`/auctions/${auctionId}/close`, {});
+}
+
+/** Cancel an auction (vendor owner or admin). */
+export function cancelAuction(auctionId: number) {
+  return post<
+    { ok: boolean; code?: string; auction: { id: number; status: AuctionStatus; endAt: string | null; highBidCents: number | null } },
+    Record<string, never>
+  >(`/auctions/${auctionId}/cancel`, {});
 }
