@@ -23,11 +23,10 @@ export default function VendorProductsTable(): React.ReactElement {
   const [state, setState] = useState<Load>({ kind: 'idle' });
   const [msg, setMsg] = useState<string | null>(null);
 
-  // NEW: filter + sort + paging
   const [status, setStatus] = useState<ListVendorProductsParams['status']>('active');
   const [sort, setSort] = useState<ListVendorProductsParams['sort']>('newest');
   const [page, setPage] = useState(1);
-  const pageSize = 100; // keep your previous fetch size
+  const pageSize = 100;
 
   useEffect(() => {
     let alive = true;
@@ -61,10 +60,6 @@ export default function VendorProductsTable(): React.ReactElement {
     if (state.kind !== 'loaded') return;
     setMsg(null);
 
-    // Optimistic UI:
-    // - Archiving while viewing "active" → remove from list
-    // - Reviving while viewing "archived" → remove from list
-    // - Otherwise (e.g., "all") → just flip the flag locally
     const prev = [...state.items];
     let local: VendorProductRow[];
 
