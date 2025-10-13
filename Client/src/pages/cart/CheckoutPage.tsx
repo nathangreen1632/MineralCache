@@ -8,6 +8,7 @@ import { createCheckoutIntent } from '../../api/checkout';
 import { useCartTotals } from '../../hooks/useCartTotals';
 import { emit } from '../../lib/eventBus';
 import { EV_CART_CHANGED } from '../../lib/events';
+import CommissionPreview from "../../components/cart/CommissionPreview.tsx";
 
 type LoadHealth =
   | { kind: 'idle' }
@@ -109,10 +110,10 @@ export default function CheckoutPage(): React.ReactElement {
       <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Checkout</h1>
 
       <div className="rounded-2xl border p-6 grid gap-4" style={card}>
-        <p className="text-sm opacity-80">
+        <p className="text-xl opacity-80">
           Total due: <strong>{centsToUsd(total)}</strong>
         </p>
-
+        <CommissionPreview />
         {disabledMsg ? (
           <div className="rounded-xl border px-3 py-2 text-sm" style={card}>
             <p style={{ color: 'var(--theme-error)' }}>
