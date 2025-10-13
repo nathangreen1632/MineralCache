@@ -529,14 +529,18 @@ export default function ProductCatalogList(): React.ReactElement {
               const eff = effectivePriceCents(p);
 
               const priceEl = onSaleNow ? (
-                <div className="text-sm">
-                  <span className="line-through opacity-60 mr-1">
+                <div className="flex items-baseline gap-2">
+                  <span className="font-bold text-[var(--theme-success)]">
+                    {centsToUsd(eff)}
+                  </span>
+                  <span className="text-xs line-through text-[var(--theme-muted)]">
                     {centsToUsd((p as any).priceCents)}
                   </span>
-                  <span>{centsToUsd(eff)}</span>
                 </div>
               ) : (
-                <div className="text-sm">{centsToUsd(eff)}</div>
+                <span className="font-bold text-[var(--theme-text)]">
+                  {centsToUsd(eff)}
+                </span>
               );
 
               const imgSrc = imageUrlForCard(p);
