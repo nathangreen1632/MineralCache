@@ -4,9 +4,8 @@ import {
   listVendorAppsSvc,
   approveVendorSvc,
   rejectVendorSvc,
+  promoteUserByEmailSvc,
 } from '../../services/admin/admin.service.js';
-
-// ✅ Centralized settings logic (ENV+DB merge, cache)
 import {
   getEffectiveSettings,
   updateAdminSettings,
@@ -17,9 +16,6 @@ import {
   type UpdateAdminSettingsDto,
 } from '../../validation/adminSettings.schema.js';
 
-/** ---------------------------------------------
- * Admin Settings DTO shaping for client (preserves your shape)
- * --------------------------------------------*/
 function toDtoFromEffective(s: Awaited<ReturnType<typeof getEffectiveSettings>>) {
   return {
     commission: {
@@ -28,8 +24,7 @@ function toDtoFromEffective(s: Awaited<ReturnType<typeof getEffectiveSettings>>)
     },
     tax: {
       bps: Number(s.tax_rate_bps ?? 0),
-      label: (s.tax_label ?? null),
-      // optional: show feature flag if your UI wants it
+      label: s.tax_label ?? null,
       enabled: Boolean(s.tax_enabled),
     },
     shippingDefaults: {
@@ -41,14 +36,10 @@ function toDtoFromEffective(s: Awaited<ReturnType<typeof getEffectiveSettings>>)
       currency: String(s.currency),
     },
     stripeEnabled: Boolean(s.stripe_enabled),
-    // keep an updatedAt for UI; effective settings are computed, so synthesize a timestamp
     updatedAt: new Date().toISOString(),
   };
 }
 
-/** ---------------------------------------------
- * GET /api/admin/settings
- * --------------------------------------------*/
 export async function getAdminSettings(_req: Request, res: Response): Promise<void> {
   try {
     const effective = await getEffectiveSettings();
@@ -59,9 +50,6 @@ export async function getAdminSettings(_req: Request, res: Response): Promise<vo
   }
 }
 
-/** ---------------------------------------------
- * PATCH /api/admin/settings
- * --------------------------------------------*/
 export async function patchAdminSettings(req: Request, res: Response): Promise<void> {
   try {
     const parsed = updateAdminSettingsSchema.safeParse(req.body as UpdateAdminSettingsDto);
@@ -69,9 +57,8 @@ export async function patchAdminSettings(req: Request, res: Response): Promise<v
       res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
       return;
     }
-
     const updatedEffective = await updateAdminSettings(parsed.data);
-    invalidateAdminSettingsCache(); // ensure subsequent reads are fresh
+    invalidateAdminSettingsCache();
     res.json(toDtoFromEffective(updatedEffective));
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error';
@@ -79,9 +66,6 @@ export async function patchAdminSettings(req: Request, res: Response): Promise<v
   }
 }
 
-/** ---------------------------------------------
- * Vendor applications (existing handlers)
- * --------------------------------------------*/
 export async function listVendorApps(req: Request, res: Response): Promise<void> {
   try {
     const page = Number(req.query.page || 1);
@@ -102,7 +86,6 @@ export async function approveVendor(req: Request, res: Response): Promise<void> 
       res.status(401).json({ error: 'Auth required' });
       return;
     }
-
     const out = await approveVendorSvc(id, adminUserId);
     if (!out.ok && (out as any).http) {
       res.status((out as any).http).json({ error: (out as any).error });
@@ -118,9 +101,7 @@ export async function approveVendor(req: Request, res: Response): Promise<void> 
 export async function rejectVendor(req: Request, res: Response): Promise<void> {
   try {
     const id = Number(req.params.id || 0);
-    const reason =
-      typeof req.body?.reason === 'string' ? req.body.reason.slice(0, 500) : null;
-
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.slice(0, 500) : null;
     const out = await rejectVendorSvc(id, reason);
     if (!out.ok && (out as any).http) {
       res.status((out as any).http).json({ error: (out as any).error });
@@ -130,5 +111,25 @@ export async function rejectVendor(req: Request, res: Response): Promise<void> {
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error';
     res.status(500).json({ error: 'Failed to reject vendor', detail: message });
+  }
+}
+
+export async function promoteUserByEmail(req: Request, res: Response): Promise<void> {
+  try {
+    const email = String(req.body?.email || '').trim();
+    const adminUserId = Number((req as any)?.user?.id ?? 0);
+    if (!Number.isFinite(adminUserId) || adminUserId <= 0) {
+      res.status(401).json({ error: 'Auth required' });
+      return;
+    }
+    const out = await promoteUserByEmailSvc(email, adminUserId);
+    if (!out.ok && (out as any).http) {
+      res.status((out as any).http).json({ error: (out as any).error });
+      return;
+    }
+    res.json(out);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    res.status(500).json({ error: 'Failed to promote user', detail: message });
   }
 }
