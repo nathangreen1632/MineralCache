@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { post } from '../lib/api';
 import { useAuthStore } from '../stores/useAuthStore';
 
@@ -61,7 +61,7 @@ export default function RegisterPage(): React.ReactElement {
         className="w-full max-w-md rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-6 shadow-xl"
         aria-labelledby="register-title"
       >
-        <h1 id="register-title" className="text-2xl font-extrabold mb-4">Create your account</h1>
+        <h1 id="register-title" className="text-2xl text-center font-extrabold mb-4">Create your account</h1>
 
         {err && <div role="alert" className="mb-3 text-sm">⚠️ {err}</div>}
 
@@ -70,6 +70,7 @@ export default function RegisterPage(): React.ReactElement {
           id="name"
           type="text"
           autoComplete="name"
+          placeholder="John Doe"
           className="mb-3 w-full rounded-xl border px-3 py-2"
           style={{ background: 'var(--theme-textbox)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
           value={name}
@@ -81,6 +82,7 @@ export default function RegisterPage(): React.ReactElement {
           id="email"
           type="email"
           autoComplete="email"
+          placeholder="email address"
           className="mb-3 w-full rounded-xl border px-3 py-2"
           style={{ background: 'var(--theme-textbox)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
           value={email}
@@ -92,29 +94,52 @@ export default function RegisterPage(): React.ReactElement {
           id="password"
           type="password"
           autoComplete="new-password"
+          placeholder="at least 8 characters"
           className="mb-6 w-full rounded-xl border px-3 py-2"
           style={{ background: 'var(--theme-textbox)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
 
-        <button
-          type="submit"
-          disabled={!canSubmit || busy}
-          className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
-          aria-disabled={!canSubmit || busy}
-        >
-          {busy ? 'Creating account…' : 'Create account'}
-        </button>
+        <div className="mt-4 flex w-full items-center justify-between">
+          <button
+            type="submit"
+            disabled={!canSubmit || busy}
+            className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+            aria-disabled={!canSubmit || busy}
+          >
+            {busy ? 'Creating account…' : 'Create account'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate(`/`)}
+            className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+            style={{
+              background: 'var(--theme-button)',
+              borderColor: 'var(--theme-border)',
+              color: 'var(--theme-text-white)',
+            }}
+          >
+            Back to Home
+          </button>
+        </div>
+
 
         <p className="mt-3 text-sm">
           Already have an account?{' '}
-          <Link
-            className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
-            to={`/login?next=${encodeURIComponent(next)}`}
+          <button
+            type="button"
+            onClick={() => navigate(`/login?next=${encodeURIComponent(next)}`)}
+            className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+            style={{
+              background: 'var(--theme-button)',
+              borderColor: 'var(--theme-border)',
+              color: 'var(--theme-text-white)',
+            }}
           >
-            Sign in
-          </Link>
+            Login
+          </button>
         </p>
       </form>
     </div>

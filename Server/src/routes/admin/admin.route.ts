@@ -5,45 +5,40 @@ import { burstLimiter } from '../../middleware/rateLimit.middleware.js';
 import { validateBody, validateQuery } from '../../middleware/validate.middleware.js';
 import { adminListVendorsSchema, adminRejectSchema } from '../../validation/vendor.schema.js';
 import { updateAdminSettingsSchema } from '../../validation/adminSettings.schema.js';
+import { adminPromoteSchema } from '../../validation/adminUsers.schema.js';
 import {
   listVendorApps,
   approveVendor,
   rejectVendor,
   getAdminSettings,
   patchAdminSettings,
+  promoteUserByEmail,
 } from '../../controllers/admin/admin.controller.js';
 import { shippingRulesRouter } from './shippingRules.route.js';
-import { adminListOrdersQuerySchema } from '../../validation/adminOrders.schema.js'; // ✅ NEW (use the alias)
+import { adminListOrdersQuerySchema } from '../../validation/adminOrders.schema.js';
 import {
   listAdminOrders,
   getAdminOrder,
-  refundOrder, // ✅ NEW
-  exportAdminOrdersCsv,    // ✅ NEW: CSV export handler
-} from '../../controllers/admin/orders.controller.js'; // ✅ NEW
+  refundOrder,
+  exportAdminOrdersCsv,
+} from '../../controllers/admin/orders.controller.js';
 
 const router: Router = Router();
 
-// Vendor applications: list / approve / reject
 router.get('/vendor-apps', requireAdmin, validateQuery(adminListVendorsSchema), listVendorApps);
 router.post('/vendor-apps/:id/approve', requireAdmin, approveVendor);
 router.post('/vendor-apps/:id/reject', requireAdmin, validateBody(adminRejectSchema), rejectVendor);
 
-// Platform settings
-// Keep the route shape the same, but use the new handlers + limiter + body validation.
 router.get('/settings', requireAdmin, burstLimiter, getAdminSettings);
 router.patch('/settings', requireAdmin, burstLimiter, validateBody(updateAdminSettingsSchema), patchAdminSettings);
 
-// Shipping rules (admin)
 router.use('/shipping-rules', requireAdmin, shippingRulesRouter);
 
-// Orders (admin)
-// CSV export (place BEFORE '/orders/:id' so 'csv' isn't captured by the param route)
 router.get('/orders.csv', requireAdmin, burstLimiter, exportAdminOrdersCsv);
-
 router.get('/orders', requireAdmin, burstLimiter, validateQuery(adminListOrdersQuerySchema), listAdminOrders);
 router.get('/orders/:id', requireAdmin, burstLimiter, getAdminOrder);
-
-// ✅ NEW: Full refund endpoint (admin only)
 router.post('/orders/:id/refund', requireAdmin, burstLimiter, refundOrder);
+
+router.post('/users/promote', requireAdmin, validateBody(adminPromoteSchema), promoteUserByEmail);
 
 export default router;
