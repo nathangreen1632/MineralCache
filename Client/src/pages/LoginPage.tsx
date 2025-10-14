@@ -8,7 +8,6 @@ export default function LoginPage(): React.ReactElement {
   const [params] = useSearchParams();
   const next = params.get('next') || '/';
 
-  // ✅ Avoid returning a new object each render (prevents getSnapshot warning/loop)
   const login = useAuthStore((s) => s.login);
   const user  = useAuthStore((s) => s.user);
 
@@ -18,7 +17,6 @@ export default function LoginPage(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
-  // If already logged in, bounce away
   useEffect(() => {
     if (user?.id) navigate(next, { replace: true });
   }, [user?.id, next, navigate]);
@@ -39,11 +37,6 @@ export default function LoginPage(): React.ReactElement {
     navigate(next, { replace: true });
   }, [canSubmit, email, password, login, navigate, next]);
 
-  function useDemoAdmin() {
-    setEmail('admin@mineralcache.local');
-    setPassword('Admin123!');
-  }
-
   return (
     <div className="min-h-screen grid place-items-center px-4 py-10"
          style={{ background: 'var(--theme-bg)', color: 'var(--theme-text)' }}>
@@ -57,9 +50,9 @@ export default function LoginPage(): React.ReactElement {
         }}
         aria-labelledby="login-title"
       >
-        <h1 id="login-title" className="text-2xl font-extrabold mb-1">Sign in</h1>
-        <p className="text-sm mb-6" style={{ color: 'var(--theme-muted)' }}>
-          Use your account to access admin, vendor tools, and checkout.
+        <h1 id="login-title" className="text-2xl font-extrabold mb-1 text-center">Sign In</h1>
+        <p className="text-sm mb-6 text-center" style={{ color: 'var(--theme-muted)' }}>
+          Sign in to shop, manage orders, follow auctions, and access vendor tools if enabled.
         </p>
 
         <label className="block text-sm mb-1" htmlFor="email">Email</label>
@@ -115,7 +108,7 @@ export default function LoginPage(): React.ReactElement {
         <button
           type="submit"
           disabled={!canSubmit}
-          className="w-full rounded-xl font-semibold px-4 py-2 disabled:opacity-60 transition-colors"
+          className="w-full rounded-xl font-semibold px-4 py-2 disabled:opacity-60 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2"
           style={{
             background: 'var(--theme-button)',
             color: 'var(--theme-text-white)',
@@ -129,19 +122,32 @@ export default function LoginPage(): React.ReactElement {
         <div className="mt-3 flex items-center justify-between">
           <button
             type="button"
-            onClick={useDemoAdmin}
-            className="text-xs underline"
-            style={{ color: 'var(--theme-link)' }}
+            onClick={() => navigate(`/register?next=${encodeURIComponent(next)}`)}
+            className="rounded-xl h-10 w-36 mt-12 px-3 py-2 font-semibold border transition-colors focus-visible:ring-2 focus-visible:ring-offset-2"
+            style={{
+              background: 'var(--theme-button)',
+              borderColor: 'var(--theme-border)',
+              color: 'var(--theme-text-white)',
+            }}
           >
-            Use demo admin
+            Create Account
           </button>
 
-          <a href="/" className="text-xs underline" style={{ color: 'var(--theme-link)' }}>
-            Back to home
-          </a>
+          <button
+            type="button"
+            onClick={() => navigate(`/`)}
+            className="rounded-xl h-10 w-36 mt-12 px-3 py-2 font-semibold border transition-colors focus-visible:ring-2 focus-visible:ring-offset-2"
+            style={{
+              background: 'var(--theme-button)',
+              borderColor: 'var(--theme-border)',
+              color: 'var(--theme-text-white)',
+            }}
+          >
+            Back to Home
+          </button>
         </div>
 
-        <p className="mt-6 text-[12px]" style={{ color: 'var(--theme-muted)' }}>
+        <p className="mt-6 text-center text-[12px]" style={{ color: 'var(--theme-muted)' }}>
           By signing in you agree to our terms. This site uses cookies for session authentication.
         </p>
       </form>
