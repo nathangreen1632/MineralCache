@@ -1,12 +1,13 @@
 // Server/src/services/admin.service.ts
 import { Op } from 'sequelize';
 import { Vendor } from '../../models/vendor.model.js';
-import { User } from '../../models/user.model.js'; // ✅ NEW
+import { User } from '../../models/user.model.js';
 import {
   ensureVendorStripeAccount,
   createAccountLink,
   stripeEnabled,
 } from '../stripe.service.js';
+import { log } from '../log.service.js';
 
 export async function listVendorAppsSvc(page: number, pageSize: number) {
   const validPage = Number.isFinite(page) && page > 0 ? page : 1;
@@ -23,11 +24,6 @@ export async function listVendorAppsSvc(page: number, pageSize: number) {
   return { items: rows, total: count, page: validPage, pageSize: validSize };
 }
 
-/**
- * Approve a vendor and (if Stripe is enabled) return an onboarding link.
- * Also records audit fields: approvedBy and approvedAt, and clears rejectedReason.
- * ✅ NEW: Promote owning user to { role: 'vendor', vendorId }
- */
 export async function approveVendorSvc(id: number, adminUserId: number) {
   if (!Number.isFinite(id) || id <= 0) {
     return { ok: false, http: 400, error: 'Bad vendor id' as const };
@@ -41,16 +37,20 @@ export async function approveVendorSvc(id: number, adminUserId: number) {
     return { ok: false, http: 404, error: 'Vendor not found' as const };
   }
 
-  // Audit fields
   vendor.approvalStatus = 'approved';
   vendor.approvedBy = adminUserId;
   vendor.approvedAt = new Date();
   vendor.rejectedReason = null;
   await vendor.save();
 
-  // ✅ Promote the owning user to vendor and attach vendorId
+  const owner = await User.findByPk(Number(vendor.userId), { attributes: ['id', 'role'] });
+  const nextRole =
+    String(owner?.role || '').toLowerCase() === 'buyer'
+      ? 'vendor'
+      : (owner?.role as 'buyer' | 'vendor' | 'admin');
+
   await User.update(
-    { role: 'vendor', vendorId: Number(vendor.id) },
+    { role: nextRole, vendorId: Number(vendor.id) },
     { where: { id: Number(vendor.userId) } }
   );
 
@@ -100,22 +100,14 @@ export async function approveVendorSvc(id: number, adminUserId: number) {
     };
   }
 
-  // Audit log placeholder
-  // eslint-disable-next-line no-console
-  console.log(
+  log.info(
     `[audit] Vendor ${vendor.id} approved by admin ${adminUserId} at ${new Date().toISOString()}`
   );
-  // Email/log placeholder
-  // eslint-disable-next-line no-console
-  console.log(`[email] Send onboarding link to vendor ${vendor.id}: ${link.url}`);
+  log.info(`[email] Send onboarding link to vendor ${vendor.id}: ${link.url}`);
 
   return { ok: true, enabled: true, onboardingUrl: link.url };
 }
 
-/**
- * Reject a vendor; records rejectedReason and clears approvedBy/approvedAt.
- * (Optional: if you want to strictly revert the user, you can also set role:'buyer' and vendorId:null here.)
- */
 export async function rejectVendorSvc(id: number, reason: string | null) {
   if (!Number.isFinite(id) || id <= 0) {
     return { ok: false, http: 400, error: 'Bad vendor id' as const };
@@ -135,16 +127,33 @@ export async function rejectVendorSvc(id: number, reason: string | null) {
 
   await vendor.save();
 
-  // If you want strict behavior on reject, uncomment:
-  // await User.update(
-  //   { role: 'buyer', vendorId: null },
-  //   { where: { id: Number(vendor.userId) } }
-  // );
-
   if (trimmed) {
-    // eslint-disable-next-line no-console
-    console.log(`[email] Vendor ${vendor.id} rejected: ${trimmed}`);
+    log.info(`[email] Vendor ${vendor.id} rejected: ${trimmed}`);
   }
 
   return { ok: true as const };
+}
+
+export async function promoteUserByEmailSvc(email: string, actingAdminId: number) {
+  const e = String(email || '').trim();
+  if (!e) return { ok: false as const, http: 400, error: 'EMAIL_REQUIRED' as const };
+  if (!Number.isFinite(actingAdminId) || actingAdminId <= 0) {
+    return { ok: false as const, http: 400, error: 'Bad admin id' as const };
+  }
+
+  const user = await User.findOne({ where: { email: { [Op.iLike]: e } } });
+  if (!user) return { ok: false as const, http: 404, error: 'USER_NOT_FOUND' as const };
+
+  const currentRole = String(user.role || '').toLowerCase();
+  if (currentRole === 'admin') {
+    return { ok: true as const, alreadyAdmin: true as const, id: Number(user.id) };
+  }
+
+  await User.update({ role: 'admin' }, { where: { id: Number(user.id) } });
+
+  log.info(
+    `[audit] User ${user.id} promoted to admin by ${actingAdminId} at ${new Date().toISOString()}`
+  );
+
+  return { ok: true as const, id: Number(user.id) };
 }
