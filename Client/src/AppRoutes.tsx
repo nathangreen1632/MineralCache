@@ -2,6 +2,7 @@
 import React from 'react';
 import { Routes, Route, Outlet } from 'react-router-dom';
 import HomePage from './pages/HomePage';
+import LegalPage from "./pages/LegalPage.tsx";
 
 // Auth
 import LoginPage from './pages/LoginPage';
@@ -72,6 +73,7 @@ export default function AppRoutes(): React.ReactElement {
     <Routes>
       <Route element={<WithAgeGate />}>
         <Route index element={<HomePage />} />
+        <Route path="/legal" element={<LegalPage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
         <Route path="verify-age" element={<AgeVerifyPage />} />

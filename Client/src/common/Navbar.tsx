@@ -19,10 +19,10 @@ import {
   ShieldCheck,
   Menu,
   X,
+  FileText,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/useAuthStore';
 
-/** Brand helper so we get "MineralCache" with italic "Cache" consistently */
 function BrandName({ className }: Readonly<{ className?: string }>) {
   return (
     <span className={className}>
@@ -145,7 +145,6 @@ function NavContent(): React.ReactElement {
         <SideNavLink to="/products" end label="Shop" Icon={Store} />
       )}
 
-      {/* Auctions */}
       {AUCTIONS_ENABLED && isAuthed && (
         <SideNavLink to="/auctions" end label="Auctions" Icon={ClipboardList} />
       )}
@@ -154,7 +153,6 @@ function NavContent(): React.ReactElement {
         <NavGroup baseTo="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard}>
           <SideNavLink to="/vendor/products" label="Products" Icon={Store} />
           <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
-          {/* Vendor: create auction */}
           {AUCTIONS_ENABLED && (
             <SideNavLink to="/vendor/auctions/new" label="New Auction" Icon={PlusCircle} />
           )}
@@ -183,6 +181,9 @@ function NavContent(): React.ReactElement {
         </>
       )}
       {isAuthed && <SideNavLink to="/account/orders" label="My Orders" Icon={Package} />}
+
+      <SideNavLink to="/legal" end label="Legal" Icon={FileText} />
+
       {!isAuthed ? (
         <>
           <SideNavLink to="/login" label="Sign in" Icon={LogIn} />
@@ -207,10 +208,8 @@ export default function Navbar(): React.ReactElement {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const location = useLocation();
 
-  // Close on route change
   useEffect(() => { setOpen(false); }, [location.pathname]);
 
-  // Close on outside click (document listener)
   useEffect(() => {
     function onDocClick(e: MouseEvent | TouchEvent) {
       if (!open) return;
@@ -227,7 +226,6 @@ export default function Navbar(): React.ReactElement {
     };
   }, [open]);
 
-  // Close on Escape
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') setOpen(false);
@@ -236,7 +234,6 @@ export default function Navbar(): React.ReactElement {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
-  // Focus the panel when opened
   useEffect(() => { if (open) panelRef.current?.focus(); }, [open]);
 
   const label = open ? 'Close navigation' : 'Open navigation';
@@ -261,7 +258,6 @@ export default function Navbar(): React.ReactElement {
         {open ? <X className="h-2 w-2" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
       </button>
 
-      {/* Floating overlay panel: only render at ≤1024px */}
       {open && (
         <div className="hidden max-[1025px]:block fixed inset-0 z-40">
           <div
@@ -295,7 +291,6 @@ export default function Navbar(): React.ReactElement {
         </div>
       )}
 
-      {/* Desktop sidebar: visible only when width > 1024px */}
       <aside
         className="hidden min-[1025px]:block w-64 shrink-0
                    border-r border-[var(--theme-border)]

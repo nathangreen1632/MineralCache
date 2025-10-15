@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Security Policy</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body>
+<style>
+    .mc-legal { line-height: 1.6; color: inherit; }
+    .mc-legal h1 { font-size: 1.75rem; margin: 0 0 0.75rem 0; }
+    .mc-legal p { margin: 0.5rem 0 1rem; }
+    .mc-legal h2 { font-size: 1.125rem; margin: 1.5rem 0 0.5rem; }
+    .mc-legal ul { margin: 0.5rem 0 1rem 1.25rem; padding-left: 1rem; }
+    .mc-legal li { list-style: disc; margin: 0.25rem 0; }
+    .mc-legal a { color: var(--theme-link); text-decoration: underline dotted; }
+    .mc-legal a:hover { color: var(--theme-link-hover); }
+    .mc-legal .muted { opacity: 0.8; font-size: 0.95em; }
+    .mc-legal hr { border: 0; border-top: 1px solid var(--theme-border); margin: 1.25rem 0; }
+    .mc-legal table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1rem; }
+    .mc-legal th, .mc-legal td { border: 1px solid var(--theme-border); padding: 0.5rem; text-align: left; vertical-align: top; }
+</style>
+
+<section class="mc-legal">
+    <h1>Security Policy</h1>
+    <p class="muted"><strong>Last updated:</strong> October 15, 2025</p>
+    <hr />
+
+    <h2>Overview</h2>
+    <p>
+        MineralCache, LLC (“MineralCache,” “we,” “us”) is committed to protecting the confidentiality, integrity,
+        and availability of data entrusted to us. This Security Policy describes our security controls and the
+        shared responsibilities between MineralCache and users of our Services.
+    </p>
+
+    <h2>Scope</h2>
+    <p>
+        This policy applies to the MineralCache marketplace and supporting systems that Process personal data and
+        transactional information for vendors and buyers. It does not cover third-party sites linked from our Services.
+    </p>
+
+    <h2>Security program</h2>
+    <ul>
+        <li>Documented information security program aligned to industry best practices.</li>
+        <li>Risk assessments and control reviews on a periodic basis.</li>
+        <li>Security training and confidentiality obligations for personnel with data access.</li>
+    </ul>
+
+    <h2>Encryption</h2>
+    <ul>
+        <li>Transport: TLS is used for data in transit between browsers, our edge, and APIs.</li>
+        <li>Storage: Sensitive data is encrypted at rest where supported by our infrastructure and data stores.</li>
+        <li>Keys: Access to encryption keys is restricted to authorized personnel on a need-to-know basis.</li>
+    </ul>
+
+    <h2>Access control & authentication</h2>
+    <ul>
+        <li>Role-based access control with least-privilege principles for internal tools and production systems.</li>
+        <li>Multi-factor authentication for privileged accounts where supported.</li>
+        <li>Session management and automatic session invalidation on logout or credential resets.</li>
+    </ul>
+
+    <h2>Application security</h2>
+    <ul>
+        <li>Secure development lifecycle including code review and dependency vulnerability scanning.</li>
+        <li>Secrets management for API keys and credentials; no hard-coding in source control.</li>
+        <li>Input validation, output encoding, and protections against common web risks.</li>
+        <li>Change management with peer review and staged deployments.</li>
+    </ul>
+
+    <h2>Infrastructure & network security</h2>
+    <ul>
+        <li>Hosting with reputable cloud providers offering physical security and redundancy.</li>
+        <li>Network segmentation, firewalls/security groups, and least-exposed services.</li>
+        <li>System hardening, patching, and baseline configuration standards.</li>
+        <li>Backups of critical data with periodic restore testing.</li>
+    </ul>
+
+    <h2>Payments</h2>
+    <ul>
+        <li>Payments are processed by third-party providers (e.g., Stripe). MineralCache does not store raw payment card numbers or CVVs.</li>
+        <li>We receive payment status and tokens from the provider for order reconciliation.</li>
+    </ul>
+
+    <h2>Monitoring & logging</h2>
+    <ul>
+        <li>Centralized logging and alerting for security-relevant events.</li>
+        <li>Anomaly detection and rate limiting to mitigate abuse and automated attacks.</li>
+    </ul>
+
+    <h2>Vulnerability management</h2>
+    <ul>
+        <li>Regular scanning for known vulnerabilities in application dependencies and images.</li>
+        <li>Risk-based remediation targets; expeditious patching for high-severity issues.</li>
+    </ul>
+
+    <h2>Incident response</h2>
+    <ul>
+        <li>Documented incident response procedures covering detection, containment, eradication, and recovery.</li>
+        <li>Post-incident review to identify root causes and preventive actions.</li>
+        <li>When legally required or appropriate, notification to affected users and/or authorities.</li>
+    </ul>
+
+    <h2>Business continuity & disaster recovery</h2>
+    <ul>
+        <li>Backups, multi-AZ/region capabilities where applicable, and recovery runbooks.</li>
+        <li>Capacity planning and load testing for critical components.</li>
+    </ul>
+
+    <h2>Data retention & deletion</h2>
+    <p>
+        Personal data is retained only as long as necessary to provide the Services, meet legal obligations,
+        resolve disputes, and enforce agreements. Upon account closure or as otherwise required,
+        data is deleted or anonymized within a commercially reasonable period, subject to lawful retention needs.
+    </p>
+
+    <h2>Third-party service providers</h2>
+    <p>
+        We may engage vetted sub-processors to support the Services (e.g., hosting, payments, communications).
+        Each is bound by written agreements requiring appropriate data protection and security controls.
+        See our Data Processing Addendum for more details.
+    </p>
+
+    <h2>Your responsibilities</h2>
+    <ul>
+        <li>Protect your account credentials; use strong, unique passwords and enable MFA where available.</li>
+        <li>Keep contact and shipping information accurate and up to date.</li>
+        <li>Review vendor listings carefully and report suspicious activity.</li>
+        <li>Comply with applicable laws, our Terms of Service, and this policy.</li>
+    </ul>
+
+    <h2>Responsible vulnerability disclosure</h2>
+    <p>
+        We welcome reports from the security community. If you believe you’ve found a vulnerability, email
+        <a href="mailto:security@mineralcache.com">security@mineralcache.com</a> with details sufficient for reproduction.
+    </p>
+    <ul>
+        <li>Do not access, modify, or exfiltrate data that does not belong to you.</li>
+        <li>Avoid privacy violations, service disruption, or degradation of our systems.</li>
+        <li>Give us a reasonable time to investigate and remediate before public disclosure.</li>
+        <li>Unauthorised automated scanning, DDoS, and social engineering are out of scope.</li>
+    </ul>
+
+    <h2>Changes to this policy</h2>
+    <p>
+        We may update this policy from time to time. Material changes will be indicated by updating the “Last updated”
+        date above. Continued use of the Services after changes become effective constitutes acceptance.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+        MineralCache, LLC · 205 Offer Ln, Llano, TX 78643, USA ·
+        <a href="mailto:security@mineralcache.com">security@mineralcache.com</a> ·
+        <a href="mailto:info@mineralcache.com">info@mineralcache.com</a>
+    </p>
+</section>
+</body>
+</html>

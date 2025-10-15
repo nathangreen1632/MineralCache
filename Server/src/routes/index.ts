@@ -1,5 +1,6 @@
 // Server/src/routes/index.ts
 import { Router } from 'express';
+import legalRouter from './legal/legal.route.js';
 import adminRouter from './admin/admin.route.js';
 import authRouter from './auth.route.js';
 import paymentsRouter from './payments.route.js';
@@ -17,6 +18,7 @@ import vendorMePayouts from './vendorsPayouts.route.js';
 
 const router: Router = Router();
 
+router.use('/legal', legalRouter);
 router.use('/admin', adminRouter);
 router.use('/auth', authRouter);
 router.use('/payments', paymentsRouter);

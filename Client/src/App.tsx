@@ -7,8 +7,9 @@ import Footer from './common/Footer';
 import { Toaster } from 'react-hot-toast';
 import GravatarStrip from './components/profile/GravatarStrip';
 import { useAuthStore } from './stores/useAuthStore';
+import LegalAgreementModal from './components/agreements/LegalAgreementModal';
+import { getMyAgreements, getRequiredLegal, postAgreement, type LegalDoc } from './api/legal';
 
-// --- 18+ banner mounted globally ---
 function AgeGateBanner(): React.ReactElement | null {
   const user = useAuthStore((s) => s.user);
   if (!user || user.dobVerified18) return null;
@@ -52,7 +53,6 @@ function AgeGateBanner(): React.ReactElement | null {
   );
 }
 
-// Lightweight bootstrap: hydrate auth store on app load & show a spinner meanwhile
 function AuthBootstrap({ children }: Readonly<{ children: React.ReactElement }>) {
   const [booting, setBooting] = useState(true);
 
@@ -60,10 +60,8 @@ function AuthBootstrap({ children }: Readonly<{ children: React.ReactElement }>)
     let alive = true;
     (async () => {
       try {
-        // ✅ hydrate session on first paint (robust to /auth/me response shape)
         await useAuthStore.getState().me();
       } catch {
-        // no-op; still render the app
       } finally {
         if (alive) setBooting(false);
       }
@@ -109,30 +107,75 @@ function AuthBootstrap({ children }: Readonly<{ children: React.ReactElement }>)
   return children;
 }
 
+function computeMissing(
+  required: LegalDoc[],
+  mine: { documentType: string; version: string }[]
+): LegalDoc[] {
+  return required.filter(
+    (r) => !mine.some((m) => m.documentType === r.key && m.version === r.version)
+  );
+}
+
 export default function App(): React.ReactElement {
-  // Container width (adjust per-route if you want)
   const mainWidth = 'max-w-7xl 2xl:max-w-[110rem]';
+  const user = useAuthStore((s) => s.user);
+  const [legalOpen, setLegalOpen] = useState(false);
+  const [legalDocs, setLegalDocs] = useState<LegalDoc[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    const reconcile = async () => {
+      if (!user?.id) {
+        setLegalOpen(false);
+        return;
+      }
+      let hadPending = false;
+      try {
+        const ls = typeof window !== 'undefined' ? window.localStorage : null;
+        const pendingStr = ls?.getItem('mc.pendingAgreements') ?? null;
+        if (pendingStr) {
+          hadPending = true;
+          try {
+            const list = JSON.parse(pendingStr) as { documentType: string; version: string }[];
+            await Promise.all(list.map((x) => postAgreement(x.documentType, x.version)));
+          } finally {
+            ls?.removeItem('mc.pendingAgreements');
+            ls?.setItem('mc.legalOnboarded', '1');
+          }
+        }
+
+        const [required, mine] = await Promise.all([getRequiredLegal(), getMyAgreements()]);
+        if (!mounted) return;
+
+        const missing = computeMissing(required, mine);
+        if (missing.length > 0 && !hadPending) {
+          setLegalDocs(missing);
+          setLegalOpen(true);
+        } else {
+          setLegalOpen(false);
+        }
+      } catch {
+        setLegalOpen(false);
+      }
+    };
+
+    void reconcile();
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id]);
 
   return (
     <AuthBootstrap>
       <div className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)] flex">
-        {/* Left sidebar (always visible) */}
         <Navbar />
-
-        {/* Right side: content column */}
         <div className="flex-1 min-w-0 flex flex-col">
-          {/* Optional top strip (user/gravatar) */}
           <GravatarStrip />
-
-          {/* Global 18+ banner */}
           <AgeGateBanner />
-
           <main className={['flex-grow w-full mx-auto', mainWidth, 'px-4'].join(' ')}>
             <AppRoutes />
           </main>
-
           <Footer />
-
           <Toaster
             toastOptions={{
               position: 'top-center',
@@ -143,6 +186,16 @@ export default function App(): React.ReactElement {
                 border: '1px solid var(--theme-border)',
               },
             }}
+          />
+          <LegalAgreementModal
+            open={legalOpen}
+            docs={legalDocs}
+            onClose={() => setLegalOpen(false)}
+            onComplete={async (accepted) => {
+              await Promise.all(accepted.map((x) => postAgreement(x.documentType, x.version)));
+              setLegalOpen(false);
+            }}
+            title="Updated policies require your review"
           />
         </div>
       </div>

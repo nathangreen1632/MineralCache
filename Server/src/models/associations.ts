@@ -6,6 +6,8 @@ import { Product } from './product.model.js';
 import { ProductImage } from './productImage.model.js';
 import { Auction } from './auction.model.js';
 import { Vendor } from './vendor.model.js';
+import { User } from './user.model.js';
+import { UserAgreement } from './userAgreement.model.js';
 
 // NEW: Category models
 import { Category } from './category.model.js';
@@ -35,3 +37,6 @@ Category.belongsToMany(Product, { through: ProductCategory, foreignKey: { name: 
 
 Product.belongsTo(Vendor, { as: 'vendor', foreignKey: { name: 'vendorId', field: 'vendorId' } });
 Vendor.hasMany(Product, { as: 'products', foreignKey: { name: 'vendorId', field: 'vendorId' } });
+
+UserAgreement.belongsTo(User, { as: 'user', foreignKey: { name: 'userId', field: 'userId' } });
+User.hasMany(UserAgreement, { as: 'agreements', foreignKey: { name: 'userId', field: 'userId' } });

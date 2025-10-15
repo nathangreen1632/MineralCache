@@ -1,9 +1,10 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { post } from '../lib/api';
 import { useAuthStore } from '../stores/useAuthStore';
+import LegalAgreementModal from '../components/agreements/LegalAgreementModal';
+import { getRequiredLegal, type LegalDoc } from '../api/legal';
 
-// ✅ Safe, linear-time email check (anchored + bounded quantifiers)
 const SAFE_EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[A-Za-z]{2,63}$/;
 
 export default function RegisterPage(): React.ReactElement {
@@ -19,12 +20,21 @@ export default function RegisterPage(): React.ReactElement {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const [docs, setDocs] = useState<LegalDoc[]>([]);
+  const [legalOpen, setLegalOpen] = useState(true);
+  const [accepted, setAccepted] = useState<{ documentType: string; version: string }[] | null>(null);
+
+  useEffect(() => {
+    getRequiredLegal().then(setDocs).catch(() => setDocs([]));
+  }, []);
+
   const canSubmit = useMemo(
     () =>
       name.trim().length >= 2 &&
       SAFE_EMAIL_RE.test(email.trim()) &&
-      password.length >= 8,
-    [name, email, password.length]
+      password.length >= 8 &&
+      Boolean(accepted),
+    [name, email, password.length, accepted]
   );
 
   const onSubmit = useCallback(async (e: React.FormEvent) => {
@@ -50,9 +60,14 @@ export default function RegisterPage(): React.ReactElement {
       return;
     }
 
-    await me(); // hydrate session (server set cookie)
+    if (accepted && typeof window !== 'undefined') {
+      window.localStorage.setItem('mc.pendingAgreements', JSON.stringify(accepted));
+      window.localStorage.setItem('mc.legalOnboarded', '1');
+    }
+
+    await me();
     navigate(next, { replace: true });
-  }, [canSubmit, busy, name, email, password, me, navigate]);
+  }, [canSubmit, busy, name, email, password, accepted, me, navigate, next]);
 
   return (
     <div className="min-h-screen grid place-items-center px-6 py-14 bg-[var(--theme-bg)] text-[var(--theme-text)]">
@@ -125,7 +140,6 @@ export default function RegisterPage(): React.ReactElement {
           </button>
         </div>
 
-
         <p className="mt-3 text-sm">
           Already have an account?{' '}
           <button
@@ -142,6 +156,17 @@ export default function RegisterPage(): React.ReactElement {
           </button>
         </p>
       </form>
+
+      <LegalAgreementModal
+        open={legalOpen}
+        docs={docs}
+        onClose={() => setLegalOpen(false)}
+        onComplete={(a) => {
+          setAccepted(a);
+          setLegalOpen(false);
+        }}
+        title="Review and accept policies"
+      />
     </div>
   );
 }
