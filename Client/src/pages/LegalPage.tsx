@@ -4,13 +4,10 @@ import { motion } from 'framer-motion';
 type Doc = { title: string; file: string; key: string };
 
 const docs: Doc[] = [
-  { title: 'AI Fair Use Policy', file: 'ai-fair-use-policy.html', key: 'ai' },
   { title: 'Cookie Policy', file: 'cookie-policy.html', key: 'cookie' },
   { title: 'Copyright & IP Policy', file: 'copyright-policy.html', key: 'copyright' },
   { title: 'Data Processing Addendum', file: 'dpa-policy.html', key: 'dpa' },
-  { title: 'Disclaimer', file: 'disclaimer-policy.html', key: 'disclaimer' },
   { title: 'End User License Agreement', file: 'eula.html', key: 'eula' },
-  { title: 'GDPR Representative Agreement', file: 'gdpr.html', key: 'gdpr' },
   { title: 'Privacy Policy', file: 'privacy-policy.html', key: 'privacy' },
   { title: 'Security Policy', file: 'security-policy.html', key: 'security' },
   { title: 'Terms of Service', file: 'terms-of-service.html', key: 'tos' },
@@ -44,11 +41,9 @@ function TopLinkBar({ docs, active, onPick }: Readonly<TopLinkBarProps>): React.
         <ul className="flex flex-wrap gap-3 justify-center">
           {docs.map((d) => {
             const isActive = active === d.key;
-            const base =
-              'px-3 py-1.5 rounded-lg text-sm font-semibold transition focus-visible:ring-2 focus-visible:ring-[var(--theme-focus)]';
+            const base = 'px-3 py-1.5 rounded-lg text-sm font-semibold transition focus-visible:ring-2 focus-visible:ring-[var(--theme-focus)]';
             const on = 'bg-[var(--theme-button)] text-[var(--theme-text-white)]';
-            const off =
-              'bg-[var(--theme-surface)] border border-[var(--theme-border)] text-[var(--theme-text)] hover:bg-[var(--theme-button)] hover:text-[var(--theme-text-white)]';
+            const off = 'bg-[var(--theme-surface)] border border-[var(--theme-border)] text-[var(--theme-text)] hover:bg-[var(--theme-button)] hover:text-[var(--theme-text-white)]';
             return (
               <li key={d.key}>
                 <button
@@ -80,6 +75,9 @@ export default function LegalPage(): React.ReactElement {
     return m;
   }, [sortedDocs]);
 
+  const PUBLIC_BASE = (import.meta as any)?.env?.BASE_URL || '/';
+  const assetUrl = (file: string) => `${String(PUBLIC_BASE).replace(/\/$/, '')}/legal/${file}`;
+
   useEffect(() => {
     const nav = document.getElementById('legalTopBar');
     if (!nav) return;
@@ -100,7 +98,6 @@ export default function LegalPage(): React.ReactElement {
   }, [map]);
 
   useEffect(() => {
-    const targets = sortedDocs.map((d) => d.key);
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((e) => {
@@ -109,8 +106,8 @@ export default function LegalPage(): React.ReactElement {
       },
       { rootMargin: '-40% 0px -55% 0px', threshold: [0, 0.25, 0.5, 0.75, 1] }
     );
-    targets.forEach((k) => {
-      const el = sectionRefs.current[k];
+    sortedDocs.forEach((d) => {
+      const el = sectionRefs.current[d.key];
       if (el) observer.observe(el);
     });
     return () => observer.disconnect();
@@ -119,15 +116,43 @@ export default function LegalPage(): React.ReactElement {
   useEffect(() => {
     const d = map[active];
     if (!d) return;
-    const url = `/legal/${d.file}`;
     if (html[d.key]) return;
-    fetch(url, { cache: 'no-store' })
+    fetch(assetUrl(d.file), { cache: 'no-store' })
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
       .then((t) => setHtml((s) => ({ ...s, [d.key]: t })))
       .catch(() => setHtml((s) => ({ ...s, [d.key]: '<p>Unable to load.</p>' })));
   }, [active, map, html]);
 
+  useEffect(() => {
+    Promise.allSettled(
+      sortedDocs.map((d) =>
+        fetch(assetUrl(d.file), { cache: 'no-store' })
+          .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+          .then((t) => ({ key: d.key, html: t }))
+          .catch(() => ({ key: d.key, html: '<p>Unable to load.</p>' }))
+      )
+    ).then((results) => {
+      const next: Record<string, string> = {};
+      results.forEach((res) => {
+        if (res.status === 'fulfilled') next[res.value.key] = res.value.html;
+      });
+      setHtml((s) => ({ ...next, ...s }));
+    });
+  }, [sortedDocs]);
+
+  const ensureLoaded = (key: string) => {
+    if (html[key]) return;
+    const d = map[key];
+    if (!d) return;
+    fetch(assetUrl(d.file), { cache: 'no-store' })
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+      .then((t) => setHtml((s) => ({ ...s, [key]: t })))
+      .catch(() => setHtml((s) => ({ ...s, [key]: '<p>Unable to load.</p>' })));
+  };
+
   const scrollTo = (key: string) => {
+    setActive(key);
+    ensureLoaded(key);
     const el = sectionRefs.current[key];
     if (!el) return;
     const y = el.getBoundingClientRect().top + window.scrollY - barH - 16;
@@ -166,7 +191,7 @@ export default function LegalPage(): React.ReactElement {
                 className="prose max-w-none prose-invert [&_*]:text-[var(--theme-text)]"
                 dangerouslySetInnerHTML={{ __html: html[d.key] ?? '' }}
               />
-              {!html[d.key] && <div className="mt-4 text-sm opacity-80">Loading…</div>}
+              {active === d.key && !html[d.key] && <div className="mt-4 text-sm opacity-80">Loading…</div>}
             </section>
           ))}
         </motion.main>
