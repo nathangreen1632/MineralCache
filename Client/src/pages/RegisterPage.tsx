@@ -62,6 +62,7 @@ export default function RegisterPage(): React.ReactElement {
 
     if (accepted && typeof window !== 'undefined') {
       window.localStorage.setItem('mc.pendingAgreements', JSON.stringify(accepted));
+      window.localStorage.setItem('mc.legalOnboarded', '1');
     }
 
     await me();
