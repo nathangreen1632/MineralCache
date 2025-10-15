@@ -111,7 +111,9 @@ function computeMissing(
   required: LegalDoc[],
   mine: { documentType: string; version: string }[]
 ): LegalDoc[] {
-  return required.filter((r) => !mine.some((m) => m.documentType === r.key && m.version === r.version));
+  return required.filter(
+    (r) => !mine.some((m) => m.documentType === r.key && m.version === r.version)
+  );
 }
 
 export default function App(): React.ReactElement {
@@ -121,42 +123,43 @@ export default function App(): React.ReactElement {
   const [legalDocs, setLegalDocs] = useState<LegalDoc[]>([]);
 
   useEffect(() => {
-    if (!user?.id) return;
-    const pending = typeof window !== 'undefined' ? window.localStorage.getItem('mc.pendingAgreements') : null;
-    if (pending) {
-      try {
-        const list = JSON.parse(pending) as { documentType: string; version: string }[];
-        Promise.all(list.map((x) => postAgreement(x.documentType, x.version))).finally(() => {
-          if (typeof window !== 'undefined') window.localStorage.removeItem('mc.pendingAgreements');
-        });
-      } catch {
-      }
-    }
-  }, [user?.id]);
-
-  useEffect(() => {
     let mounted = true;
-
-    const run = async () => {
+    const reconcile = async () => {
       if (!user?.id) {
         setLegalOpen(false);
         return;
       }
+      let hadPending = false;
       try {
+        const ls = typeof window !== 'undefined' ? window.localStorage : null;
+        const pendingStr = ls?.getItem('mc.pendingAgreements') ?? null;
+        if (pendingStr) {
+          hadPending = true;
+          try {
+            const list = JSON.parse(pendingStr) as { documentType: string; version: string }[];
+            await Promise.all(list.map((x) => postAgreement(x.documentType, x.version)));
+          } finally {
+            ls?.removeItem('mc.pendingAgreements');
+            ls?.setItem('mc.legalOnboarded', '1');
+          }
+        }
+
         const [required, mine] = await Promise.all([getRequiredLegal(), getMyAgreements()]);
         if (!mounted) return;
+
         const missing = computeMissing(required, mine);
-        if (missing.length > 0) {
+        if (missing.length > 0 && !hadPending) {
           setLegalDocs(missing);
           setLegalOpen(true);
         } else {
           setLegalOpen(false);
         }
       } catch {
+        setLegalOpen(false);
       }
     };
 
-    void run();
+    void reconcile();
     return () => {
       mounted = false;
     };
