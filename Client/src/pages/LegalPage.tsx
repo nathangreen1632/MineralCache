@@ -79,7 +79,7 @@ export default function LegalPage(): React.ReactElement {
     return m;
   }, [sortedDocs]);
 
-  const PUBLIC_BASE = (import.meta as any)?.env?.BASE_URL || '/';
+  const PUBLIC_BASE = import.meta.env.BASE_URL || '/';
   const assetUrl = (file: string) => `${String(PUBLIC_BASE).replace(/\/$/, '')}/legal/${file}`;
 
   useEffect(() => {
@@ -203,4 +203,3 @@ export default function LegalPage(): React.ReactElement {
     </div>
   );
 }
-
