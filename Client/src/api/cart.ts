@@ -2,6 +2,8 @@
 import { get, post, put } from '../lib/api';
 import { emit } from '../lib/eventBus';
 import { EV_CART_CHANGED, EV_SHIPPING_CHANGED } from '../lib/events';
+import { addToGuestCart, removeFromGuestCart, getGuestCart } from '../lib/guestCart';
+import { getPublicProductsByIds } from './publicProducts';
 
 export type CartItem = {
   productId: number;
@@ -23,7 +25,6 @@ export type CartResponse = {
   totals: CartTotals;
 };
 
-// 🔧 Server expects `quantity` on PUT
 export type PutCartItem = { productId: number; quantity: number };
 export type PutCartBody = { items: PutCartItem[] };
 
@@ -35,7 +36,6 @@ export type SetShippingRuleBody = {
   ruleId: number | string;
 };
 
-/* ───────────────── helpers: coerce/normalize ───────────────── */
 function toNum(v: unknown, fallback = 0): number {
   const n = typeof v === 'string' ? Number(v) : (v as number);
   return Number.isFinite(n) ? n : fallback;
@@ -96,11 +96,50 @@ function normalizeTotals(raw: any): CartTotals {
   };
 }
 
-/* ───────────────── API ───────────────── */
-
-// GET /api/cart  → normalize to our stable shape
 export async function getCart() {
   const res = await get<any>('/cart');
+
+  if ((res as any)?.status === 401 || String((res as any)?.error || '').toLowerCase() === 'unauthorized') {
+    const guest = getGuestCart();
+    if (!guest.length) {
+      return {
+        data: { items: [], totals: { subtotal: 0, shipping: 0, total: 0 } } as CartResponse,
+        error: null,
+        status: 200,
+      };
+    }
+
+    const products = await getPublicProductsByIds(guest.map((g) => g.productId));
+    const byId = new Map<number, any>(products.map((p: any) => [Number(p?.id ?? p?.productId), p]));
+
+    const items = guest
+      .map((g) => {
+        const p = byId.get(g.productId);
+        if (!p) return null;
+        const title = String(p?.title ?? p?.name ?? 'Untitled item');
+        const priceCentsNum = Number(p?.priceCents ?? p?.price ?? 0);
+        const priceCents = Number.isFinite(priceCentsNum) ? Math.max(0, Math.trunc(priceCentsNum)) : 0;
+        const quantity = Math.max(1, Math.trunc(Number((g as any).quantity ?? 1)));
+        return {
+          productId: g.productId,
+          title,
+          priceCents,
+          qty: quantity,
+          quantity,
+          imageUrl: pickImageUrl(p),
+        } as CartItem;
+      })
+      .filter(Boolean) as CartItem[];
+
+    const subtotal = items.reduce((s, i) => s + i.priceCents * (i.quantity ?? i.qty ?? 1), 0);
+    const totals = { subtotal, shipping: 0, total: subtotal };
+
+    return {
+      data: { items, totals } as CartResponse,
+      error: null,
+      status: 200,
+    };
+  }
 
   if (res?.data) {
     const raw = res.data;
@@ -112,31 +151,22 @@ export async function getCart() {
   return res as { data: CartResponse | null; error?: string | null; status?: number };
 }
 
-// PUT /api/cart
 export async function saveCart(body: PutCartBody) {
   const res = await put<{ ok: true }, PutCartBody>('/cart', body);
   if (!res.error) emit(EV_CART_CHANGED);
   return res;
 }
 
-// PATCH/PUT /api/cart/shipping-rule
 export async function setCartShippingRule(ruleId: number | string) {
   const res = await put<{ ok: true }, SetShippingRuleBody>('/cart/shipping-rule', { ruleId });
   if (!res.error) emit(EV_SHIPPING_CHANGED, { ruleId });
   return res;
 }
 
-// POST /api/cart/checkout
 export function startCheckout(amountCents: number) {
   return post<CheckoutResponse, { amountCents: number }>('/cart/checkout', { amountCents });
 }
 
-/**
- * Add-to-cart convenience:
- * - Loads current cart
- * - Merges/inserts using `quantity`
- * - Saves via saveCart (emits EV_CART_CHANGED)
- */
 export async function addToCart(productId: number, addQty = 1) {
   const res = await getCart();
   const { data, error, status } = res as {
@@ -145,7 +175,11 @@ export async function addToCart(productId: number, addQty = 1) {
     status?: number;
   };
 
-  if (status === 401) return { data: null, error: 'AUTH_REQUIRED', status };
+  if (status === 401 || status === 403) {
+    addToGuestCart(productId, addQty);
+    emit(EV_CART_CHANGED);
+    return { data: { ok: true } as any, error: null, status: 200 };
+  }
   if (error) return { data: null, error, status };
 
   const items: PutCartItem[] = [];
@@ -171,10 +205,15 @@ export async function addToCart(productId: number, addQty = 1) {
   if (idx >= 0) items[idx] = { productId, quantity: clamp(items[idx].quantity + addQty) };
   else items.push({ productId, quantity: clamp(addQty) });
 
-  return await saveCart({ items });
+  const saved = await saveCart({ items });
+  if ((saved as any)?.status === 401 || (typeof (saved as any)?.error === 'string' && (saved as any).error.toLowerCase().includes('unauthorized'))) {
+    addToGuestCart(productId, addQty);
+    emit(EV_CART_CHANGED);
+    return { data: { ok: true } as any, error: null, status: 200 };
+  }
+  return saved;
 }
 
-/** Remove a single product from the cart */
 export async function removeFromCart(productId: number) {
   const res = await getCart();
   const { data, error, status } = res as {
@@ -183,7 +222,11 @@ export async function removeFromCart(productId: number) {
     status?: number;
   };
 
-  if (status === 401) return { data: null, error: 'AUTH_REQUIRED', status };
+  if (status === 401 || status === 403) {
+    removeFromGuestCart(productId);
+    emit(EV_CART_CHANGED);
+    return { data: { ok: true } as any, error: null, status: 200 };
+  }
   if (error || !data) return { data: null, error: error ?? 'LOAD_FAILED', status };
 
   const items = (data.items ?? [])
@@ -193,10 +236,22 @@ export async function removeFromCart(productId: number) {
       quantity: Math.max(0, Math.trunc(Number(it.quantity ?? it.qty ?? 0))),
     }));
 
-  return await saveCart({ items });
+  const saved = await saveCart({ items });
+  if ((saved as any)?.status === 401 || (typeof (saved as any)?.error === 'string' && (saved as any).error.toLowerCase().includes('unauthorized'))) {
+    removeFromGuestCart(productId);
+    emit(EV_CART_CHANGED);
+    return { data: { ok: true } as any, error: null, status: 200 };
+  }
+  return saved;
 }
 
-/** Remove all items */
 export async function clearCart() {
-  return await saveCart({ items: [] });
+  const saved = await saveCart({ items: [] });
+  if ((saved as any)?.status === 401 || (typeof (saved as any)?.error === 'string' && (saved as any).error.toLowerCase().includes('unauthorized'))) {
+    const ls = typeof window !== 'undefined' ? window.localStorage : null;
+    ls?.setItem('mc.guestcart.v1', JSON.stringify([]));
+    emit(EV_CART_CHANGED);
+    return { data: { ok: true } as any, error: null, status: 200 };
+  }
+  return saved;
 }
