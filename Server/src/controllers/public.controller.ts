@@ -131,11 +131,11 @@ export async function listPublicProductsCtrl(req: Request, res: Response) {
       priceMaxCentsFromDollars = Math.round(priceMaxDollars * 100);
     }
 
-    let priceMinCents: number | null = null;
+    let priceMinCents: number | null;
     if (priceMinCentsQP != null) priceMinCents = priceMinCentsQP;
     else priceMinCents = priceMinCentsFromDollars;
 
-    let priceMaxCents: number | null = null;
+    let priceMaxCents: number | null;
     if (priceMaxCentsQP != null) priceMaxCents = priceMaxCentsQP;
     else priceMaxCents = priceMaxCentsFromDollars;
 
