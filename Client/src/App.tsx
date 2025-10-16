@@ -9,6 +9,7 @@ import GravatarStrip from './components/profile/GravatarStrip';
 import { useAuthStore } from './stores/useAuthStore';
 import LegalAgreementModal from './components/agreements/LegalAgreementModal';
 import { getMyAgreements, getRequiredLegal, postAgreement, type LegalDoc } from './api/legal';
+import { attachGuestCartMerge } from './lib/mergeOnAuth';
 
 function AgeGateBanner(): React.ReactElement | null {
   const user = useAuthStore((s) => s.user);
@@ -121,6 +122,10 @@ export default function App(): React.ReactElement {
   const user = useAuthStore((s) => s.user);
   const [legalOpen, setLegalOpen] = useState(false);
   const [legalDocs, setLegalDocs] = useState<LegalDoc[]>([]);
+
+  useEffect(() => {
+    attachGuestCartMerge();
+  }, []);
 
   useEffect(() => {
     let mounted = true;

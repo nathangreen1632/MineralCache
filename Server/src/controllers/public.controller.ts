@@ -62,6 +62,56 @@ const numOrNull = (v: unknown) => {
 
 export async function listPublicProductsCtrl(req: Request, res: Response) {
   try {
+    const idsParam = String(req.query.ids || '').trim();
+    if (idsParam) {
+      const ids = Array.from(
+        new Set(
+          idsParam
+            .split(',')
+            .map((s) => Number(s.trim()))
+            .filter((n) => Number.isFinite(n) && n > 0)
+        )
+      );
+      if (ids.length === 0) {
+        res.json([]);
+        return;
+      }
+      const rows = await Product.findAll({
+        where: { id: { [Op.in]: ids }, archivedAt: { [Op.is]: null } as any },
+        include: [{ model: ProductImage, as: 'images', separate: false, required: false }],
+        order: [['id', 'ASC']],
+      });
+      const out = rows.map((p) => {
+        const j: any = p.toJSON();
+        const now = new Date();
+        let unit = Number(j.priceCents ?? 0);
+        if (typeof (p as any).getEffectivePriceCents === 'function') {
+          try {
+            unit = Number((p as any).getEffectivePriceCents(now) ?? unit);
+          } catch {}
+        }
+        let rel: string | null = null;
+        if (Array.isArray(j.images) && j.images[0]) {
+          const c = j.images[0];
+          rel = c?.v800Path ?? c?.v320Path ?? c?.v1600Path ?? c?.origPath ?? null;
+        }
+        const imageUrl = rel ? toPublicUrl(rel) : null;
+        return {
+          id: Number(j.id),
+          productId: Number(j.id),
+          title: String(j.title || ''),
+          priceCents: unit,
+          unitPriceCents: unit,
+          primaryImageUrl: imageUrl,
+          imageUrl,
+          slug: typeof j.slug === 'string' ? j.slug : null,
+          vendorId: Number(j.vendorId ?? 0) || null,
+        };
+      });
+      res.json(out);
+      return;
+    }
+
     const slug = String(req.query.category || '').trim();
     const page = Math.max(1, Number(req.query.page) || 1);
     const pageSize = Math.min(60, Math.max(1, Number(req.query.pageSize) || 24));
@@ -81,11 +131,11 @@ export async function listPublicProductsCtrl(req: Request, res: Response) {
       priceMaxCentsFromDollars = Math.round(priceMaxDollars * 100);
     }
 
-    let priceMinCents: number | null = null;
+    let priceMinCents: number | null;
     if (priceMinCentsQP != null) priceMinCents = priceMinCentsQP;
     else priceMinCents = priceMinCentsFromDollars;
 
-    let priceMaxCents: number | null = null;
+    let priceMaxCents: number | null;
     if (priceMaxCentsQP != null) priceMaxCents = priceMaxCentsQP;
     else priceMaxCents = priceMaxCentsFromDollars;
 
@@ -210,14 +260,11 @@ export async function listPublicProductsCtrl(req: Request, res: Response) {
       }
 
       let rel: string | null = null;
-      if (cover && typeof cover.v800Path === 'string' && cover.v800Path.length > 0) {
-        rel = cover.v800Path;
-      } else if (cover && typeof cover.v320Path === 'string' && cover.v320Path.length > 0) {
-        rel = cover.v320Path;
-      } else if (cover && typeof cover.v1600Path === 'string' && cover.v1600Path.length > 0) {
-        rel = cover.v1600Path;
-      } else if (cover && typeof cover.origPath === 'string' && cover.origPath.length > 0) {
-        rel = cover.origPath;
+      for (const s of [cover?.v800Path, cover?.v320Path, cover?.v1600Path, cover?.origPath]) {
+        if (typeof s === 'string' && s.length > 0) {
+          rel = s;
+          break;
+        }
       }
 
       let salePriceValue: number | null = null;
@@ -249,7 +296,7 @@ export async function listPublicProductsCtrl(req: Request, res: Response) {
 
       let vendorIdValue: number | null = null;
       if (j.vendorId != null) {
-        vendorIdValue = j.vendorId as number;
+        vendorIdValue = Number(j.vendorId);
       }
 
       return {
@@ -261,7 +308,7 @@ export async function listPublicProductsCtrl(req: Request, res: Response) {
         salePriceCents: salePriceValue,
         primaryImageUrl,
         vendorId: vendorIdValue,
-        vendor: null as any,
+        vendor: null,
       };
     });
 
@@ -286,3 +333,50 @@ export async function getPublicConfigCtrl(_req: Request, res: Response) {
     res.status(500).json({ error: e?.message || 'Failed to load config' });
   }
 }
+
+export async function getPublicProductCtrl(req: Request, res: Response) {
+  const idRaw = req.params?.id;
+  const id = Number(idRaw);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ error: 'Invalid product id' });
+    return;
+  }
+  try {
+    const row = await Product.findOne({
+      where: { id, archivedAt: { [Op.is]: null } as any },
+      include: [{ model: ProductImage, as: 'images', separate: false, required: false }],
+    });
+    if (!row) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    const j: any = row.toJSON();
+    const now = new Date();
+    let unit = Number(j.priceCents ?? 0);
+    if (typeof (row as any).getEffectivePriceCents === 'function') {
+      try {
+        unit = Number((row as any).getEffectivePriceCents(now) ?? unit);
+      } catch {}
+    }
+    let rel: string | null = null;
+    if (Array.isArray(j.images) && j.images[0]) {
+      const c = j.images[0];
+      rel = c?.v800Path ?? c?.v320Path ?? c?.v1600Path ?? c?.origPath ?? null;
+    }
+    const imageUrl = rel ? toPublicUrl(rel) : null;
+    res.json({
+      id: Number(j.id),
+      productId: Number(j.id),
+      title: String(j.title || ''),
+      priceCents: unit,
+      unitPriceCents: unit,
+      primaryImageUrl: imageUrl,
+      imageUrl,
+      slug: typeof j.slug === 'string' ? j.slug : null,
+      vendorId: Number(j.vendorId ?? 0) || null,
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Failed to load product' });
+  }
+}
+
