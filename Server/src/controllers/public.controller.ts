@@ -379,3 +379,4 @@ export async function getPublicProductCtrl(req: Request, res: Response) {
     res.status(500).json({ error: e?.message || 'Failed to load product' });
   }
 }
+
