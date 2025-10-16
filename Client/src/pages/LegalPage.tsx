@@ -203,3 +203,4 @@ export default function LegalPage(): React.ReactElement {
     </div>
   );
 }
+
