@@ -174,12 +174,11 @@ function NavContent(): React.ReactElement {
           <SideNavLink to="/admin/settings" label="Admin · Settings" Icon={Settings} />
         </>
       )}
-      {isAuthed && (
-        <>
-          <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
-          <SideNavLink to="/checkout" label="Checkout" Icon={CreditCard} />
-        </>
-      )}
+
+      <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
+
+      {isAuthed && <SideNavLink to="/checkout" label="Checkout" Icon={CreditCard} />}
+
       {isAuthed && <SideNavLink to="/account/orders" label="My Orders" Icon={Package} />}
 
       <SideNavLink to="/legal" end label="Legal" Icon={FileText} />
