@@ -7,12 +7,14 @@ const docs: Doc[] = [
   { title: 'Cookie Policy', file: 'cookie-policy.html', key: 'cookie' },
   { title: 'Copyright & IP Policy', file: 'copyright-policy.html', key: 'copyright' },
   { title: 'Data Processing Addendum', file: 'dpa-policy.html', key: 'dpa' },
-  { title: 'End User License Agreement', file: 'eula.html', key: 'eula' },
+  { title: 'EULA', file: 'eula.html', key: 'eula' },
+  { title: 'Data Consumption & Usage', file: 'privacy-choices.html', key: 'data' },
   { title: 'Privacy Policy', file: 'privacy-policy.html', key: 'privacy' },
   { title: 'Returns & Refunds', file: 'refund-policy.html', key: 'refund' },
   { title: 'Security Policy', file: 'security-policy.html', key: 'security' },
   { title: 'Shipping Policy', file: 'shipping-policy.html', key: 'shipping' },
   { title: 'Terms of Service', file: 'terms-of-service.html', key: 'tos' },
+  { title: 'Vendor Terms & Listing Standards', file: 'seller-vendor-terms-and-conditions.html', key: 'vendor' },
 ];
 
 type BackToTopProps = { onClick: () => void };
@@ -201,3 +203,4 @@ export default function LegalPage(): React.ReactElement {
     </div>
   );
 }
+
