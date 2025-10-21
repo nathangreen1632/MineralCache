@@ -181,7 +181,7 @@ export default function CartPage(): React.ReactElement {
   }
 
   return (
-    <section className="mx-auto max-w-5xl px-4 py-8 space-y-6">
+    <section className="mx-auto max-w-6xl px-4 py-8 space-y-6">
       <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Your Cart</h1>
 
       <div className="grid gap-6 md:grid-cols-3">
