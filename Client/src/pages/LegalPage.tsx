@@ -78,6 +78,7 @@ export default function LegalPage(): React.ReactElement {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const PUBLIC_BASE = import.meta.env.BASE_URL || '/';
   const assetUrl = (file: string) => `${String(PUBLIC_BASE).replace(/\/$/, '')}/legal/${file}`;
+  const rafId = useRef<number | null>(null);
 
   useEffect(() => {
     const nav = document.getElementById('legalTopBar');
@@ -133,6 +134,32 @@ export default function LegalPage(): React.ReactElement {
     observerRef.current = io;
     Object.values(sectionRefs.current).forEach((el) => el && io.observe(el));
     return () => io.disconnect();
+  }, [sorted, barH, activeKey]);
+
+  useEffect(() => {
+    const onScroll = () => {
+      if (programmatic.current) return;
+      if (rafId.current !== null) return;
+      rafId.current = window.requestAnimationFrame(() => {
+        rafId.current = null;
+        const y = window.scrollY + barH + 24;
+        let current = sorted[0]?.key ?? '';
+        for (const d of sorted) {
+          const el = sectionRefs.current[d.key];
+          if (el && el.offsetTop <= y) current = d.key;
+        }
+        if (current && current !== activeKey) {
+          setActiveKey(current);
+          if (typeof window !== 'undefined') history.replaceState(null, '', `#${current}`);
+        }
+      });
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (rafId.current !== null) cancelAnimationFrame(rafId.current);
+    };
   }, [sorted, barH, activeKey]);
 
   const handleScrollTo = (key: string) => {
