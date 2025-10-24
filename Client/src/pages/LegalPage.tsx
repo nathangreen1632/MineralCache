@@ -19,6 +19,7 @@ const docs: Doc[] = [
 ];
 
 type TopBarProps = { items: Doc[]; active: string; onPick: (key: string) => void; navOpen: boolean; setNavOpen: (v: boolean) => void };
+
 function TopBar({ items, active, onPick, navOpen, setNavOpen }: Readonly<TopBarProps>) {
   return (
     <motion.nav
@@ -44,9 +45,11 @@ function TopBar({ items, active, onPick, navOpen, setNavOpen }: Readonly<TopBarP
         <ul id="legalPills" className={`flex flex-wrap justify-center gap-3 ${navOpen ? 'flex' : 'hidden md:flex'}`} role="text">
           {items.map((d) => {
             const isActive = active === d.key;
-            const base = 'px-3 py-1.5 rounded-lg text-sm font-semibold transition focus-visible:ring-2 focus-visible:ring-[var(--theme-focus)]';
-            const on = 'bg-[var(--theme-button)] text-[var(--theme-text-white)]';
-            const off = 'bg-[var(--theme-surface)] border border-[var(--theme-border)] text-[var(--theme-text)] hover:bg-[var(--theme-button)] hover:text-[var(--theme-text-white)]';
+            const base =
+              'px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-[var(--theme-focus)] border';
+            const on = 'bg-[var(--theme-button)] text-[var(--theme-text-white)] border-transparent';
+            const off =
+              'bg-[var(--theme-surface)] text-[var(--theme-text)] border-[var(--theme-border)] hover:bg-[var(--theme-button)] hover:text-[var(--theme-text-white)]';
             return (
               <li key={d.key}>
                 <button
@@ -78,19 +81,16 @@ export default function LegalPage(): React.ReactElement {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const PUBLIC_BASE = import.meta.env.BASE_URL || '/';
   const assetUrl = (file: string) => `${String(PUBLIC_BASE).replace(/\/$/, '')}/legal/${file}`;
-  const rafId = useRef<number | null>(null);
 
   useEffect(() => {
     const nav = document.getElementById('legalTopBar');
     if (!nav) return;
     const measure = () => setBarH(nav.getBoundingClientRect().height || 0);
     measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(nav);
-    window.addEventListener('resize', measure);
+    const onResize = () => measure();
+    window.addEventListener('resize', onResize);
     return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', measure);
+      window.removeEventListener('resize', onResize);
     };
   }, []);
 
@@ -121,45 +121,23 @@ export default function LegalPage(): React.ReactElement {
       observerRef.current.disconnect();
       observerRef.current = null;
     }
-    const io = new IntersectionObserver((entries) => {
-      if (programmatic.current) return;
-      const visible = entries.find((e) => e.isIntersecting);
-      if (!visible) return;
-      const key = Object.entries(sectionRefs.current).find(([_, el]) => el === visible.target)?.[0];
-      if (key && key !== activeKey) {
-        setActiveKey(key);
-        if (typeof window !== 'undefined') history.replaceState(null, '', `#${key}`);
-      }
-    }, { root: null, rootMargin: `-${barH + 24}px 0px -70% 0px`, threshold: 0.2 });
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (programmatic.current) return;
+        const visible = entries.filter((e) => e.isIntersecting);
+        if (!visible.length) return;
+        const best = visible.reduce((a, b) => (a.intersectionRatio >= b.intersectionRatio ? a : b));
+        const key = Object.entries(sectionRefs.current).find(([_, el]) => el === best.target)?.[0];
+        if (key && key !== activeKey) {
+          setActiveKey(key);
+          if (typeof window !== 'undefined') history.replaceState(null, '', `#${key}`);
+        }
+      },
+      { root: null, rootMargin: `-${barH + 8}px 0px -60% 0px`, threshold: [0, 0.25, 0.5, 0.75, 1] }
+    );
     observerRef.current = io;
     Object.values(sectionRefs.current).forEach((el) => el && io.observe(el));
     return () => io.disconnect();
-  }, [sorted, barH, activeKey]);
-
-  useEffect(() => {
-    const onScroll = () => {
-      if (programmatic.current) return;
-      if (rafId.current !== null) return;
-      rafId.current = window.requestAnimationFrame(() => {
-        rafId.current = null;
-        const y = window.scrollY + barH + 24;
-        let current = sorted[0]?.key ?? '';
-        for (const d of sorted) {
-          const el = sectionRefs.current[d.key];
-          if (el && el.offsetTop <= y) current = d.key;
-        }
-        if (current && current !== activeKey) {
-          setActiveKey(current);
-          if (typeof window !== 'undefined') history.replaceState(null, '', `#${current}`);
-        }
-      });
-    };
-
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      if (rafId.current !== null) cancelAnimationFrame(rafId.current);
-    };
   }, [sorted, barH, activeKey]);
 
   const handleScrollTo = (key: string) => {
@@ -181,7 +159,6 @@ export default function LegalPage(): React.ReactElement {
     }, guardMs);
   };
 
-
   const scrollToTop = () => {
     const first = sorted[0]?.key ?? '';
     const distance = Math.abs(window.scrollY);
@@ -198,7 +175,6 @@ export default function LegalPage(): React.ReactElement {
     }, guardMs);
   };
 
-
   return (
     <div className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)]" style={{ overflowAnchor: 'none' as any }}>
       <TopBar items={sorted} active={activeKey} onPick={handleScrollTo} navOpen={navOpen} setNavOpen={setNavOpen} />
@@ -208,24 +184,27 @@ export default function LegalPage(): React.ReactElement {
           <section
             key={doc.key}
             id={doc.key}
-            ref={(el) => { sectionRefs.current[doc.key] = el; }}
+            ref={(el) => {
+              sectionRefs.current[doc.key] = el;
+            }}
             style={{ scrollMarginTop: barH + 16 }}
-            className={`rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-6 shadow-[0_10px_30px_var(--theme-shadow)] ${highlighted === doc.key ? 'ring-2 ring-[var(--theme-focus)]' : ''}`}
+            className={`rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-6 ${highlighted === doc.key ? 'ring-2 ring-[var(--theme-focus)]' : ''}`}
             aria-labelledby={`heading-${doc.key}`}
           >
             <div className="flex items-center justify-between gap-4 mb-4">
-              <h2 id={`heading-${doc.key}`} className="text-2xl font-semibold">{doc.title}</h2>
+              <h2 id={`heading-${doc.key}`} className="text-2xl font-semibold">
+                {doc.title}
+              </h2>
               <button
                 type="button"
                 onClick={scrollToTop}
                 className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
-                aria-label="Back to top"
               >
                 Back to Top
               </button>
             </div>
             <div
-              className="prose max-w-none prose-invert [&_*]:text-[var(--theme-text)] [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_td]:border [&_th]:border-[var(--theme-border)] [&_td]:border-[var(--theme-border)] [&_thead_th]:bg-[var(--theme-card)]"
+              className="prose max-w-none prose-invert [&_*]:text-[var(--theme-text)] [&_a]:text-[var(--theme-link)] [&_a:hover]:text-[var(--theme-link-hover)] [&_hr]:border-[var(--theme-border)] [&_thead_th]:bg-[var(--theme-card)]"
               dangerouslySetInnerHTML={{ __html: html[doc.key] ?? '' }}
             />
             {activeKey === doc.key && !html[doc.key] && <div className="mt-4 text-sm opacity-80">Loading…</div>}
