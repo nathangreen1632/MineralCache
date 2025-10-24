@@ -126,7 +126,12 @@ export default function LegalPage(): React.ReactElement {
         if (programmatic.current) return;
         const visible = entries.filter((e) => e.isIntersecting);
         if (!visible.length) return;
-        const best = visible.reduce((a, b) => (a.intersectionRatio >= b.intersectionRatio ? a : b));
+
+        const best = visible.reduce<IntersectionObserverEntry>(
+          (prev, curr) => (prev.intersectionRatio >= curr.intersectionRatio ? prev : curr),
+          visible[0]
+        );
+
         const key = Object.entries(sectionRefs.current).find(([_, el]) => el === best.target)?.[0];
         if (key && key !== activeKey) {
           setActiveKey(key);
