@@ -96,7 +96,7 @@ export default function VendorProductsPage(): React.ReactElement {
 
   return (
     <div className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)]">
-      <div className="mx-auto max-w-3xl px-6 py-14 grid gap-10">
+      <div className="mx-auto max-w-6xl px-6 py-14 grid gap-10">
         <header className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">My Products</h1>
           <Link
