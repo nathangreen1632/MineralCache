@@ -1,36 +1,28 @@
 // Server/src/controllers/webhooks/stripe.controller.ts
 import type { Request, Response } from 'express';
-import { verifyStripeWebhook, retrieveChargeWithBalanceTx } from '../../services/stripe.service.js';
+import { verifyStripeWebhook } from '../../services/stripe.service.js';
 import { db } from '../../models/sequelize.js';
 import { Order } from '../../models/order.model.js';
 import { OrderItem } from '../../models/orderItem.model.js';
 import { Product } from '../../models/product.model.js';
 import { obs } from '../../services/observability.service.js';
-
-// ✅ NEW: vendor payout snapshot model
 import { OrderVendor } from '../../models/orderVendor.model.js';
-
-// ✅ NEW: idempotency store + structured log
 import { WebhookEvent } from '../../models/webhookEvent.model.js';
 import { log } from '../../services/log.service.js';
-
-// ✅ NEW: email + buyer fetch
 import { sendOrderEmail } from '../../services/email.service.js';
 import { User } from '../../models/user.model.js';
+import { AuctionLock } from '../../models/auctionLock.model.js';
+import { Op } from 'sequelize';
 
 export async function createPaymentIntent(_req: Request, res: Response): Promise<void> {
-  // Use the new checkout flow
   res.status(410).json({ error: 'Use /api/checkout/intent' });
 }
 
-/** POST /api/webhooks/stripe (raw body) */
 export async function stripeWebhook(req: Request, res: Response): Promise<void> {
   try {
     const sig = (req.headers['stripe-signature'] as string) ?? null;
-    // raw body is required; webhooks.route.ts uses raw({ type: 'application/json' })
     const event = verifyStripeWebhook(req.body as unknown as Buffer, sig);
 
-    // ---------- Idempotency guard (record receipt; suppress duplicates) ----------
     const source = 'stripe';
     const eventId = String((event as any)?.id || '');
     const type = String(event.type);
@@ -41,7 +33,6 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
         eventId,
         type,
         status: 'received',
-        // Don’t persist raw payload in prod; keep in lower envs for debugging
         payload: process.env.NODE_ENV === 'production' ? null : (event as any),
       } as any);
     } catch (err: any) {
@@ -57,7 +48,6 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
       throw err;
     }
 
-    // ✅ Observability: note receipt of webhook
     obs.stripeWebhook(req, type, eventId);
 
     const sequelize = db.instance();
@@ -67,14 +57,12 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // -------------------- Business logic (unchanged) --------------------
     switch (event.type) {
       case 'payment_intent.succeeded': {
         const pi = event.data.object as any;
         const intentId = String(pi?.id || '');
         if (!intentId) break;
 
-        // We'll capture these to send email after the transaction commits.
         let paidOrderId: number | null = null;
         let paidOrderNumber: string | null = null;
         let buyerUserId: number | null = null;
@@ -85,22 +73,26 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
             transaction: t,
             lock: t.LOCK.UPDATE,
           });
-          if (!order) return; // no matching order, ignore gracefully
-          if (order.status === 'paid') return; // idempotent: already processed
+          if (!order) return;
+          if (order.status === 'paid') return;
 
           order.status = 'paid';
           order.paidAt = new Date();
           await order.save({ transaction: t });
 
-          // Inventory lock: archive purchased products
+          const buyerId = Number((order as any).buyerUserId ?? order.get?.('buyerUserId'));
+
           const items = await OrderItem.findAll({ where: { orderId: order.id }, transaction: t });
           const productIds = items.map((i) => Number(i.productId)).filter(Number.isFinite);
           if (productIds.length > 0) {
             const now = new Date();
             await Product.update({ archivedAt: now }, { where: { id: productIds }, transaction: t });
+            await AuctionLock.update(
+              { status: 'paid' },
+              { where: { productId: { [Op.in]: productIds }, userId: buyerId, status: 'active' }, transaction: t }
+            );
           }
 
-          // ✅ Snapshot vendor payout rows (gross, fee, net) for this order
           const vendorLineTotals = new Map<number, number>();
           const vendorFees = new Map<number, number>();
           for (const it of items) {
@@ -109,7 +101,6 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
             vendorFees.set(vId, (vendorFees.get(vId) || 0) + Number((it as any).commissionCents || 0));
           }
 
-          // shipping snapshot
           const shippingSnap =
             ((order as any).vendorShippingJson || {}) as Record<string, { cents?: number }>;
           const vendorShipping = new Map<number, number>();
@@ -143,7 +134,6 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
             }
           }
 
-          // Stash for post-commit email
           paidOrderId = Number(order.id);
           const rawOrderNumber =
             (order as any)?.orderNumber ??
@@ -156,11 +146,9 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
 
           buyerUserId = Number((order as any).buyerUserId ?? order.get?.('buyerUserId'));
 
-          // ✅ Observability: order paid
           obs.orderPaid(req, Number(order.id), intentId);
         });
 
-        // Send order confirmation email (post-commit; never blocks webhook success)
         if (paidOrderId && buyerUserId) {
           try {
             const buyer = await User.findByPk(buyerUserId);
@@ -181,7 +169,6 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
               });
             }
           } catch (err) {
-            // eslint-disable-next-line no-console
             console.warn('[webhook.email.order_paid] failed', err);
           }
         }
@@ -219,16 +206,8 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
         if (!chargeId || !piId) break;
 
         try {
-          const full = await retrieveChargeWithBalanceTx(chargeId);
-          const bt = (full as any)?.balance_transaction;
-          const feeCents = Number(bt?.fee ?? 0);
-          const netCents = Number(bt?.net ?? 0);
-
           const order = await Order.findOne({ where: { paymentIntentId: piId }, attributes: ['id'] });
           if (!order) break;
-
-          // If you later add columns (stripeFeeCents/netCents), persist here.
-          // await order.update({ stripeFeeCents: feeCents, stripeNetCents: netCents });
         } catch (err: any) {
           obs.error(req, 'stripe.charge.fetch_failed', { chargeId, message: String(err?.message || err) });
         }
@@ -248,11 +227,9 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
       }
 
       default:
-        // Already noted via obs.stripeWebhook above
         break;
     }
 
-    // Mark processed in idempotency store
     await WebhookEvent.update(
       { status: 'processed', processedAt: new Date() },
       { where: { source, eventId } }
@@ -261,7 +238,6 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
     res.json({ received: true });
   } catch (e: any) {
     log.error('webhook.error', { err: e?.message });
-    // Keep graceful JSON error (Stripe expects 2xx for handled events, but this is a verify error)
     res.status(400).json({ error: e?.message || 'Webhook error' });
   }
 }
