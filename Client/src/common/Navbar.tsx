@@ -1,6 +1,6 @@
 // Client/src/common/Navbar.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, NavLink, useLocation } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Home,
   Store,
@@ -128,6 +128,7 @@ function NavGroup({
 function NavContent(): React.ReactElement {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const navigate = useNavigate();
 
   const isAuthed = Boolean(user);
   const role = user?.role ?? 'buyer';
@@ -137,6 +138,14 @@ function NavContent(): React.ReactElement {
   const AUCTIONS_ENABLED =
     String(import.meta.env.VITE_AUCTIONS_ENABLED || '').toLowerCase() === 'true';
 
+  const onSignOut = async () => {
+    try {
+      await logout();
+    } finally {
+      navigate('/', { replace: true });
+    }
+  };
+
   return (
     <nav className="mt-6 grid gap-1" aria-label="Main">
       <SideNavLink to="/" end label="Home" Icon={Home} />
@@ -145,9 +154,11 @@ function NavContent(): React.ReactElement {
       ) : (
         <SideNavLink to="/products" end label="Shop" Icon={Store} />
       )}
+
       {AUCTIONS_ENABLED && isAuthed && (
         <SideNavLink to="/auctions" end label="Auctions" Icon={ClipboardList} />
       )}
+
       {isVendor && (
         <NavGroup baseTo="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard}>
           <SideNavLink to="/vendor/products" label="Products" Icon={Store} />
@@ -172,23 +183,22 @@ function NavContent(): React.ReactElement {
           <SideNavLink to="/admin/settings" label="Settings" Icon={Settings} />
         </NavGroup>
       )}
+
       <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
+
       {isAuthed && <SideNavLink to="/checkout" label="Checkout" Icon={CreditCard} />}
+
       {isAuthed && <SideNavLink to="/account/orders" label="My Orders" Icon={Package} />}
+
       <SideNavLink to="/legal" end label="Legal" Icon={FileText} />
+
       {!isAuthed ? (
         <>
           <SideNavLink to="/login" label="Sign in" Icon={LogIn} />
           <SideNavLink to="/register" label="Create account" Icon={UserPlus} />
         </>
       ) : (
-        <SideActionButton
-          label="Sign out"
-          Icon={LogOut}
-          onClick={() => {
-            logout().catch(() => {});
-          }}
-        />
+        <SideActionButton label="Sign out" Icon={LogOut} onClick={onSignOut} />
       )}
     </nav>
   );
