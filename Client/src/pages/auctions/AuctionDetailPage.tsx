@@ -344,7 +344,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
 
           {/* ✅ NEW: Vendor slug, placed between headerTitle and productTitle */}
           {vendorSlug ? (
-            <div className="text-sm">
+            <div className="text-2xl">Sold by:{' '}
               <Link
                 to={`/vendors/${vendorSlug}`}
                 className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
