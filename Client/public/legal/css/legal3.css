@@ -12,3 +12,24 @@
 .mc-legal th, .mc-legal td { border: 1px solid var(--theme-border); padding: 0.5rem; text-align: left; vertical-align: top; }
 .mc-legal th { background: var(--theme-card); }
 .badge { display: inline-block; padding: 0.1rem 0.5rem; border: 1px solid var(--theme-border); border-radius: 999px; font-size: 0.75rem; }
+
+/* Mobile-first table stacking */
+.mc-legal table { display: block; overflow-x: auto; }
+.mc-legal thead { position: absolute; width: 1px; height: 1px; margin: -1px; border: 0; padding: 0; clip: rect(0 0 0 0); overflow: hidden; }
+.mc-legal tbody, .mc-legal tr, .mc-legal th, .mc-legal td { display: block; }
+.mc-legal tr { border: 1px solid var(--theme-border); margin-bottom: 0.75rem; border-radius: 0.75rem; overflow: hidden; }
+.mc-legal td { border: 0; border-top: 1px solid var(--theme-border); padding: 0.5rem 0.75rem; display: grid; grid-template-columns: 10ch 1fr; gap: 0.5rem; }
+.mc-legal td:first-child { border-top: 0; }
+.mc-legal td::before { content: attr(data-label); font-weight: 600; opacity: 0.9; }
+.mc-legal a { word-break: break-word; }
+
+/* Enhance for wider screens */
+@media (min-width: 640px) {
+    .mc-legal table { display: table; overflow: visible; }
+    .mc-legal thead { position: static; width: auto; height: auto; margin: 0; clip: auto; overflow: visible; }
+    .mc-legal tbody { display: table-row-group; }
+    .mc-legal tr { display: table-row; border: none; margin: 0; border-radius: 0; }
+    .mc-legal th, .mc-legal td { display: table-cell; border: 1px solid var(--theme-border); padding: 0.5rem; }
+    .mc-legal td { grid-template-columns: none; gap: 0; }
+    .mc-legal td::before { content: none; }
+}
