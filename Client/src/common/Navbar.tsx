@@ -163,16 +163,16 @@ function NavContent(): React.ReactElement {
       {isAuthed && !isVendor && (
         <SideNavLink to="/vendor/apply" label="Apply as Vendor" Icon={UserPlus} />
       )}
+
       {isAdmin && (
-        <>
-          <SideNavLink to="/admin" label="Admin · Dashboard" Icon={LayoutDashboard} />
-          <SideNavLink to="/admin/vendor-apps" label="Admin · Vendor Apps" Icon={ClipboardList} />
-          <SideNavLink to="/admin/orders" label="Admin · Orders" Icon={Package} />
+        <NavGroup baseTo="/admin" label="Admin Dashboard" Icon={LayoutDashboard}>
+          <SideNavLink to="/admin/vendor-apps" label="Vendor Applications" Icon={ClipboardList} />
+          <SideNavLink to="/admin/orders" label="Orders" Icon={Package} />
           {AUCTIONS_ENABLED && (
-            <SideNavLink to="/admin/auctions" label="Admin · Auctions" Icon={ShieldCheck} />
+            <SideNavLink to="/admin/auctions" label="Auctions" Icon={ShieldCheck} />
           )}
-          <SideNavLink to="/admin/settings" label="Admin · Settings" Icon={Settings} />
-        </>
+          <SideNavLink to="/admin/settings" label="Settings" Icon={Settings} />
+        </NavGroup>
       )}
 
       <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
