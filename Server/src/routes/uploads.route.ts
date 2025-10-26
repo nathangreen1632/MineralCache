@@ -9,7 +9,7 @@ const router: Router = Router();
 
 // Multipart (Multer) flow — field: "photos"
 // Order: auth → window limiter → burst limiter → Multer → total-batch limit → handler
-router.post('/photos', requireAuth, uploadImagesLimiter, burstLimiter, photosMulter.array('photos', 6), enforceTotalBatchBytes, handleUpload);
+router.post('/photos', requireAuth, burstLimiter, photosMulter.array('photos', 6), enforceTotalBatchBytes, handleUpload);
 
 // Signed URL issuance (kept as-is; add limiter here later if needed)
 router.post('/sign', requireAuth, signUploads);

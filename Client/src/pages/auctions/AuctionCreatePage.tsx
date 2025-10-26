@@ -30,7 +30,7 @@ export default function AuctionCreatePage(): React.ReactElement {
   const [startingBidUSD, setStartingBidUSD] = useState<string>(''); // display as dollars
   const [reserveUSD, setReserveUSD] = useState<string>('');         // optional
   const [buyNowUSD, setBuyNowUSD] = useState<string>('');           // optional
-  const [durationDays, setDurationDays] = useState<1 | 3 | 5 | 7>(7);
+  const [durationDays, setDurationDays] = useState<1 | 3 | 5 | 7>(1);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 

@@ -1,6 +1,6 @@
 // Client/src/common/Navbar.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, NavLink, useLocation } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Home,
   Store,
@@ -22,6 +22,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/useAuthStore';
+import ThemeToggle from './ThemeToggle';
 
 function BrandName({ className }: Readonly<{ className?: string }>) {
   return (
@@ -127,6 +128,7 @@ function NavGroup({
 function NavContent(): React.ReactElement {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const navigate = useNavigate();
 
   const isAuthed = Boolean(user);
   const role = user?.role ?? 'buyer';
@@ -135,6 +137,14 @@ function NavContent(): React.ReactElement {
 
   const AUCTIONS_ENABLED =
     String(import.meta.env.VITE_AUCTIONS_ENABLED || '').toLowerCase() === 'true';
+
+  const onSignOut = async () => {
+    try {
+      await logout();
+    } finally {
+      navigate('/', { replace: true });
+    }
+  };
 
   return (
     <nav className="mt-6 grid gap-1" aria-label="Main">
@@ -164,15 +174,14 @@ function NavContent(): React.ReactElement {
         <SideNavLink to="/vendor/apply" label="Apply as Vendor" Icon={UserPlus} />
       )}
       {isAdmin && (
-        <>
-          <SideNavLink to="/admin" label="Admin · Dashboard" Icon={LayoutDashboard} />
-          <SideNavLink to="/admin/vendor-apps" label="Admin · Vendor Apps" Icon={ClipboardList} />
-          <SideNavLink to="/admin/orders" label="Admin · Orders" Icon={Package} />
+        <NavGroup baseTo="/admin" label="Admin Dashboard" Icon={LayoutDashboard}>
+          <SideNavLink to="/admin/vendor-apps" label="Vendor Applications" Icon={ClipboardList} />
+          <SideNavLink to="/admin/orders" label="Orders" Icon={Package} />
           {AUCTIONS_ENABLED && (
-            <SideNavLink to="/admin/auctions" label="Admin · Auctions" Icon={ShieldCheck} />
+            <SideNavLink to="/admin/auctions" label="Auctions" Icon={ShieldCheck} />
           )}
-          <SideNavLink to="/admin/settings" label="Admin · Settings" Icon={Settings} />
-        </>
+          <SideNavLink to="/admin/settings" label="Settings" Icon={Settings} />
+        </NavGroup>
       )}
 
       <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
@@ -189,13 +198,7 @@ function NavContent(): React.ReactElement {
           <SideNavLink to="/register" label="Create account" Icon={UserPlus} />
         </>
       ) : (
-        <SideActionButton
-          label="Sign out"
-          Icon={LogOut}
-          onClick={() => {
-            logout().catch(() => {});
-          }}
-        />
+        <SideActionButton label="Sign out" Icon={LogOut} onClick={onSignOut} />
       )}
     </nav>
   );
@@ -283,6 +286,8 @@ export default function Navbar(): React.ReactElement {
               </Link>
             </div>
 
+            <ThemeToggle />
+
             <div className="mt-4 grid gap-1">
               <NavContent />
             </div>
@@ -306,6 +311,9 @@ export default function Navbar(): React.ReactElement {
         >
           <BrandName />
         </Link>
+
+        <ThemeToggle />
+
         <NavContent />
       </aside>
     </>

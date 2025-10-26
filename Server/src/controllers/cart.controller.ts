@@ -8,23 +8,18 @@ import { Cart } from '../models/cart.model.js';
 import { Product } from '../models/product.model.js';
 import { updateCartSchema } from '../validation/cart.schema.js';
 import { computeVendorShippingByLines } from '../services/shipping.service.js';
-
-// ✅ admin settings + tax helpers
 import { getAdminSettingsCached } from '../services/settings.service.js';
 import { calcTaxCents, taxFeatureEnabled } from '../services/tax.service.js';
-
-// ✅ NEW: product images + public route to build URLs
 import { ProductImage } from '../models/productImage.model.js';
 import { UPLOADS_PUBLIC_ROUTE } from './products.controller.js';
+import { AuctionLock } from '../models/auctionLock.model.js';
 
-/** Public URL from a stored relative path */
 function toPublicUrl(rel?: string | null): string | null {
   if (!rel) return null;
   const clean = String(rel).replace(/^\/+/, '');
   return `${UPLOADS_PUBLIC_ROUTE}/${encodeURI(clean)}`;
 }
 
-/** ---------------- Zod error helper (no deprecated APIs) ---------------- */
 function zDetails(err: ZodError) {
   const treeify = (z as any).treeifyError;
   if (typeof treeify === 'function') return treeify(err);
@@ -37,8 +32,7 @@ function zDetails(err: ZodError) {
   };
 }
 
-/** ---------------- Availability guard (staleness) ---------------- */
-async function validateAvailability(productIds: number[]) {
+async function validateAvailability(productIds: number[], userId: number) {
   if (productIds.length === 0) {
     return { ok: true as const, unavailable: [] as Array<{ productId: number; reason: string }> };
   }
@@ -48,11 +42,32 @@ async function validateAvailability(productIds: number[]) {
     attributes: ['id', 'archivedAt'],
   });
 
+  const now = new Date();
+  const locks = await AuctionLock.findAll({
+    where: { productId: { [Op.in]: productIds }, status: 'active' },
+    attributes: ['productId', 'userId', 'expiresAt'],
+  });
+
+  const lockByProduct = new Map<number, { userId: number; expiresAt: Date }>();
+  for (const l of locks) {
+    lockByProduct.set(Number(l.productId), { userId: Number(l.userId), expiresAt: new Date(String(l.expiresAt)) });
+  }
+
   const unavailable: Array<{ productId: number; reason: string }> = [];
   for (const p of rows) {
-    const archived = (p as any).archivedAt != null;
-    if (archived) {
-      unavailable.push({ productId: Number(p.id), reason: 'archived' });
+    const pid = Number(p.id);
+    if ((p as any).archivedAt != null) {
+      unavailable.push({ productId: pid, reason: 'archived' });
+      continue;
+    }
+    const lock = lockByProduct.get(pid);
+    if (lock) {
+      if (lock.expiresAt > now && Number(userId) !== Number(lock.userId)) {
+        unavailable.push({ productId: pid, reason: 'reserved' });
+      }
+      if (lock.expiresAt <= now) {
+        await AuctionLock.update({ status: 'released' }, { where: { productId: pid, status: 'active' } });
+      }
     }
   }
 
@@ -62,22 +77,16 @@ async function validateAvailability(productIds: number[]) {
   return { ok: true as const, unavailable: [] as Array<{ productId: number; reason: string }> };
 }
 
-/** ---------------- Totals helper ----------------
- * Enrich each line with:
- *   - imageUrl (cover image: primary → sortOrder → id)
- *   - unitPriceCents (sale-aware if instance exposes getEffectivePriceCents)
- *   - priceCents (alias of unitPriceCents for client convenience)
- * ---------------------------------------------------------------------- */
-async function computeTotals(items: Array<{ productId: number; quantity: number }>) {
+async function computeTotals(items: Array<{ productId: number; quantity: number }>, userId: number) {
   type CartLine = {
     productId: number;
     vendorId: number;
     title: string;
     unitPriceCents: number;
-    priceCents: number;       // alias for client
+    priceCents: number;
     quantity: number;
     lineTotalCents: number;
-    imageUrl: string | null;  // cover image
+    imageUrl: string | null;
   };
 
   if (!items.length) {
@@ -96,9 +105,7 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
     };
   }
 
-  const ids = [...new Set(items.map((i) => Number(i.productId)))].filter((n) =>
-    Number.isFinite(n)
-  );
+  const ids = [...new Set(items.map((i) => Number(i.productId)))].filter((n) => Number.isFinite(n));
   if (ids.length === 0) {
     return {
       lines: [] as CartLine[],
@@ -115,7 +122,6 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
     };
   }
 
-  // Fetch products + a single “cover” image (primary first, then sortOrder)
   const products = await Product.findAll({
     where: { id: { [Op.in]: ids }, archivedAt: { [Op.is]: null } as any },
     attributes: ['id', 'vendorId', 'title', 'priceCents', 'salePriceCents', 'saleStartAt', 'saleEndAt'],
@@ -135,39 +141,52 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
     ],
   });
 
+  const locks = await AuctionLock.findAll({
+    where: { productId: { [Op.in]: ids }, status: 'active', userId },
+    attributes: ['productId', 'priceCents', 'expiresAt'],
+  });
+
+  const lockMap = new Map<number, { priceCents: number; expiresAt: Date }>();
+  const now = new Date();
+  for (const l of locks) {
+    const exp = new Date(String(l.expiresAt));
+    if (exp > now) lockMap.set(Number(l.productId), { priceCents: Number(l.priceCents), expiresAt: exp });
+  }
+
   const byId = new Map<number, any>();
   for (const p of products) byId.set(Number((p as any).id), p);
 
   const lines: CartLine[] = [];
   let subtotalCents = 0;
-
-  // Group concrete Product instances per vendor for rule-based shipping
   const vendorGroups = new Map<number, Array<{ product: Product; quantity: number }>>();
 
   for (const row of items) {
     const p = byId.get(Number(row.productId));
-    if (!p) continue; // silently drop unknown/archived
+    if (!p) continue;
 
     const qty = Math.max(0, Math.trunc(Number(row.quantity || 0)));
     if (qty <= 0) continue;
 
-    // Prefer instance method if available; fall back to base price
+    const lock = lockMap.get(Number(row.productId));
+
     let unitPrice = 0;
-    try {
-      // @ts-ignore optional instance method
-      unitPrice =
-        typeof (p).getEffectivePriceCents === 'function'
-          ? Number((p).getEffectivePriceCents())
-          : Number((p).priceCents || 0);
-    } catch {
-      unitPrice = Number((p).priceCents || 0);
+    if (lock) {
+      unitPrice = Number(lock.priceCents);
+    } else {
+      try {
+        unitPrice =
+          typeof p.getEffectivePriceCents === 'function'
+            ? Number(p.getEffectivePriceCents())
+            : Number((p).priceCents || 0);
+      } catch {
+        unitPrice = Number((p).priceCents || 0);
+      }
     }
     if (!Number.isFinite(unitPrice)) unitPrice = 0;
 
     const j = p.toJSON();
     const cover = Array.isArray(j.images) && j.images[0] ? j.images[0] : null;
-    const rel =
-      cover?.v800Path || cover?.v320Path || cover?.v1600Path || cover?.origPath || null;
+    const rel = cover?.v800Path || cover?.v320Path || cover?.v1600Path || cover?.origPath || null;
     const imageUrl = toPublicUrl(rel);
 
     const lineTotal = Math.round(unitPrice * qty);
@@ -182,14 +201,13 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
       vendorId,
       title: String(j.title || ''),
       unitPriceCents: unitPrice,
-      priceCents: unitPrice, // alias
+      priceCents: unitPrice,
       quantity: qty,
       lineTotalCents: lineTotal,
       imageUrl,
     });
   }
 
-  // Per-vendor shipping via rules (vendor → global default → admin defaults → sane default)
   const vendorShippingSnapshot: Record<
     string,
     { cents: number; ruleId: number | null; label: string; params: any }
@@ -221,7 +239,6 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
     0
   );
 
-  // tax from admin settings (subtotal-only)
   const settings = await getAdminSettingsCached();
   const taxRateBps = Number(settings?.tax_rate_bps ?? 0);
   const taxLabel: string | null = settings?.tax_label ?? null;
@@ -242,16 +259,12 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
   };
 }
 
-/** ------------------------------------------------------------------------
- * Cart endpoints
- * -----------------------------------------------------------------------*/
 export async function getCart(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
 
   const userId = (req as any).user.id;
   const cart = await Cart.findOne({ where: { userId } });
 
-  // ✅ filter out any zero/invalid quantities
   const raw: Array<{ productId: unknown; quantity: unknown }> = (cart?.itemsJson as any) ?? [];
   const items = raw
     .map((x) => ({
@@ -260,10 +273,17 @@ export async function getCart(req: Request, res: Response): Promise<void> {
     }))
     .filter((x) => Number.isFinite(x.productId) && x.productId > 0 && x.quantity > 0);
 
-  const totals = await computeTotals(items);
+  const productIds = items.map((x) => x.productId);
+  const avail = await validateAvailability(productIds, userId);
+  if (!avail.ok) {
+    res.status(409).json({ unavailable: avail.unavailable });
+    return;
+  }
+
+  const totals = await computeTotals(items, userId);
 
   res.json({
-    items: totals.lines, // includes imageUrl, priceCents, unitPriceCents
+    items: totals.lines,
     totals: {
       subtotal: totals.subtotalCents,
       shipping: totals.shippingCents,
@@ -271,7 +291,7 @@ export async function getCart(req: Request, res: Response): Promise<void> {
       total: totals.totalCents,
     },
     tax: {
-      enabled: taxFeatureEnabled, // boolean, not callable
+      enabled: taxFeatureEnabled,
       label: totals.taxLabel ?? null,
       rateBps: Number((await getAdminSettingsCached())?.tax_rate_bps ?? 0),
     },
@@ -282,14 +302,12 @@ export async function getCart(req: Request, res: Response): Promise<void> {
 export async function putCart(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
 
-  // Validate full replace payload
   const parsed = updateCartSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Invalid input', details: zDetails(parsed.error) });
     return;
   }
 
-  // ✅ normalize + drop zeros/invalids (treat zero as "remove")
   const normalized: Array<{ productId: number; quantity: number }> = parsed.data.items
     .map((x) => ({
       productId: Number(x.productId),
@@ -297,40 +315,31 @@ export async function putCart(req: Request, res: Response): Promise<void> {
     }))
     .filter((x) => Number.isFinite(x.productId) && x.productId > 0 && x.quantity > 0);
 
-  // Staleness guard on remaining ids
+  const userId = (req as any).user.id;
   const productIds = normalized.map((x) => x.productId);
-  const avail = await validateAvailability(productIds);
+  const avail = await validateAvailability(productIds, userId);
   if (!avail.ok) {
     res.status(409).json({
       error: 'Some items are no longer available',
       code: 'PRODUCT_UNAVAILABLE',
-      unavailable: avail.unavailable, // [{ productId, reason }]
+      unavailable: avail.unavailable,
     });
     return;
   }
 
-  const userId = (req as any).user.id;
-  const totals = await computeTotals(normalized);
-
-  // Upsert normalized items
-  const now = new Date();
-  const existing = await Cart.findOne({ where: { userId } });
-  if (existing) {
-    (existing as any).itemsJson = normalized;
-    (existing as any).updatedAt = now;
-    await (existing as any).save();
+  let cart = await Cart.findOne({ where: { userId } });
+  if (!cart) {
+    await Cart.create({userId, itemsJson: normalized} as any);
   } else {
-    await Cart.create({
-      userId,
-      itemsJson: normalized,
-      createdAt: now,
-      updatedAt: now,
-    } as any);
+    (cart as any).itemsJson = normalized;
+    await cart.save();
   }
+
+  const totals = await computeTotals(normalized, userId);
 
   res.json({
     ok: true,
-    items: totals.lines, // includes imageUrl, priceCents, unitPriceCents
+    items: totals.lines,
     totals: {
       subtotal: totals.subtotalCents,
       shipping: totals.shippingCents,
@@ -355,11 +364,9 @@ export async function checkout(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // Compute real totals from the user’s cart — rule-based
   const userId = (req as any).user.id;
   const cart = await Cart.findOne({ where: { userId } });
 
-  // ✅ same sanitize as getCart()
   const raw: Array<{ productId: unknown; quantity: unknown }> = (cart?.itemsJson as any) ?? [];
   const items = raw
     .map((x) => ({
@@ -368,9 +375,8 @@ export async function checkout(req: Request, res: Response): Promise<void> {
     }))
     .filter((x) => Number.isFinite(x.productId) && x.productId > 0 && x.quantity > 0);
 
-  // Staleness guard before totals/PI
   const productIds = items.map((x) => x.productId);
-  const avail = await validateAvailability(productIds);
+  const avail = await validateAvailability(productIds, userId);
   if (!avail.ok) {
     res.status(409).json({
       error: 'Some items are no longer available',
@@ -380,7 +386,7 @@ export async function checkout(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const totals = await computeTotals(items);
+  const totals = await computeTotals(items, userId);
 
   if (!totals.totalCents || totals.totalCents < 50) {
     res.status(400).json({ error: 'Cart total too low' });

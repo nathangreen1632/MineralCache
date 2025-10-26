@@ -1,13 +1,14 @@
 // Server/src/services/auction.service.ts
-import {Transaction} from 'sequelize';
+import {Transaction, Op} from 'sequelize';
 import {Auction, type IncrementTier} from '../models/auction.model.js';
 import {Bid} from '../models/bid.model.js';
 import {stopAuctionTicker} from '../sockets/tickers/auctionTicker.js';
 import {logInfo, logWarn} from './log.service.js';
+import {Cart} from '../models/cart.model.js';
+import {AuctionLock} from '../models/auctionLock.model.js';
 
 export type Ladder = IncrementTier[];
 
-// Week 6 plan ladder (cents): 10–50=$5; 51–500=$10; 501–1000=$25; 1001–5000=$50; 5001–10000=$100; 10001–25000=$250; 25001+=$500
 const DEFAULT_LADDER: Ladder = [
   { upToCents: 50_00, incrementCents: 5_00 },
   { upToCents: 500_00, incrementCents: 10_00 },
@@ -32,21 +33,53 @@ export function ladderIncrementFor(priceCents: number, ladder: Ladder): number {
   for (const tier of ladder) {
     if (tier.upToCents == null || priceCents <= tier.upToCents) return tier.incrementCents;
   }
-  return ladder[ladder.length - 1]?.incrementCents ?? 100; // last resort
+  return ladder[ladder.length - 1]?.incrementCents ?? 100;
 }
 
 export function minimumAcceptableBid(a: Auction): number {
   const ladder = effectiveLadder(a);
-  // NOTE: use startPriceCents (DB column) instead of startingBidCents
   const base = a.highBidCents ?? a.startPriceCents ?? 0;
   const inc = ladderIncrementFor(base, ladder);
   return base + inc;
 }
 
-/**
- * Resolve outcome between previous leader (with proxy) and challenger (with proxy).
- * Winner pays min(ownProxy, otherProxy + incAt(otherProxy)).
- */
+async function upsertCartLine(tx: Transaction, userId: number, productId: number) {
+  const existing = await Cart.findOne({ where: { userId }, transaction: tx, lock: (tx as any).LOCK?.UPDATE });
+  const line = { productId: Number(productId), quantity: 1 };
+  if (!existing) {
+    await Cart.create({ userId: Number(userId), itemsJson: [line] } as any, { transaction: tx });
+    return;
+  }
+  const raw: Array<{ productId: unknown; quantity: unknown }> = (existing as any).itemsJson ?? [];
+  const items = raw
+    .map((x) => ({
+      productId: Number((x as any).productId),
+      quantity: Math.max(1, Math.trunc(Number((x as any).quantity ?? 1))),
+    }))
+    .filter((x) => Number.isFinite(x.productId) && x.productId > 0);
+  const idx = items.findIndex((x) => x.productId === Number(productId));
+  if (idx >= 0) items[idx].quantity = 1; else items.push(line);
+  (existing as any).itemsJson = items;
+  await existing.save({ transaction: tx });
+}
+
+async function purgeProductFromOtherCarts(tx: Transaction, productId: number, winnerUserId: number) {
+  const carts = await Cart.findAll({
+    where: { userId: { [Op.ne]: Number(winnerUserId) } },
+    transaction: tx,
+    lock: (tx as any).LOCK?.UPDATE,
+  });
+  for (const c of carts) {
+    const raw: unknown = (c as any).itemsJson ?? [];
+    const items = Array.isArray(raw) ? raw : [];
+    const next = items.filter((it: any) => Number(it?.productId) !== Number(productId));
+    if (next.length !== items.length) {
+      (c as any).itemsJson = next;
+      await c.save({ transaction: tx });
+    }
+  }
+}
+
 export function resolveProxies(
   prevProxy: number,
   challengerProxy: number,
@@ -63,12 +96,6 @@ export function resolveProxies(
   return { winner: 'challenger', clearingPrice: clearing };
 }
 
-/**
- * Place a bid inside a DB transaction:
- * - validates ladder/min step
- * - proxy vs proxy resolution
- * - anti-sniping: extends endAt if inside window
- */
 export async function placeBidTx(
   tx: Transaction,
   auction: Auction,
@@ -104,10 +131,8 @@ export async function placeBidTx(
   }
 
   const prevLeaderId = auction.highBidUserId ?? null;
-  // NOTE: use startPriceCents (DB column) instead of startingBidCents
   const prevHigh = auction.highBidCents ?? auction.startPriceCents ?? 0;
 
-  // Persist challenger’s intent (requested + proxy) for audit
   const bid = await Bid.create(
     {
       auctionId: auction.id,
@@ -118,12 +143,10 @@ export async function placeBidTx(
     { transaction: tx }
   );
 
-  // If no previous leader → challenger becomes leader at requested (or minNext if requested overshoots weirdly)
   if (prevLeaderId == null) {
     auction.highBidCents = Math.max(requested, minNext);
     auction.highBidUserId = userId;
 
-    // Anti-sniping extension
     let extendedMs = 0;
     if (auction.endAt && auction.endAt.getTime() - Date.now() <= ANTI_SNIPING_MS) {
       auction.endAt = new Date(Date.now() + ANTI_SNIPING_MS);
@@ -145,14 +168,11 @@ export async function placeBidTx(
     };
   }
 
-  // Resolve proxy vs proxy
-  // If you later store prev leader’s max proxy, swap this to that value.
   const outcome = resolveProxies(prevHigh, proxy, ladder);
 
   auction.highBidCents = outcome.clearingPrice;
   auction.highBidUserId = outcome.winner === 'prev' ? prevLeaderId : userId;
 
-  // Anti-sniping extension
   let extendedMs = 0;
   if (auction.endAt && auction.endAt.getTime() - Date.now() <= ANTI_SNIPING_MS) {
     auction.endAt = new Date(Date.now() + ANTI_SNIPING_MS);
@@ -190,12 +210,10 @@ export type EndAuctionResult = {
   reason: EndAuctionReason;
 };
 
-/** Load an auction for mutation inside a transaction (FOR UPDATE where supported). */
 async function getAuctionForUpdate(auctionId: number, tx: Transaction): Promise<Auction | null> {
   return Auction.findByPk(auctionId, { transaction: tx, lock: true as any });
 }
 
-/** Finalize an auction as "ended" (manual close). Idempotent. */
 export async function endAuctionTx(
   tx: Transaction,
   auctionId: number,
@@ -220,14 +238,40 @@ export async function endAuctionTx(
     return { auction: a, alreadyFinal: true, reason };
   }
 
-  if (a.status !== 'live' && a.status !== 'scheduled') {
-    logWarn('auction.end.invalid_state', { auctionId, status: a.status });
-    throw Object.assign(new Error('Invalid state transition'), {code: 'INVALID_STATE' as const});
-  }
-
   a.status = 'ended';
-  a.endAt ??= new Date();
+  a.endAt = new Date();
   await a.save({ transaction: tx });
+
+  const reserve = a.reservePriceCents ?? null;
+  const sold =
+    a.highBidUserId != null &&
+    a.productId != null &&
+    (reserve == null || (a.highBidCents ?? 0) >= reserve);
+
+  if (sold) {
+    const winnerUserId = Number(a.highBidUserId);
+    const productId = Number(a.productId);
+    const priceCents = Number(a.highBidCents ?? 0);
+
+    await upsertCartLine(tx, winnerUserId, productId);
+    await purgeProductFromOtherCarts(tx, productId, winnerUserId);
+
+    const holdMs = 5 * 24 * 60 * 60 * 1000;
+    const expiresAt = new Date(Date.now() + holdMs);
+
+    const existingActive = await AuctionLock.findOne({
+      where: { productId, status: 'active' },
+      transaction: tx,
+      lock: (tx as any).LOCK?.UPDATE,
+    });
+
+    if (!existingActive) {
+      await AuctionLock.create(
+        { productId, userId: winnerUserId, auctionId, priceCents, expiresAt, status: 'active' } as any,
+        { transaction: tx }
+      );
+    }
+  }
 
   try { stopAuctionTicker(a.id); } catch (e) { logWarn('auction.end.stop_ticker_failed', { auctionId, err: String(e) }); }
 
@@ -235,7 +279,7 @@ export async function endAuctionTx(
   return { auction: a, alreadyFinal: false, reason };
 }
 
-/** Cancel an auction (vendor/admin). Idempotent. */
+
 export async function cancelAuctionTx(
   tx: Transaction,
   auctionId: number,
