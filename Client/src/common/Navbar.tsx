@@ -22,6 +22,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/useAuthStore';
+import ThemeToggle from './ThemeToggle';
 
 function BrandName({ className }: Readonly<{ className?: string }>) {
   return (
@@ -144,11 +145,9 @@ function NavContent(): React.ReactElement {
       ) : (
         <SideNavLink to="/products" end label="Shop" Icon={Store} />
       )}
-
       {AUCTIONS_ENABLED && isAuthed && (
         <SideNavLink to="/auctions" end label="Auctions" Icon={ClipboardList} />
       )}
-
       {isVendor && (
         <NavGroup baseTo="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard}>
           <SideNavLink to="/vendor/products" label="Products" Icon={Store} />
@@ -163,7 +162,6 @@ function NavContent(): React.ReactElement {
       {isAuthed && !isVendor && (
         <SideNavLink to="/vendor/apply" label="Apply as Vendor" Icon={UserPlus} />
       )}
-
       {isAdmin && (
         <NavGroup baseTo="/admin" label="Admin Dashboard" Icon={LayoutDashboard}>
           <SideNavLink to="/admin/vendor-apps" label="Vendor Applications" Icon={ClipboardList} />
@@ -174,15 +172,10 @@ function NavContent(): React.ReactElement {
           <SideNavLink to="/admin/settings" label="Settings" Icon={Settings} />
         </NavGroup>
       )}
-
       <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
-
       {isAuthed && <SideNavLink to="/checkout" label="Checkout" Icon={CreditCard} />}
-
       {isAuthed && <SideNavLink to="/account/orders" label="My Orders" Icon={Package} />}
-
       <SideNavLink to="/legal" end label="Legal" Icon={FileText} />
-
       {!isAuthed ? (
         <>
           <SideNavLink to="/login" label="Sign in" Icon={LogIn} />
@@ -283,6 +276,8 @@ export default function Navbar(): React.ReactElement {
               </Link>
             </div>
 
+            <ThemeToggle />
+
             <div className="mt-4 grid gap-1">
               <NavContent />
             </div>
@@ -306,6 +301,9 @@ export default function Navbar(): React.ReactElement {
         >
           <BrandName />
         </Link>
+
+        <ThemeToggle />
+
         <NavContent />
       </aside>
     </>
