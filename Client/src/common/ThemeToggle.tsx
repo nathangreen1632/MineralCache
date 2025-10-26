@@ -17,7 +17,7 @@ export default function ThemeToggle(): React.ReactElement {
 
   return (
     <div className="mt-4 mb-2 grid gap-2" aria-label="Appearance">
-      <div className="flex items-center justify-between rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-2">
+      <div className="flex items-center justify-between rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-1">
         <div className="flex items-center gap-2 text-sm font-semibold text-[var(--theme-text)]">
           <span>Appearance</span>
           <span className="ml-2 rounded-md px-2 py-0.5 text-xs bg-[var(--theme-surface)] border border-[var(--theme-border)]">
