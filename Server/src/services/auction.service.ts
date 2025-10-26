@@ -5,6 +5,7 @@ import {Bid} from '../models/bid.model.js';
 import {stopAuctionTicker} from '../sockets/tickers/auctionTicker.js';
 import {logInfo, logWarn} from './log.service.js';
 import {Cart} from '../models/cart.model.js';
+import {AuctionLock} from '../models/auctionLock.model.js';
 
 export type Ladder = IncrementTier[];
 
@@ -237,13 +238,8 @@ export async function endAuctionTx(
     return { auction: a, alreadyFinal: true, reason };
   }
 
-  if (a.status !== 'live' && a.status !== 'scheduled') {
-    logWarn('auction.end.invalid_state', { auctionId, status: a.status });
-    throw Object.assign(new Error('Invalid state transition'), {code: 'INVALID_STATE' as const});
-  }
-
   a.status = 'ended';
-  a.endAt ??= new Date();
+  a.endAt = new Date();
   await a.save({ transaction: tx });
 
   const reserve = a.reservePriceCents ?? null;
@@ -251,11 +247,30 @@ export async function endAuctionTx(
     a.highBidUserId != null &&
     a.productId != null &&
     (reserve == null || (a.highBidCents ?? 0) >= reserve);
+
   if (sold) {
     const winnerUserId = Number(a.highBidUserId);
     const productId = Number(a.productId);
+    const priceCents = Number(a.highBidCents ?? 0);
+
     await upsertCartLine(tx, winnerUserId, productId);
     await purgeProductFromOtherCarts(tx, productId, winnerUserId);
+
+    const holdMs = 5 * 24 * 60 * 60 * 1000;
+    const expiresAt = new Date(Date.now() + holdMs);
+
+    const existingActive = await AuctionLock.findOne({
+      where: { productId, status: 'active' },
+      transaction: tx,
+      lock: (tx as any).LOCK?.UPDATE,
+    });
+
+    if (!existingActive) {
+      await AuctionLock.create(
+        { productId, userId: winnerUserId, auctionId, priceCents, expiresAt, status: 'active' } as any,
+        { transaction: tx }
+      );
+    }
   }
 
   try { stopAuctionTicker(a.id); } catch (e) { logWarn('auction.end.stop_ticker_failed', { auctionId, err: String(e) }); }
@@ -263,6 +278,7 @@ export async function endAuctionTx(
   logInfo('auction.end.success', { auctionId, status: a.status, endAt: a.endAt });
   return { auction: a, alreadyFinal: false, reason };
 }
+
 
 export async function cancelAuctionTx(
   tx: Transaction,
