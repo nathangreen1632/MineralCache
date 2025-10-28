@@ -16,6 +16,8 @@ import { bidBodySchema, bidParamsSchema } from '../validation/auctions.schema.js
 import { emitHighBid, emitOutbid, emitAuctionEnded } from '../sockets/emitters/auctions.emit.js';
 import { ensureAuctionTicker } from '../sockets/tickers/auctionTicker.js';
 import { obs } from '../services/observability.service.js';
+import { User } from '../models/user.model.js';
+import { sendBidEmail } from '../services/email.service.js';
 
 function ensureAuthed(req: Request, res: Response): req is Request & {
   user: { id: number; role: 'buyer' | 'vendor' | 'admin'; dobVerified18: boolean; vendorId?: number | null };
@@ -258,17 +260,15 @@ export async function placeBid(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    const fresh = await Auction.findByPk(auctionId);
     const io = getIO(req);
     if (io) {
-      const fresh = await Auction.findByPk(auctionId);
       ensureAuctionTicker(io, auctionId, fresh?.endAt ?? null);
-
       emitHighBid(io, auctionId, {
         highBidCents: result.highBidCents ?? 0,
         leaderUserId: result.leaderUserId ?? 0,
         minNextBidCents: result.minNextBidCents ?? 0,
       });
-
       if (result.prevLeaderChanged && result.prevLeaderId) {
         emitOutbid(io, auctionId, {
           outbidUserId: result.prevLeaderId,
@@ -276,6 +276,26 @@ export async function placeBid(req: Request, res: Response): Promise<void> {
         });
       }
     }
+
+    try {
+      const bidder = await User.findByPk((req as any).user.id, { attributes: ['email'] });
+      if (bidder?.email) {
+        await sendBidEmail('bid_placed', {
+          to: { email: bidder.email, name: null },
+          auctionTitle: fresh?.title ?? 'Auction',
+          amountCents: result.highBidCents ?? 0,
+          auctionId,
+        });
+        if (result.youAreLeading) {
+          await sendBidEmail('bid_leading', {
+            to: { email: bidder.email, name: null },
+            auctionTitle: fresh?.title ?? 'Auction',
+            amountCents: result.highBidCents ?? 0,
+            auctionId,
+          });
+        }
+      }
+    } catch {}
 
     (obs as any)?.info?.('auction.bid', {
       requestId: (req as any).context?.requestId,
