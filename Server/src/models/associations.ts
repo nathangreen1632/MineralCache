@@ -8,6 +8,7 @@ import { Auction } from './auction.model.js';
 import { Vendor } from './vendor.model.js';
 import { User } from './user.model.js';
 import { UserAgreement } from './userAgreement.model.js';
+export { PasswordReset } from './passwordReset.model.js';
 
 // NEW: Category models
 import { Category } from './category.model.js';
