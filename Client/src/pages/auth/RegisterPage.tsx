@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { post } from '../lib/api';
-import { useAuthStore } from '../stores/useAuthStore';
-import LegalAgreementModal from '../components/agreements/LegalAgreementModal';
-import { getRequiredLegal, type LegalDoc } from '../api/legal';
+import { post } from '../../lib/api.ts';
+import { useAuthStore } from '../../stores/useAuthStore.ts';
+import LegalAgreementModal from '../../components/agreements/LegalAgreementModal.tsx';
+import { getRequiredLegal, type LegalDoc } from '../../api/legal.ts';
 
 const SAFE_EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[A-Za-z]{2,63}$/;
 
