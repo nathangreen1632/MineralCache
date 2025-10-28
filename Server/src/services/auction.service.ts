@@ -1,11 +1,13 @@
 // Server/src/services/auction.service.ts
-import {Transaction, Op} from 'sequelize';
-import {Auction, type IncrementTier} from '../models/auction.model.js';
-import {Bid} from '../models/bid.model.js';
-import {stopAuctionTicker} from '../sockets/tickers/auctionTicker.js';
-import {logInfo, logWarn} from './log.service.js';
-import {Cart} from '../models/cart.model.js';
-import {AuctionLock} from '../models/auctionLock.model.js';
+import { Transaction, Op } from 'sequelize';
+import { Auction, type IncrementTier } from '../models/auction.model.js';
+import { Bid } from '../models/bid.model.js';
+import { stopAuctionTicker } from '../sockets/tickers/auctionTicker.js';
+import { logInfo, logWarn } from './log.service.js';
+import { Cart } from '../models/cart.model.js';
+import { AuctionLock } from '../models/auctionLock.model.js';
+import { User } from '../models/user.model.js';
+import { sendBidEmail } from './email.service.js';
 
 export type Ladder = IncrementTier[];
 
@@ -225,12 +227,12 @@ export async function endAuctionTx(
   const a = await getAuctionForUpdate(auctionId, tx);
   if (!a) {
     logWarn('auction.end.not_found', { auctionId });
-    throw Object.assign(new Error('Auction not found'), {code: 'NOT_FOUND' as const});
+    throw Object.assign(new Error('Auction not found'), { code: 'NOT_FOUND' as const });
   }
 
   if (actor.kind === 'vendor' && a.vendorId !== actor.vendorId) {
     logWarn('auction.end.forbidden_vendor_mismatch', { auctionId, vendorId: actor.vendorId, ownerVendorId: a.vendorId });
-    throw Object.assign(new Error('Forbidden'), {code: 'FORBIDDEN' as const});
+    throw Object.assign(new Error('Forbidden'), { code: 'FORBIDDEN' as const });
   }
 
   if (a.status === 'ended' || a.status === 'canceled') {
@@ -271,6 +273,18 @@ export async function endAuctionTx(
         { transaction: tx }
       );
     }
+
+    try {
+      const winner = await User.findByPk(winnerUserId, { attributes: ['email'] });
+      if (winner?.email) {
+        await sendBidEmail('bid_won', {
+          to: { email: winner.email, name: null },
+          auctionTitle: a.title ?? 'Auction',
+          amountCents: priceCents,
+          auctionId: a.id,
+        });
+      }
+    } catch {}
   }
 
   try { stopAuctionTicker(a.id); } catch (e) { logWarn('auction.end.stop_ticker_failed', { auctionId, err: String(e) }); }
@@ -278,7 +292,6 @@ export async function endAuctionTx(
   logInfo('auction.end.success', { auctionId, status: a.status, endAt: a.endAt });
   return { auction: a, alreadyFinal: false, reason };
 }
-
 
 export async function cancelAuctionTx(
   tx: Transaction,
@@ -291,12 +304,12 @@ export async function cancelAuctionTx(
   const a = await getAuctionForUpdate(auctionId, tx);
   if (!a) {
     logWarn('auction.cancel.not_found', { auctionId });
-    throw Object.assign(new Error('Auction not found'), {code: 'NOT_FOUND' as const});
+    throw Object.assign(new Error('Auction not found'), { code: 'NOT_FOUND' as const });
   }
 
   if (actor.kind === 'vendor' && a.vendorId !== actor.vendorId) {
     logWarn('auction.cancel.forbidden_vendor_mismatch', { auctionId, vendorId: actor.vendorId, ownerVendorId: a.vendorId });
-    throw Object.assign(new Error('Forbidden'), {code: 'FORBIDDEN' as const});
+    throw Object.assign(new Error('Forbidden'), { code: 'FORBIDDEN' as const });
   }
 
   if (a.status === 'ended' || a.status === 'canceled') {
@@ -306,7 +319,7 @@ export async function cancelAuctionTx(
 
   if (a.status !== 'live' && a.status !== 'scheduled' && a.status !== 'draft') {
     logWarn('auction.cancel.invalid_state', { auctionId, status: a.status });
-    throw Object.assign(new Error('Invalid state transition'), {code: 'INVALID_STATE' as const});
+    throw Object.assign(new Error('Invalid state transition'), { code: 'INVALID_STATE' as const });
   }
 
   a.status = 'canceled';
