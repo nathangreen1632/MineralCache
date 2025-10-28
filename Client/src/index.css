@@ -39,6 +39,7 @@
     --theme-moveto: var(--c-f);
     --theme-scripture: var(--c-f);
     --theme-verse: var(--c-f);
+    --theme-card-number: var(--c-e);
 
     /* buttons */
     --theme-button: var(--c-e);
@@ -117,6 +118,7 @@
     --theme-moveto: var(--c-e);
     --theme-scripture: var(--c-e);
     --theme-verse: var(--c-e);
+    --theme-card-number: var(--c-a);
 
     /* buttons */
     --theme-button: var(--c-a);
