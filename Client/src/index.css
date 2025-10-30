@@ -22,6 +22,7 @@
     --c-m: #C1EDF0;
     --c-n: #F2F2F2;
     --c-o: #F5AF02;
+    --c-p: #000000;
 
     /* LIGHT MODE theme mapping */
     --theme-bg: var(--c-b);
@@ -40,6 +41,10 @@
     --theme-scripture: var(--c-f);
     --theme-verse: var(--c-f);
     --theme-card-number: var(--c-e);
+    --theme-shadow-carousel: var(--c-e);
+    --theme-shadow-categories: var(--c-e);
+    --theme-shadow-onSale: var(--c-e);
+    --theme-text-black: var(--c-p);
 
     /* buttons */
     --theme-button: var(--c-e);
@@ -101,6 +106,7 @@
     --c-m: #902923;
     --c-n: #191919;
     --c-o: #F5AF02;
+    --c-p: #000000;
 
     /* DARK MODE theme mapping — mirrors your previous logic */
     --theme-bg: var(--c-e);
@@ -119,6 +125,10 @@
     --theme-scripture: var(--c-e);
     --theme-verse: var(--c-e);
     --theme-card-number: var(--c-a);
+    --theme-shadow-carousel: rgba(204, 218, 209, 0.25);
+    --theme-shadow-categories: var(--c-o);
+    --theme-shadow-onSale: rgba(204, 218, 209, 0.25);
+    --theme-text-black: var(--c-p);
 
     /* buttons */
     --theme-button: var(--c-a);
