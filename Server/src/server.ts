@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import app from './app.js';
 import { db } from './models/sequelize.js';
 import { initSockets } from './sockets/index.js';
+import { reconcileAuctions } from './services/auctionReconciler.service.js';
 
 let PORT = Number(process.env.PORT);
 if (!Number.isFinite(PORT) || PORT <= 0) {
@@ -11,19 +12,17 @@ if (!Number.isFinite(PORT) || PORT <= 0) {
 }
 const URL = `http://localhost:${PORT}`;
 
-// Create HTTP server (same origin) and initialize Socket.IO via our helper
 const server = createServer(app);
-// Export if other modules need access to the io instance
 export const io = initSockets(server, { path: '/socket.io' });
-
-// ✅ Make Socket.IO available to controllers via req.app.get('io')
 app.set('io', io);
 
-// DB status log (do not crash app if DB unavailable); always start server
 (async () => {
   const result = await db.ping();
   if (result.ok) {
     console.log('[db] connected');
+    try {
+      await reconcileAuctions(io);
+    } catch {}
   } else {
     console.warn(`[db] unavailable: ${result.error ?? 'unknown error'}`);
   }
@@ -33,23 +32,17 @@ app.set('io', io);
   });
 })();
 
-/**
- * Graceful shutdown with proper awaits (no nested callbacks).
- * Sonar-friendly: promises are awaited inside the try block.
- */
 async function shutdown(signal: NodeJS.Signals) {
   console.log(`[svc] ${signal} received — shutting down…`);
   try {
-    // Close Socket.IO
     await new Promise<void>((resolve) => {
       io.close(() => resolve());
     });
-
-    // Close HTTP server
     await new Promise<void>((resolve, reject) => {
       server.close((err?: Error) => (err ? reject(err) : resolve()));
     });
-
+    const s = db.instance();
+    if (s) await s.close();
     console.log('[svc] closed');
     process.exit(0);
   } catch (err) {
