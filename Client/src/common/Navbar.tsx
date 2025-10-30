@@ -163,9 +163,6 @@ function NavContent(): React.ReactElement {
         <NavGroup baseTo="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard}>
           <SideNavLink to="/vendor/products" label="Create Auction" Icon={Store} />
           <SideNavLink to="/products/new" label="New Product" Icon={PlusCircle} />
-          {AUCTIONS_ENABLED && (
-            <SideNavLink to="/vendor/auctions/new" label="New Auction" Icon={PlusCircle} />
-          )}
           <SideNavLink to="/vendor/orders" label="Orders" Icon={Package} />
           <SideNavLink to="/vendor/payouts" label="Payouts" Icon={Banknote} />
         </NavGroup>
