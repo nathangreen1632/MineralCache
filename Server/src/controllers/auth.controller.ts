@@ -58,6 +58,10 @@ function isAdult(ymd: string): boolean {
   return age >= 18;
 }
 
+function genOtp6(): string {
+  return crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+}
+
 export async function register(req: Request, res: Response): Promise<void> {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -260,7 +264,7 @@ export async function forgotPassword(req: Request, res: Response) {
       attributes: ['id', 'email'],
     });
 
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const code = genOtp6();
     const hash = crypto.createHash('sha256').update(code).digest('hex');
     const ttlMs = 10 * 60 * 1000;
     const expiresAt = new Date(Date.now() + ttlMs);
