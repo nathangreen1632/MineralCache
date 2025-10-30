@@ -360,7 +360,7 @@ export default function VendorOrdersPage(): React.ReactElement {
                 <option value="other">Other</option>
               </select>
 
-              <label className="text-xs opacity-70 mt-2" htmlFor="tracking">Tracking # (optional)</label>
+              <label className="text-xs opacity-70 mt-2" htmlFor="tracking">Tracking #</label>
               <input
                 id="tracking"
                 value={shipDialog.tracking}
