@@ -40,7 +40,7 @@ export default function ProductCard({
 
   return (
     <div
-      className="group block rounded-2xl overflow-hidden border shadow-sm hover:shadow-md transition-shadow"
+      className="group block rounded-2xl overflow-hidden border hover:shadow-md transition-shadow shadow-[0_6px_12.5px_var(--theme-shadow-onSale)]"
       style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-card)' }}
     >
       {/* Image → product detail */}
@@ -66,7 +66,7 @@ export default function ProductCard({
         {onSale && (
           <span
             className="absolute left-3 top-3 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold shadow"
-            style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
+            style={{ background: 'var(--theme-button-yellow)', color: 'var(--theme-text-black)' }}
             aria-label="On sale"
           >
             On Sale
