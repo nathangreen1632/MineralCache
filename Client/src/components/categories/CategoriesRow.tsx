@@ -76,7 +76,7 @@ export default function CategoriesRow(): React.ReactElement {
   return (
     <section
       aria-label="Browse by category"
-      className="mx-auto max-w-7xl px-6 mt-8"
+      className="mx-auto max-w-8xl px-6 mt-8"
     >
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-xl font-bold text-[var(--theme-text)]">Categories</h2>
@@ -104,7 +104,7 @@ export default function CategoriesRow(): React.ReactElement {
           ))}
 
         {visible.map((cat) => (
-          <li key={cat.id} className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-3">
+          <li key={cat.id} className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] shadow-[0_2px_5px_var(--theme-shadow-categories)] p-3">
             <Link
               to={`/category/${cat.slug}`}
               className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-focus)] rounded-xl"
