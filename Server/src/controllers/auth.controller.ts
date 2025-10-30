@@ -2,28 +2,33 @@
 import type { Request, Response } from 'express';
 import { z, type ZodError } from 'zod';
 import bcrypt from 'bcryptjs';
-import { Op, fn, col, where as sqlWhere } from 'sequelize'; // fn/col/where kept
+import { Op, fn, col, where as sqlWhere } from 'sequelize';
 import { User } from '../models/user.model.js';
-import { loginSchema, registerSchema, verify18Schema, normalizeDob } from '../validation/auth.schema.js';
-import { logInfo, logWarn } from '../services/log.service.js'; // ✅ NEW
+import { PasswordReset } from '../models/passwordReset.model.js';
+import {
+  loginSchema,
+  registerSchema,
+  verify18Schema,
+  normalizeDob,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+} from '../validation/auth.schema.js';
+import { logInfo, logWarn } from '../services/log.service.js';
+import crypto from 'node:crypto';
+import { sendOtpEmail } from '../services/email.service.js';
 
-/** ------------------------------------------------------------------------
- * Error details serializer
- * -----------------------------------------------------------------------*/
 function zDetails(err: ZodError) {
   const anyZ = z as any;
   if (typeof anyZ.treeifyError === 'function') return anyZ.treeifyError(err);
   return { formErrors: [err.message], fieldErrors: {} as Record<string, string[]> };
 }
 
-/** ------------------------------ Observability ctx --------------------------- */
 function obsCtx(req: Request) {
   const ctx = (req as any).context || {};
   const u = (req as any).user ?? (req.session as any)?.user ?? null;
   return { requestId: ctx.requestId, userId: u?.id ?? null, ip: req.ip };
 }
 
-/** ------------------------------ Session helpers --------------------------- */
 function rotateSession(req: Request): void {
   (req.session as any) = null;
 }
@@ -37,7 +42,6 @@ function setSessionUser(
   req.user = sessionUser as any;
 }
 
-/** ------------------------------ Helpers --------------------------- */
 function isAdult(ymd: string): boolean {
   const [y, m, d] = ymd.split('-').map((s) => Number(s));
   if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return false;
@@ -54,11 +58,14 @@ function isAdult(ymd: string): boolean {
   return age >= 18;
 }
 
-// ---------- Handlers
+function genOtp6(): string {
+  return crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+}
+
 export async function register(req: Request, res: Response): Promise<void> {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
-    logWarn('auth.register.invalid_input', { ...obsCtx(req) }); // ✅
+    logWarn('auth.register.invalid_input', { ...obsCtx(req) });
     res.status(400).json({ error: 'Invalid input', details: zDetails(parsed.error) });
     return;
   }
@@ -68,7 +75,7 @@ export async function register(req: Request, res: Response): Promise<void> {
 
   const existing = await User.findOne({ where: { email: { [Op.iLike]: normEmail } } });
   if (existing) {
-    logWarn('auth.register.email_in_use', { ...obsCtx(req) }); // ✅ (avoid logging raw email)
+    logWarn('auth.register.email_in_use', { ...obsCtx(req) });
     res.status(409).json({ error: 'Email in use' });
     return;
   }
@@ -85,7 +92,7 @@ export async function register(req: Request, res: Response): Promise<void> {
     updatedAt: now,
   } as any);
 
-  logInfo('auth.register.created', { ...obsCtx(req), newUserId: Number(user.id) }); // ✅
+  logInfo('auth.register.created', { ...obsCtx(req), newUserId: Number(user.id) });
 
   rotateSession(req);
   setSessionUser(req, {
@@ -101,17 +108,15 @@ export async function register(req: Request, res: Response): Promise<void> {
 export async function login(req: Request, res: Response): Promise<void> {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
-    logWarn('auth.login.invalid_input', { ...obsCtx(req) }); // ✅
+    logWarn('auth.login.invalid_input', { ...obsCtx(req) });
     res.status(400).json({ error: 'Invalid input', details: zDetails(parsed.error) });
     return;
   }
   const { email, password } = parsed.data;
   const normEmail = email.trim().toLowerCase();
 
-  // Case-insensitive equality via LOWER(email) = normEmail; no null-hash filter (we check below)
   const whereEmailEq = sqlWhere(fn('lower', col('email')), normEmail);
   const user = await User.findOne({
-
     where: whereEmailEq as any,
     attributes: ['id', 'email', 'role', 'dobVerified18', 'passwordHash', 'updatedAt', 'createdAt'],
     order: [
@@ -121,7 +126,7 @@ export async function login(req: Request, res: Response): Promise<void> {
   });
 
   if (!user) {
-    logWarn('auth.login.user_not_found', { ...obsCtx(req) }); // ✅
+    logWarn('auth.login.user_not_found', { ...obsCtx(req) });
     res.status(401).json({ error: 'Invalid credentials' });
     return;
   }
@@ -129,7 +134,6 @@ export async function login(req: Request, res: Response): Promise<void> {
   const hash = (user as any).passwordHash as string | null;
   let pass = !!hash && (await bcrypt.compare(password, hash));
 
-  // Dev-only escape hatch (ignored in production)
   if (!pass && process.env.NODE_ENV !== 'production') {
     const allowDev = String(process.env.ALLOW_DEV_ADMIN_LOGIN ?? '').toLowerCase() === 'true';
     const devEmail = String(process.env.ADMIN_DEV_EMAIL ?? 'admin@mineralcache.local').toLowerCase();
@@ -140,7 +144,7 @@ export async function login(req: Request, res: Response): Promise<void> {
   }
 
   if (!pass) {
-    logWarn('auth.login.bad_password', { ...obsCtx(req), userId: Number(user.id) }); // ✅
+    logWarn('auth.login.bad_password', { ...obsCtx(req), userId: Number(user.id) });
     res.status(401).json({ error: 'Invalid credentials' });
     return;
   }
@@ -153,18 +157,14 @@ export async function login(req: Request, res: Response): Promise<void> {
     email: user.email,
   });
 
-  logInfo('auth.login.success', { ...obsCtx(req), userId: Number(user.id) }); // ✅
+  logInfo('auth.login.success', { ...obsCtx(req), userId: Number(user.id) });
   res.status(200).json({ ok: true });
 }
 
-/**
- * /auth/me — returns a stable shape for gating UI:
- * { id, email, role, vendorId?, dobVerified18, createdAt }
- */
 export async function me(req: Request, res: Response): Promise<void> {
   const sess = (req.session as any)?.user;
   if (!sess?.id) {
-    logWarn('auth.me.unauthorized', { ...obsCtx(req) }); // ✅
+    logWarn('auth.me.unauthorized', { ...obsCtx(req) });
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
@@ -174,7 +174,7 @@ export async function me(req: Request, res: Response): Promise<void> {
   });
 
   if (!user) {
-    logWarn('auth.me.stale_session', { ...obsCtx(req), sessUserId: Number(sess.id) }); // ✅
+    logWarn('auth.me.stale_session', { ...obsCtx(req), sessUserId: Number(sess.id) });
     (req.session as any) = null;
     req.user = null as any;
     res.status(401).json({ error: 'Unauthorized' });
@@ -200,32 +200,29 @@ export async function me(req: Request, res: Response): Promise<void> {
   res.json(payload);
 }
 
-/**
- * /auth/verify-18 — uses your verify18Schema and DOB normalizer
- */
 export async function verify18(req: Request, res: Response): Promise<void> {
   const u = (req.session as any)?.user;
   if (!u?.id) {
-    logWarn('auth.verify18.unauthorized', { ...obsCtx(req) }); // ✅
+    logWarn('auth.verify18.unauthorized', { ...obsCtx(req) });
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
 
   const parsed = verify18Schema.safeParse(req.body);
   if (!parsed.success) {
-    logWarn('auth.verify18.invalid_input', { ...obsCtx(req), userId: Number(u.id) }); // ✅
+    logWarn('auth.verify18.invalid_input', { ...obsCtx(req), userId: Number(u.id) });
     res.status(400).json({ error: 'Invalid input', details: zDetails(parsed.error) });
     return;
   }
 
   const ymd = normalizeDob(parsed.data);
   if (!ymd) {
-    logWarn('auth.verify18.invalid_dob', { ...obsCtx(req), userId: Number(u.id) }); // ✅
+    logWarn('auth.verify18.invalid_dob', { ...obsCtx(req), userId: Number(u.id) });
     res.status(400).json({ error: 'INVALID_DOB' });
     return;
   }
   if (!isAdult(ymd)) {
-    logWarn('auth.verify18.age_restriction', { ...obsCtx(req), userId: Number(u.id) }); // ✅
+    logWarn('auth.verify18.age_restriction', { ...obsCtx(req), userId: Number(u.id) });
     res.status(400).json({ error: 'AGE_RESTRICTION' });
     return;
   }
@@ -236,14 +233,105 @@ export async function verify18(req: Request, res: Response): Promise<void> {
   (req.session as any) = { user: u };
   req.user = u;
 
-  logInfo('auth.verify18.verified', { ...obsCtx(req), userId: Number(u.id) }); // ✅
+  logInfo('auth.verify18.verified', { ...obsCtx(req), userId: Number(u.id) });
   res.json({ ok: true });
 }
 
 export async function logout(req: Request, res: Response): Promise<void> {
-  const prevId = (req.session as any)?.user?.id ?? null; // capture before rotate
+  const prevId = (req.session as any)?.user?.id ?? null;
   (req.session as any) = null;
   req.user = null as any;
-  logInfo('auth.logout', { ...obsCtx(req), userId: prevId }); // ✅
+  logInfo('auth.logout', { ...obsCtx(req), userId: prevId });
   res.status(204).end();
+}
+
+function lowerEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+export async function forgotPassword(req: Request, res: Response) {
+  const parsed = forgotPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn('auth.forgot.invalid_input', { ...obsCtx(req) });
+    res.status(400).json({ error: 'Invalid request' });
+    return;
+  }
+  const email = lowerEmail(parsed.data.email);
+
+  try {
+    const user = await User.findOne({
+      where: sqlWhere(fn('lower', col('email')), email),
+      attributes: ['id', 'email'],
+    });
+
+    const code = genOtp6();
+    const hash = crypto.createHash('sha256').update(code).digest('hex');
+    const ttlMs = 10 * 60 * 1000;
+    const expiresAt = new Date(Date.now() + ttlMs);
+
+    if (user) {
+      await PasswordReset.create({ userId: Number(user.id), codeHash: hash, expiresAt } as any);
+      try {
+        await sendOtpEmail({ to: { email: user.email, name: null }, code, minutes: 10 });
+      } catch {}
+      logInfo('auth.forgot.issued', { ...obsCtx(req), userId: Number(user.id) });
+    }
+
+    res.json({ ok: true });
+  } catch (e) {
+    logWarn('auth.forgot.error', { ...obsCtx(req), msg: String((e as any)?.message || e) });
+    res.json({ ok: true });
+  }
+}
+
+export async function resetPassword(req: Request, res: Response) {
+  const parsed = resetPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn('auth.reset.invalid_input', { ...obsCtx(req) });
+    res.status(400).json({ error: 'Invalid request' });
+    return;
+  }
+  const email = lowerEmail(parsed.data.email);
+  const code = parsed.data.code;
+  const newPassword = parsed.data.newPassword;
+
+  try {
+    const user = await User.findOne({
+      where: sqlWhere(fn('lower', col('email')), email),
+      attributes: ['id', 'email', 'passwordHash'],
+    });
+    if (!user) {
+      res.status(400).json({ error: 'Invalid code' });
+      return;
+    }
+
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+
+    const token = await PasswordReset.findOne({
+      where: {
+        userId: Number(user.id),
+        codeHash,
+        usedAt: { [Op.is]: null },
+        expiresAt: { [Op.gt]: new Date() },
+      },
+      order: [['id', 'DESC']],
+    });
+
+    if (!token) {
+      res.status(400).json({ error: 'Invalid or expired code' });
+      return;
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashed = await bcrypt.hash(newPassword, salt);
+
+    await user.update({ passwordHash: hashed });
+    await token.update({ usedAt: new Date() });
+
+    logInfo('auth.reset.success', { ...obsCtx(req), userId: Number(user.id) });
+    res.json({ ok: true });
+  } catch (e) {
+    logWarn('auth.reset.error', { ...obsCtx(req), msg: String((e as any)?.message || e) });
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
 }

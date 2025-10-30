@@ -5,14 +5,16 @@ import HomePage from './pages/HomePage';
 import LegalPage from "./pages/LegalPage.tsx";
 
 // Auth
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
+import LoginPage from './pages/auth/LoginPage';
+import RegisterPage from './pages/auth/RegisterPage';
 import AgeVerifyPage from './pages/auth/AgeVerifyPage';
+import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 
 // Public catalog
-import ProductCatalogList from './pages/products/ProductCatalogList.tsx';
+import ProductCatalogList from './pages/products/ProductCatalogList';
 import ProductDetail from './pages/products/ProductDetail';
-import CategoryPage from './pages/CategoryPage'; // ← NEW
+import CategoryPage from './pages/CategoryPage';
 
 // Auctions (public + vendor create)
 import AuctionsListPage from './pages/auctions/AuctionsListPage';
@@ -26,7 +28,7 @@ import VendorDashboard from './pages/vendor/VendorDashboard';
 import VendorMainPage from './pages/vendor/VendorMainPage';
 import VendorProductsPage from './pages/vendor/VendorProductsPage';
 import VendorOrdersPage from './pages/vendor/VendorOrdersPage';
-import VendorPayoutsPage from './pages/vendor/VendorPayoutsPage.tsx';
+import VendorPayoutsPage from './pages/vendor/VendorPayoutsPage';
 
 // Admin
 import AdminVendorApps from './pages/admin/AdminVendorApps';
@@ -42,7 +44,7 @@ import ProductEdit from './pages/products/ProductEdit';
 // Cart & Checkout
 import CartPage from './pages/cart/CartPage';
 import CheckoutPage from './pages/cart/CheckoutPage';
-import Receipt from './pages/orders/Receipt.tsx';
+import Receipt from './pages/orders/Receipt';
 
 // Orders
 import OrderConfirmationPage from './pages/orders/OrderConfirmationPage';
@@ -81,6 +83,8 @@ export default function AppRoutes(): React.ReactElement {
         <Route path="products/:id" element={<ProductDetail />} />
         <Route path="category/:slug" element={<CategoryPage />} />
         <Route path="/vendors/:slug" element={<VendorMainPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         {AUCTIONS_ENABLED && (
           <>

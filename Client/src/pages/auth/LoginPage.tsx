@@ -1,7 +1,7 @@
 // Client/src/pages/LoginPage.tsx
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuthStore } from '../stores/useAuthStore';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuthStore } from '../../stores/useAuthStore.ts';
 
 export default function LoginPage(): React.ReactElement {
   const navigate = useNavigate();
@@ -9,7 +9,7 @@ export default function LoginPage(): React.ReactElement {
   const next = params.get('next') || '/';
 
   const login = useAuthStore((s) => s.login);
-  const user  = useAuthStore((s) => s.user);
+  const user = useAuthStore((s) => s.user);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,7 +21,11 @@ export default function LoginPage(): React.ReactElement {
     if (user?.id) navigate(next, { replace: true });
   }, [user?.id, next, navigate]);
 
-  const canSubmit = useMemo(() => !busy && email.trim().length > 3 && password.length >= 8, [busy, email, password]);
+  const canSubmit = useMemo(() => {
+    const emailOk = email.trim().length > 3;
+    const passOk = password.length >= 8;
+    return !busy && emailOk && passOk;
+  }, [busy, email, password]);
 
   const onSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,7 +77,7 @@ export default function LoginPage(): React.ReactElement {
         />
 
         <label className="block text-sm mb-1" htmlFor="password">Password</label>
-        <div className="relative mb-3">
+        <div className="relative mb-2">
           <input
             id="password"
             type={showPassword ? 'text' : 'password'}
@@ -87,6 +91,7 @@ export default function LoginPage(): React.ReactElement {
               borderColor: 'var(--theme-border)',
               color: 'var(--theme-text)',
             }}
+            aria-describedby="password-help"
           />
           <button
             type="button"
@@ -119,32 +124,29 @@ export default function LoginPage(): React.ReactElement {
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
 
-        <div className="mt-3 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => navigate(`/register?next=${encodeURIComponent(next)}`)}
-            className="rounded-xl h-10 w-36 mt-12 px-3 py-2 font-semibold border transition-colors focus-visible:ring-2 focus-visible:ring-offset-2"
-            style={{
-              background: 'var(--theme-button)',
-              borderColor: 'var(--theme-border)',
-              color: 'var(--theme-text-white)',
-            }}
+        <div className="mt-6 flex items-center justify-between text-center text-base">
+          <Link
+            to={`/register?next=${encodeURIComponent(next)}`}
+            className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
           >
             Create Account
-          </button>
+          </Link>
 
-          <button
-            type="button"
-            onClick={() => navigate(`/`)}
-            className="rounded-xl h-10 w-36 mt-12 px-3 py-2 font-semibold border transition-colors focus-visible:ring-2 focus-visible:ring-offset-2"
-            style={{
-              background: 'var(--theme-button)',
-              borderColor: 'var(--theme-border)',
-              color: 'var(--theme-text-white)',
-            }}
+          <p className="mt-2">
+            <Link
+              to="/forgot-password"
+              className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
+            >
+              I forgot my password
+            </Link>
+          </p>
+
+          <Link
+            to="/"
+            className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
           >
             Back to Home
-          </button>
+          </Link>
         </div>
 
         <p className="mt-6 text-center text-[12px]" style={{ color: 'var(--theme-muted)' }}>

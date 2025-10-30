@@ -173,7 +173,7 @@ export default function OrderConfirmationPage(): React.ReactElement {
       <div className="flex items-center gap-3">
         <Link
           to="/products"
-          className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+          className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button-yellow)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
         >
           Continue shopping
         </Link>

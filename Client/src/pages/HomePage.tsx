@@ -176,7 +176,7 @@ export default function HomePage(): React.ReactElement {
                        focus-visible:ring-2 focus-visible:ring-offset-2
                        focus-visible:ring-[var(--theme-focus)]
                        focus-visible:ring-offset-[var(--theme-surface)]
-                       disabled:opacity-50"
+                       disabled:opacity-80 shadow-[0_2px_5px_var(--theme-shadow-categories)]"
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={!canPrev}
             aria-label="Previous page"
@@ -196,7 +196,7 @@ export default function HomePage(): React.ReactElement {
                        focus-visible:ring-2 focus-visible:ring-offset-2
                        focus-visible:ring-[var(--theme-focus)]
                        focus-visible:ring-offset-[var(--theme-surface)]
-                       disabled:opacity-50"
+                       disabled:opacity-80 shadow-[0_2px_5px_var(--theme-shadow-categories)]"
             onClick={() => setPage(p => p + 1)}
             disabled={!canNext}
             aria-label="Next page"
@@ -215,7 +215,7 @@ export default function HomePage(): React.ReactElement {
         <span
           role="text"
           aria-level={1}
-          className="block text-4xl md:text-6xl font-extrabold tracking-tight text-[var(--theme-text)] mt-12 md:mt-16 lg:mt-20"
+          className="block text-4xl md:text-6xl font-extrabold tracking-tight text-[var(--theme-text)] mt-2 md:mt-6 lg:mt-10"
         >
           Welcome to Mineral<span className="italic">Cache</span>
         </span>

@@ -116,7 +116,7 @@ export default function CartPage(): React.ReactElement {
     setState({ ...state, items: next });
     if (!dirty) {
       setDirty(true);
-      showFlash({ kind: 'info', text: 'Quantity updated. Click "Save Cart" before checkout.' });
+      showFlash({ kind: 'info', text: 'Quantity updated. Click "Update Cart" before checkout.' });
     }
   }
 
@@ -254,7 +254,7 @@ export default function CartPage(): React.ReactElement {
                 className="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-60"
                 style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
               >
-                {busy ? 'Saving…' : 'Save Cart'}
+                {busy ? 'Updating…' : 'Update Cart'}
               </button>
               <a
                 href="/checkout"

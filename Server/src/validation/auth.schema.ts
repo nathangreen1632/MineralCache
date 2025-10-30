@@ -1,5 +1,6 @@
 // Server/src/validation/auth.schema.ts
 import { z } from 'zod';
+import { Email } from './fields.js';
 
 // --------------------- Common fields ---------------------
 const email = z.email().min(3).max(254);
@@ -116,3 +117,12 @@ export const registerSchema = z.object({
   name: name.optional(),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: Email.max(320),
+});
+
+export const resetPasswordSchema = z.object({
+  email: Email.max(320),
+  code: z.string().min(6).max(6).regex(/^\d{6}$/),
+  newPassword: z.string().min(8).max(200),
+});

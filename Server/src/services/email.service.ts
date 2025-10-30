@@ -1,7 +1,13 @@
 import { Resend } from 'resend';
 import { AdminSettings } from '../models/adminSettings.model.js';
 
-type EmailKind = 'order_paid' | 'order_shipped' | 'order_delivered';
+type EmailKind =
+  | 'order_paid'
+  | 'order_shipped'
+  | 'order_delivered'
+  | 'bid_placed'
+  | 'bid_leading'
+  | 'bid_won';
 
 export type EmailAddress = { name?: string | null; email: string };
 
@@ -12,6 +18,24 @@ export type OrderEmailContext = {
   itemsBrief?: string;
   trackingUrl?: string | null;
   carrier?: string | null;
+  subtotalCents?: number | null;
+  shippingCents?: number | null;
+  taxCents?: number | null;
+  totalCents?: number | null;
+};
+
+export type OtpContext = {
+  to: EmailAddress;
+  code: string;
+  minutes: number;
+};
+
+export type BidEmailContext = {
+  to: EmailAddress;
+  auctionTitle: string;
+  amountCents: number;
+  productSlug?: string | null;
+  auctionId?: number | null;
 };
 
 function emailEnabled(): boolean {
@@ -26,75 +50,72 @@ function getResend(): Resend | null {
 
 async function getBranding() {
   const row = await AdminSettings.findOne({ order: [['id', 'ASC']] });
-  const brand = row?.brandName || 'Mineral Cache';
-  const fromEmail = row?.emailFrom || 'no-reply@mineralcache.local';
+  const brand = row?.brandName || process.env.BRAND_NAME || 'Mineral Cache';
+  const fromEmail = row?.emailFrom || process.env.EMAIL_FROM || 'no-reply@mineralvendors.com';
   return { brand, fromEmail };
 }
 
-function subjectFor(kind: EmailKind, brand: string, orderNumber?: string | null): string {
-  if (kind === 'order_paid') return `[${brand}] Order confirmed${orderNumber ? ` #${orderNumber}` : ''}`;
-  if (kind === 'order_shipped') return `[${brand}] Your order shipped${orderNumber ? ` #${orderNumber}` : ''}`;
-  return `[${brand}] Order delivered${orderNumber ? ` #${orderNumber}` : ''}`;
+function formatFromHeader(brand: string, fromEmail: string) {
+  return brand + ' <' + fromEmail + '>';
 }
 
-function htmlFor(kind: EmailKind, brand: string, ctx: OrderEmailContext): string {
-  const orderLine = ctx.orderNumber ? `Order #${ctx.orderNumber}` : `Order ID ${ctx.orderId}`;
-  const list = ctx.itemsBrief || 'Your items are on the way.';
-  let extra = '';
+function usd(cents: number | null | undefined) {
+  const n = typeof cents === 'number' ? cents : 0;
+  return '$' + (n / 100).toFixed(2);
+}
+
+function subjectFor(kind: EmailKind, brand: string, orderNumber: string | null) {
+  const suffix = orderNumber ? ' #' + orderNumber : '';
+  if (kind === 'order_paid') return brand + ' receipt' + suffix;
+  if (kind === 'order_shipped') return brand + ' order shipped' + suffix;
+  if (kind === 'order_delivered') return brand + ' order delivered' + suffix;
+  if (kind === 'bid_placed') return brand + ' bid placed';
+  if (kind === 'bid_leading') return brand + ' you are the leading bidder';
+  if (kind === 'bid_won') return brand + ' you won the auction';
+  return brand;
+}
+
+function htmlFor(kind: EmailKind, brand: string, ctx: OrderEmailContext) {
+  const head =
+    '<div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:#111;line-height:1.5"><h2 style="margin:0 0 12px">' +
+    brand +
+    '</h2>';
+  const foot = '<p style="margin-top:16px;color:#555">Thanks for shopping with ' + brand + '.</p></div>';
+
+  if (kind === 'order_paid') {
+    const parts: string[] = [];
+    const lines: string[] = [];
+    if (ctx.itemsBrief) lines.push('<div style="margin:8px 0">' + ctx.itemsBrief + '</div>');
+    if (typeof ctx.subtotalCents === 'number') parts.push('<div>Subtotal: <strong>' + usd(ctx.subtotalCents) + '</strong></div>');
+    if (typeof ctx.shippingCents === 'number') parts.push('<div>Shipping: <strong>' + usd(ctx.shippingCents) + '</strong></div>');
+    if (typeof ctx.taxCents === 'number') parts.push('<div>Tax: <strong>' + usd(ctx.taxCents) + '</strong></div>');
+    if (typeof ctx.totalCents === 'number') parts.push('<div>Total: <strong>' + usd(ctx.totalCents) + '</strong></div>');
+    const totals = parts.length ? '<div style="margin-top:8px">' + parts.join('') + '</div>' : '';
+    const orderTxt = ctx.orderNumber ? ' for order #' + ctx.orderNumber : '';
+    return head + '<p style="margin:0 0 8px">Your payment was received' + orderTxt + '.</p>' + lines.join('') + totals + foot;
+  }
 
   if (kind === 'order_shipped') {
-    const lines: string[] = [];
-    if (ctx.carrier) lines.push(`Carrier: ${ctx.carrier}`);
-    if (ctx.trackingUrl) lines.push(`Tracking: <a href="${ctx.trackingUrl}">${ctx.trackingUrl}</a>`);
-    if (lines.length > 0) extra = `<p>${lines.join('<br/>')}</p>`;
+    const t = ctx.trackingUrl ? '<div>Tracking: <a href="' + ctx.trackingUrl + '">' + ctx.trackingUrl + '</a></div>' : '';
+    const orderTxt = ctx.orderNumber ? ' #' + ctx.orderNumber : '';
+    const items = ctx.itemsBrief ? '<div>' + ctx.itemsBrief + '</div>' : '';
+    return head + '<p style="margin:0 0 8px">Your order' + orderTxt + ' has shipped.</p>' + items + t + foot;
   }
 
-  return `
-    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5">
-      <h2>${brand}</h2>
-      <p><strong>${orderLine}</strong></p>
-      <p>${list}</p>
-      ${extra}
-      <p>Thank you for shopping with ${brand}.</p>
-    </div>
-  `;
-}
-
-/** Formats the RFC5322 "From" header like: "Brand Name <no-reply@domain.com>" */
-function formatFromHeader(brand: string, fromEmail: string): string {
-  return `${brand} <${fromEmail}>`;
-}
-
-/** Single send path (Resend) with graceful fallbacks and logging */
-async function deliver(to: EmailAddress, fromHeader: string, subject: string, html: string): Promise<void> {
-  if (!emailEnabled()) {
-    // eslint-disable-next-line no-console
-    console.log('[email.disabled]', { to: to.email, subject });
-    return;
+  if (kind === 'order_delivered') {
+    const orderTxt = ctx.orderNumber ? ' #' + ctx.orderNumber : '';
+    const items = ctx.itemsBrief ? '<div>' + ctx.itemsBrief + '</div>' : '';
+    return head + '<p style="margin:0 0 8px">Your order' + orderTxt + ' was delivered.</p>' + items + foot;
   }
 
+  return head + '<p style="margin:0">Notification</p>' + foot;
+}
+
+async function deliver(to: EmailAddress, from: string, subject: string, html: string) {
+  if (!emailEnabled()) return;
   const resend = getResend();
-  if (!resend) {
-    // eslint-disable-next-line no-console
-    console.warn('[email.error] RESEND_API_KEY not set; email suppressed', { to: to.email, subject });
-    return;
-  }
-
-  try {
-    const result = await resend.emails.send({
-      from: fromHeader,
-      to: [to.email],
-      subject,
-      html,
-    });
-
-    // eslint-disable-next-line no-console
-    console.log('[email.sent]', { to: to.email, subject, id: (result as any)?.id ?? null });
-  } catch (err) {
-    // Do not blow up order flows if email fails
-    // eslint-disable-next-line no-console
-    console.warn('[email.error] failed to send', { to: to.email, subject, err });
-  }
+  if (!resend) return;
+  await resend.emails.send({ from, to: [to.email], subject, html });
 }
 
 export async function sendOrderEmail(kind: EmailKind, ctx: OrderEmailContext): Promise<void> {
@@ -102,6 +123,56 @@ export async function sendOrderEmail(kind: EmailKind, ctx: OrderEmailContext): P
   const subject = subjectFor(kind, brand, ctx.orderNumber ?? null);
   const html = htmlFor(kind, brand, ctx);
   const fromHeader = formatFromHeader(brand, fromEmail);
-
   await deliver(ctx.buyer, fromHeader, subject, html);
+}
+
+export async function sendOtpEmail(ctx: OtpContext): Promise<void> {
+  const { brand, fromEmail } = await getBranding();
+  const fromHeader = formatFromHeader(brand, fromEmail);
+  const subject = brand + ' password reset code';
+  const html =
+    '<div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:#111;line-height:1.5">' +
+    '<h2 style="margin:0 0 12px">' +
+    brand +
+    '</h2>' +
+    '<p style="margin:0 0 8px">Use this code to reset your password:</p>' +
+    '<div style="font-size:24px;font-weight:700;letter-spacing:2px">' +
+    ctx.code +
+    '</div>' +
+    '<p style="margin:12px 0 0;color:#555">This code expires in ' +
+    String(ctx.minutes) +
+    ' minutes.</p>' +
+    '</div>';
+  await deliver(ctx.to, fromHeader, subject, html);
+}
+
+export async function sendBidEmail(kind: 'bid_placed' | 'bid_leading' | 'bid_won', ctx: BidEmailContext): Promise<void> {
+  const { brand, fromEmail } = await getBranding();
+  const fromHeader = formatFromHeader(brand, fromEmail);
+  const subject = subjectFor(kind as EmailKind, brand, null);
+  const amount = usd(ctx.amountCents);
+  let link: string | null = null;
+  if (ctx.productSlug) link = 'https://mineralcache.com/auctions/' + ctx.productSlug;
+  else if (ctx.auctionId) link = 'https://mineralcache.com/auction/' + String(ctx.auctionId);
+  const linkHtml = link ? '<p><a href="' + link + '">View auction</a></p>' : '';
+  let lead = '';
+  if (kind === 'bid_placed') lead = 'Your bid was placed.';
+  if (kind === 'bid_leading') lead = 'You are the leading bidder.';
+  if (kind === 'bid_won') lead = 'You won the auction.';
+  const html =
+    '<div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:#111;line-height:1.5">' +
+    '<h2 style="margin:0 0 12px">' +
+    brand +
+    '</h2>' +
+    '<p style="margin:0 0 8px">' +
+    lead +
+    '</p>' +
+    '<div>' +
+    ctx.auctionTitle +
+    ' — <strong>' +
+    amount +
+    '</strong></div>' +
+    linkHtml +
+    '</div>';
+  await deliver(ctx.to, fromHeader, subject, html);
 }

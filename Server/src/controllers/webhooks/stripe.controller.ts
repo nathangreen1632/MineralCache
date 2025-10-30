@@ -27,6 +27,7 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
     const eventId = String((event as any)?.id || '');
     const type = String(event.type);
 
+    let createdRow = true;
     try {
       await WebhookEvent.create({
         source,
@@ -45,14 +46,16 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
         res.json({ received: true, duplicate: true });
         return;
       }
-      throw err;
+      log.error('webhook.persist_failed', { source, type, eventId, error: msg });
+      res.status(202).json({ received: true });
+      return;
     }
 
     obs.stripeWebhook(req, type, eventId);
 
     const sequelize = db.instance();
     if (!sequelize) {
-      await WebhookEvent.update({ status: 'error' }, { where: { source, eventId } });
+      if (createdRow) await WebhookEvent.update({ status: 'error' }, { where: { source, eventId } });
       res.status(500).json({ error: 'DB not initialized' });
       return;
     }
@@ -157,19 +160,27 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
               const itemsBrief = items
                 .map((i) => {
                   const qty = i.quantity;
-                  return `• ${i.title} ×${qty}`;
+                  return '• ' + i.title + ' ×' + qty;
                 })
                 .join('<br/>');
+
+              const ord = await Order.findByPk(paidOrderId, {
+                attributes: ['subtotalCents', 'shippingCents', 'taxCents', 'totalCents'],
+              });
 
               await sendOrderEmail('order_paid', {
                 orderId: paidOrderId,
                 orderNumber: paidOrderNumber,
                 buyer: { email: buyer.email, name: (buyer as any)?.fullName ?? null },
                 itemsBrief,
+                subtotalCents: Number((ord as any)?.subtotalCents ?? 0),
+                shippingCents: Number((ord as any)?.shippingCents ?? 0),
+                taxCents: Number((ord as any)?.taxCents ?? 0),
+                totalCents: Number((ord as any)?.totalCents ?? 0),
               });
             }
           } catch (err) {
-            console.warn('[webhook.email.order_paid] failed', err);
+            log.warn('webhook.email.order_paid_failed', { error: String((err as any)?.message || err) });
           }
         }
 

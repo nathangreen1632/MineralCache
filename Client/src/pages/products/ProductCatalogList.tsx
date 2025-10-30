@@ -565,7 +565,7 @@ export default function ProductCatalogList(): React.ReactElement {
                   tabIndex={vendorSlug ? 0 : -1}
                   onClick={onCardClick}
                   onKeyDown={onCardKeyDown}
-                  className={`rounded-xl border p-3 hover:shadow ${vendorSlug ? 'cursor-pointer' : ''}`}
+                  className={`rounded-xl border p-3 hover:shadow ${vendorSlug ? 'cursor-pointer shadow-[0_2px_5px_var(--theme-shadow-carousel)]' : ''}`}
                   style={card}
                   aria-label={vendorSlug ? `View vendor storefront: ${vendorLabel}` : undefined}
                   title={vendorSlug ? `View vendor: ${vendorLabel}` : undefined}
@@ -600,7 +600,7 @@ export default function ProductCatalogList(): React.ReactElement {
                       {onSaleNow && (
                         <span
                           className="absolute left-3 top-3 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold shadow"
-                          style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
+                          style={{ background: 'var(--theme-button-yellow)', color: 'var(--theme-text-black)' }}
                           aria-label="On sale"
                         >
                           On Sale

@@ -71,7 +71,7 @@ export default function Receipt(): React.ReactElement {
   const tax = (o as any).taxCents ?? 0;
 
   return (
-    <section className="mx-auto max-w-3xl px-6 py-14 space-y-6 print:px-4 print:py-8">
+    <section className="mx-auto max-w-6xl px-6 py-14 space-y-6 print:px-4 print:py-8">
       {/* Header + actions (hidden when printing) */}
       <div className="flex items-center justify-between print:hidden">
         <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Receipt</h1>
