@@ -67,7 +67,7 @@ export default function AutoCarousel({
       <section
         className={[
           // container
-          'relative w-full overflow-hidden rounded-2xl border shadow-[0_10px_30px_var(--theme-shadow)] mt-8 sm:mt-12',
+          'relative w-full overflow-hidden rounded-2xl border shadow-[0_6px_40px_var(--theme-shadow-carousel)] mt-8 sm:mt-12',
           'border-[var(--theme-border)] bg-[var(--theme-card)]',
           heightClass,
         ].join(' ')}
