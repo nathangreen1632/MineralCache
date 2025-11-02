@@ -3,9 +3,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import AutoCarousel from '../components/media/AutoCarousel';
 import ProductCard from '../components/products/ProductCard';
 import { getFeaturedPhotos, getOnSaleProducts } from '../api/public';
-import CategoriesRow from '../components/categories/CategoriesRow'; // ← NEW
+import CategoriesRow from '../components/categories/CategoriesRow';
+import logoWords from '../assets/mc_logo_words.webp';
 
-const PAGE_SIZE = 24;
+const PAGE_SIZE = 8;
 
 export default function HomePage(): React.ReactElement {
   const [photos, setPhotos] = useState<string[] | null>(null);
@@ -13,7 +14,6 @@ export default function HomePage(): React.ReactElement {
     useState<Awaited<ReturnType<typeof getOnSaleProducts>> | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // Pager state
   const [page, setPage] = useState(1);
   const effectiveLimit = page * PAGE_SIZE;
 
@@ -32,7 +32,6 @@ export default function HomePage(): React.ReactElement {
     return Array.from({ length: 6 }, (_, i) => `sk-${base}-${i}`);
   }, []);
 
-  // Fetch featured photos once
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -49,7 +48,6 @@ export default function HomePage(): React.ReactElement {
     return () => { alive = false; };
   }, []);
 
-  // Fetch on-sale products whenever the page/limit changes
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -66,7 +64,6 @@ export default function HomePage(): React.ReactElement {
     return () => { alive = false; };
   }, [effectiveLimit]);
 
-  // ---------- Hero ----------
   let heroContent: React.ReactNode;
   if (photos === null) {
     heroContent = (
@@ -99,12 +96,12 @@ export default function HomePage(): React.ReactElement {
         intervalMs={5000}
         heightClass="h-[24rem] md:h-[32rem] lg:h-[40rem]"
         ctaHref="/products"
-        ctaLabel="Shop now"
+        ctaLabel="SHOP NOW"
+        ctaClassName="animate-bounce-3s"
       />
     );
   }
 
-  // ---------- On Sale grid + pager ----------
   const visibleOnSale = useMemo(() => {
     if (!onSale) return [];
     const start = (page - 1) * PAGE_SIZE;
@@ -156,7 +153,6 @@ export default function HomePage(): React.ReactElement {
               imageUrl={p.imageUrl || undefined}
               price={p.price}
               salePrice={p.salePrice ?? undefined}
-              // NEW: pass vendor info so the card can render the vendor link
               vendorSlug={
                 (p as any).vendorSlug ??
                 (p as any).vendor?.slug ??
@@ -166,7 +162,6 @@ export default function HomePage(): React.ReactElement {
           ))}
         </div>
 
-        {/* Pager */}
         <div className="mt-4 flex items-center justify-between">
           <button
             type="button"
@@ -210,31 +205,24 @@ export default function HomePage(): React.ReactElement {
 
   return (
     <div className="space-y-12">
-      {/* Page header */}
-      <header className="mt-2 text-center">
-        <span
-          role="text"
-          aria-level={1}
-          className="block text-4xl md:text-6xl font-extrabold tracking-tight text-[var(--theme-text)] mt-2 md:mt-6 lg:mt-10"
-        >
-          Welcome to Mineral<span className="italic">Cache</span>
-        </span>
-        <span className="block mt-1 text-md md:text-2xl text-[var(--theme-muted)]">
-          Buy. Sell. Discover. The Mineral and Fossil Marketplace.
-        </span>
+      <header className="mt-1 flex justify-center">
+        <img
+          src={logoWords}
+          alt="MineralCache — Buy. Sell. Discover. The Mineral and Fossil Marketplace."
+          className="mx-auto h-auto w-full max-w-[900px] rounded-2xl mt-8 sm:mt-2"
+          style={{ filter: 'drop-shadow(0 1px 4px var(--theme-shadow-categories))' }}
+        />
       </header>
 
-      {/* Hero carousel */}
       <section>{heroContent}</section>
 
-      {/* NEW: Categories row under the carousel */}
       <section>
         <CategoriesRow />
       </section>
 
       <section className="space-y-3 mb-12">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-extrabold text-[var(--theme-text)]">On sale</h2>
+          <h2 className="text-2xl font-extrabold text-[var(--theme-text)]">On Sale</h2>
           <a
             href="/products"
             className="text-sm underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
