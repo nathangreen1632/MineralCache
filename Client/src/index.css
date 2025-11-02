@@ -13,7 +13,7 @@
 
     /* Extended palette (complements, lightened for UI) */
     --c-f: #EAE9EC;
-    --c-g: #EEDCE9;
+    --c-g: #4DA167;
     --c-h: #E9D7DA;
     --c-i: #D6F4F5;
     --c-j: #38302E;
@@ -45,6 +45,7 @@
     --theme-shadow-categories: var(--c-e);
     --theme-shadow-onSale: var(--c-e);
     --theme-text-black: var(--c-p);
+    --theme-text-dark: var(--c-b);
 
     /* buttons */
     --theme-button: var(--c-e);
@@ -129,6 +130,7 @@
     --theme-shadow-categories: var(--c-o);
     --theme-shadow-onSale: rgba(204, 218, 209, 0.25);
     --theme-text-black: var(--c-p);
+    --theme-text-dark: var(--c-a);
 
     /* buttons */
     --theme-button: var(--c-a);
@@ -325,4 +327,21 @@ html[data-theme="dark"] {
 
   --theme-scrollbar-track: var(--theme-bg);
   --theme-scrollbar-thumb: var(--theme-accent);
+}
+
+@layer keyframes {
+  @keyframes mc-bounce-3s {
+    0%, 100% { transform: translateY(0); }
+    3% { transform: translateY(-0.5rem); }
+    6% { transform: translateY(0); }
+    9% { transform: translateY(-0.25rem); }
+    12% { transform: translateY(0); }
+  }
+}
+
+@layer utilities {
+  .animate-bounce-3s {
+    animation: mc-bounce-3s 3s ease-in-out infinite;
+    will-change: transform;
+  }
 }
