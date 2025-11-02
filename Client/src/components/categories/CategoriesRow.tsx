@@ -79,7 +79,7 @@ export default function CategoriesRow(): React.ReactElement {
       className="mx-auto max-w-8xl px-6 mt-8"
     >
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xl font-bold text-[var(--theme-text)]">Categories</h2>
+        <h2 className="text-2xl font-extrabold text-[var(--theme-text)]">Categories</h2>
         <button
           type="button"
           aria-pressed={paused}
@@ -118,7 +118,7 @@ export default function CategoriesRow(): React.ReactElement {
                   loading="lazy"
                 />
               </div>
-              <div className="mt-2 text-center font-semibold text-[var(--theme-text)]">
+              <div className="mt-2 text-lg text-center font-semibold text-[var(--theme-text)]">
                 {cat.name}
               </div>
             </Link>
