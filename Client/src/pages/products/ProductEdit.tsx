@@ -142,7 +142,7 @@ export default function ProductEdit(): React.ReactElement {
   }
 
   return (
-    <section className="mx-auto max-w-3xl px-6 py-14 grid gap-10">
+    <section className="mx-auto max-w-6xl px-6 py-14 grid gap-10">
       <div>
         <h1 className="mb-4 text-2xl font-semibold text-[var(--theme-text)]">Edit Product</h1>
         <ProductForm
