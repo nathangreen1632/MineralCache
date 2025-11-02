@@ -358,7 +358,7 @@ export default function ProductForm({
       {/* NEW: Category (required) */}
       <div className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-4">
         <label htmlFor={ids.categoryId} className="block text-sm font-semibold mb-1">
-          Category <span aria-hidden="true">*</span>
+          Category <span className="text-[var(--theme-warning)]" aria-hidden="true">*</span>
         </label>
         <select
           id={ids.categoryId}
