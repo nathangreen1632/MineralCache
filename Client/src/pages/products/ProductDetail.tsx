@@ -164,7 +164,7 @@ export default function ProductDetail(): React.ReactElement {
         {onSaleNow && (
           <span
             className="absolute left-3 top-3 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold shadow"
-            style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
+            style={{ background: 'var(--theme-button-yellow)', color: 'var(--theme-text-black)' }}
             aria-label="On sale"
           >
             On Sale
