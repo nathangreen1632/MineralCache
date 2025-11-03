@@ -194,15 +194,6 @@ export async function getAuction(req: Request, res: Response): Promise<void> {
   res.json({ data });
 }
 
-export async function createAuction(req: Request, res: Response): Promise<void> {
-  if (!ensureAuthed(req, res)) return;
-  if (req.user?.role !== 'vendor' && req.user?.role !== 'admin') {
-    res.status(403).json({ error: 'Forbidden' });
-    return;
-  }
-  res.status(201).json({ id: null });
-}
-
 export async function placeBid(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
   if (!ensureAdult(req, res)) return;
