@@ -23,11 +23,21 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../stores/useAuthStore';
 import ThemeToggle from './ThemeToggle';
+import mcLogo from '../assets/mc_logo_256.webp';
 
 function BrandName({ className }: Readonly<{ className?: string }>) {
   return (
-    <span className={className}>
-      Mineral<span className="italic">Cache</span>
+    <span className={['inline-flex items-center gap-2', className || ''].join(' ')}>
+      <img
+        src={mcLogo}
+        alt=""
+        aria-hidden="true"
+        className="h-7 w-7 rounded-lg"
+        style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
+      />
+      <span>
+        Mineral<span className="italic">Cache</span>
+      </span>
     </span>
   );
 }
@@ -154,11 +164,9 @@ function NavContent(): React.ReactElement {
       ) : (
         <SideNavLink to="/products" end label="Shop" Icon={Store} />
       )}
-
       {AUCTIONS_ENABLED && isAuthed && (
         <SideNavLink to="/auctions" end label="Auctions" Icon={ClipboardList} />
       )}
-
       {isVendor && (
         <NavGroup baseTo="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard}>
           <SideNavLink to="/vendor/products" label="Create Auction" Icon={Store} />
@@ -180,15 +188,10 @@ function NavContent(): React.ReactElement {
           <SideNavLink to="/admin/settings" label="Settings" Icon={Settings} />
         </NavGroup>
       )}
-
       <SideNavLink to="/cart" label="Cart" Icon={ShoppingCart} />
-
       {isAuthed && <SideNavLink to="/checkout" label="Checkout" Icon={CreditCard} />}
-
       {isAuthed && <SideNavLink to="/account/orders" label="My Orders" Icon={Package} />}
-
       <SideNavLink to="/legal" end label="Legal" Icon={FileText} />
-
       {!isAuthed ? (
         <>
           <SideNavLink to="/login" label="Sign in" Icon={LogIn} />
@@ -242,7 +245,7 @@ export default function Navbar(): React.ReactElement {
       <button
         ref={buttonRef}
         type="button"
-        className="hidden max-[1025px]:inline-flex fixed top-3 left-3 z-50 items-center rounded-xl px-3 py-2
+        className="hidden max-[1025px]:inline-flex fixed top-2 left-2 z-50 items-center rounded-2xl px-3 py-2
                    bg-[var(--theme-button)] text-[var(--theme-text-white)]
                    hover:bg-[var(--theme-button-hover)]
                    focus-visible:ring-2 focus-visible:ring-offset-2
@@ -254,7 +257,7 @@ export default function Navbar(): React.ReactElement {
         aria-controls="mobile-nav-panel"
         onClick={() => setOpen((v) => !v)}
       >
-        {open ? <X className="h-2 w-2" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
+        {open ? <X className="h-2 w-2" aria-hidden="true" /> : <Menu className="h-3 w-3" aria-hidden="true" />}
       </button>
 
       {open && (
@@ -266,7 +269,7 @@ export default function Navbar(): React.ReactElement {
             role="text"
             aria-modal="true"
             aria-labelledby="mobile-nav-title"
-            className="absolute top-3 left-3 right-3 max-h-[85vh] overflow-y-auto
+            className="absolute top-3 left-2 right-2 max-h-[85vh] overflow-y-auto
                        rounded-2xl border border-[var(--theme-border)]
                        bg-[var(--theme-surface)] shadow-[0_10px_30px_var(--theme-shadow)] p-4"
           >

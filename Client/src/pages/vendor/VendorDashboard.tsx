@@ -1,5 +1,5 @@
 // Client/src/pages/VendorDashboard.tsx
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   createStripeOnboardingLink,
   getMyVendorFull,
@@ -163,7 +163,7 @@ export default function VendorDashboard() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 space-y-6">
+    <div className="mx-auto max-w-8xl px-4 py-8 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold" style={mutedText}>
