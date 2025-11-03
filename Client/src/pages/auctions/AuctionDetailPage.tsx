@@ -8,12 +8,12 @@ import {
   placeBid,
   watchAuction,
   unwatchAuction,
-  buyNow, // ✅ ADDED
+  buyNow,
   type AuctionDto,
   type PlaceBidRes,
 } from '../../api/auctions';
 import Countdown from '../../components/auctions/Countdown';
-import AuctionActions from '../../components/auctions/AuctionActions'; // ✅ ADDED
+import AuctionActions from '../../components/auctions/AuctionActions';
 
 function cents(v: number | null | undefined): string {
   let n = 0;
@@ -27,11 +27,9 @@ export default function AuctionDetailPage(): React.ReactElement | null {
   const params = useParams();
   const id = Number(params?.id ?? 0);
 
-  // router helpers
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ✅ Accept preload from <Link state={{ imageUrl, productTitle, vendorSlug }}>
   const preload = (location.state as {
     imageUrl?: string | null;
     productTitle?: string | null;
@@ -41,7 +39,6 @@ export default function AuctionDetailPage(): React.ReactElement | null {
   const [auction, setAuction] = useState<AuctionDto | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(preload?.imageUrl ?? null);
   const [productTitle, setProductTitle] = useState<string | null>(preload?.productTitle ?? null);
-  // ✅ NEW: vendor slug state (optional)
   const [vendorSlug, setVendorSlug] = useState<string | null>(preload?.vendorSlug ?? null);
 
   const [minNext, setMinNext] = useState<number | null>(null);
@@ -50,9 +47,8 @@ export default function AuctionDetailPage(): React.ReactElement | null {
   const [amount, setAmount] = useState<string>('');
   const [proxy, setProxy] = useState<string>('');
   const [watching, setWatching] = useState(false);
-  const [buyBusy, setBuyBusy] = useState(false); // ✅ ADDED
+  const [buyBusy, setBuyBusy] = useState(false);
 
-  // Back button handler with safe fallback
   const onBack = useCallback(() => {
     if (window.history.length > 1) navigate(-1);
     else navigate('/auctions', { replace: true });
@@ -72,12 +68,12 @@ export default function AuctionDetailPage(): React.ReactElement | null {
       .then((res) => {
         if (!isMounted) return;
 
-        if ((res)?.error) {
+        if (res?.error) {
           setAuction(null);
           return;
         }
 
-        const payload = (res).data as {
+        const payload = res.data as {
           data?: AuctionDto & { imageUrl?: string | null; productTitle?: string | null };
         } | null | undefined;
 
@@ -85,12 +81,10 @@ export default function AuctionDetailPage(): React.ReactElement | null {
           setAuction(payload.data);
           setMinNext(null);
 
-          // Pick up extra fields if the server provides them
           const extra = payload.data as any;
           if (typeof extra.imageUrl === 'string') setImageUrl(extra.imageUrl);
           if (typeof extra.productTitle === 'string') setProductTitle(extra.productTitle);
 
-          // ✅ Try to derive vendor slug from common shapes (optional, non-breaking)
           if (!vendorSlug) {
             const vslug =
               extra?.vendorSlug ??
@@ -110,9 +104,8 @@ export default function AuctionDetailPage(): React.ReactElement | null {
     return () => {
       isMounted = false;
     };
-  }, [id]); // intentionally not including vendorSlug to avoid loop
+  }, [id]);
 
-  // sockets: join room and listen for updates
   useEffect(() => {
     if (!id) return;
 
@@ -177,11 +170,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
 
       const amt = Math.round(Number(amount) * 100);
       let prox: number | undefined = undefined;
-
-      if (proxy.trim().length > 0) {
-        prox = Math.round(Number(proxy) * 100);
-      }
-
+      if (proxy.trim().length > 0) prox = Math.round(Number(proxy) * 100);
       if (!Number.isFinite(amt) || amt <= 0) {
         showFlash({ kind: 'error', text: 'Enter a valid bid amount.' });
         return;
@@ -191,22 +180,51 @@ export default function AuctionDetailPage(): React.ReactElement | null {
       try {
         const apiRes = await placeBid({ auctionId: auction.id, amountCents: amt, maxProxyCents: prox });
 
-        if ((apiRes as any)?.error) {
-          showFlash({ kind: 'error', text: 'Bid failed.' });
-          // no-op
-        } else {
-          const body = (apiRes as any).data as PlaceBidRes | null | undefined;
-          if (body?.data) {
-            setAmount('');
-            setProxy('');
-            setMinNext(body.data.minNextBidCents);
-            showFlash({
-              kind: body.data.youAreLeading ? 'success' : 'info',
-              text: body.data.youAreLeading ? 'You are leading!' : 'Bid accepted.',
-            });
+        const data: any = (apiRes as any)?.data ?? null;
+        const httpErr = (apiRes as any)?.error ?? null;
+
+        if (httpErr || (data?.error && !data.data)) {
+          const hint =
+            Number.isFinite(data?.minNextBidCents) ? Number(data.minNextBidCents) :
+              (() => {
+                const s = String(data?.error ?? httpErr ?? '');
+                const m = RegExp(/(\d[\d,]*(?:\.\d{1,2})?)/).exec(s);
+                if (!m) return null;
+                const num = Number(String(m[1]).replace(/,/g, ''));
+                if (!Number.isFinite(num)) return null;
+                return s.includes('$') || String(m[1]).includes('.') ? Math.round(num * 100) : Math.round(num);
+              })();
+
+          if (hint && Number.isFinite(hint)) {
+            setMinNext(hint);
+            showFlash({ kind: 'error', text: `Bid too low. Next minimum is ${cents(hint)}.` });
           } else {
             showFlash({ kind: 'error', text: 'Bid failed.' });
           }
+          return;
+        }
+
+        const body = data as PlaceBidRes | null | undefined;
+        if (body?.data) {
+          setAmount('');
+          setProxy('');
+          setMinNext(body.data.minNextBidCents);
+          setAuction(prev => {
+            if (!prev) return prev;
+            const nextHigh = Number(body.data.highBidCents ?? prev.highBidCents ?? 0);
+            if (typeof prev.highBidCents === 'number' && nextHigh < prev.highBidCents) return prev;
+            return {
+              ...prev,
+              highBidCents: nextHigh,
+              highBidUserId: Number(body.data.leaderUserId ?? prev.highBidUserId ?? 0),
+            };
+          });
+          showFlash({
+            kind: body.data.youAreLeading ? 'success' : 'info',
+            text: body.data.youAreLeading ? 'You are leading!' : 'Bid accepted.',
+          });
+        } else {
+          showFlash({ kind: 'error', text: 'Bid failed.' });
         }
       } catch {
         showFlash({ kind: 'error', text: 'Bid failed. Are you signed in and 18+ verified?' });
@@ -235,7 +253,6 @@ export default function AuctionDetailPage(): React.ReactElement | null {
     }
   }, [auction, watching, showFlash]);
 
-  // ✅ ADDED: Buy Now handler
   const onBuyNow = useCallback(async () => {
     if (!auction || auction.status !== 'live') return;
     const ok = window.confirm('Buy this item now? This will end the auction immediately.');
@@ -255,10 +272,9 @@ export default function AuctionDetailPage(): React.ReactElement | null {
         return;
       }
       showFlash({ kind: 'success', text: 'Purchased via Buy Now.' });
-      // Refresh details to reflect final state
       const reload = await getAuction(auction.id);
-      if (!(reload)?.error) {
-        const payload = (reload).data as { data?: AuctionDto } | null | undefined;
+      if (!reload?.error) {
+        const payload = reload.data as { data?: AuctionDto } | null | undefined;
         if (payload?.data) setAuction(payload.data);
       }
     } finally {
@@ -286,22 +302,17 @@ export default function AuctionDetailPage(): React.ReactElement | null {
   let buttonLabel = 'Place bid';
   if (busy) buttonLabel = 'Placing…';
 
-  // Build a product link if we have an id
   const productHref = typeof auction.productId === 'number' ? `/products/${auction.productId}` : null;
 
   return (
     <main className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)]">
       <div className="mx-auto max-w-5xl px-6 py-14 grid gap-8">
         <header className="grid gap-2">
-          {/* Back button above the title */}
           <div>
             <button
               type="button"
               onClick={onBack}
-              className="inline-flex items-center gap-2 text-sm font-semibold
-                         text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]
-                         focus-visible:outline-none focus-visible:ring-2
-                         focus-visible:ring-[var(--theme-focus)] rounded-lg px-1 py-1"
+              className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--theme-link)] hover:text-[var(--theme-link-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-focus)] rounded-lg px-1 py-1"
               aria-label="Go back"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -309,7 +320,6 @@ export default function AuctionDetailPage(): React.ReactElement | null {
             </button>
           </div>
 
-          {/* UPDATED: add status pill next to the title */}
           <h1 className="text-2xl font-bold flex items-center gap-2">
             {headerTitle}
             {auction.status === 'ended' && (
@@ -324,7 +334,6 @@ export default function AuctionDetailPage(): React.ReactElement | null {
             )}
           </h1>
 
-          {/* ✅ ADDED: vendor/admin action buttons (no deletion of existing lines) */}
           {typeof auction.vendorId === 'number' && (
             <div className="flex justify-end">
               <AuctionActions
@@ -342,9 +351,9 @@ export default function AuctionDetailPage(): React.ReactElement | null {
             </div>
           )}
 
-          {/* ✅ NEW: Vendor slug, placed between headerTitle and productTitle */}
           {vendorSlug ? (
-            <div className="text-2xl">Sold by:{' '}
+            <div className="text-2xl">
+              Sold by:{' '}
               <Link
                 to={`/vendors/${vendorSlug}`}
                 className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
@@ -371,9 +380,13 @@ export default function AuctionDetailPage(): React.ReactElement | null {
           )}
 
           <div className="text-lg flex items-center gap-3">
-            <span>Current: <strong>{cents(display)}</strong></span>
+            <span>
+              Current: <strong>{cents(display)}</strong>
+            </span>
             <span>•</span>
-            <span>Ends in: <Countdown endAt={auction.endAt} /></span>
+            <span>
+              Ends in: <Countdown endAt={auction.endAt} />
+            </span>
           </div>
         </header>
 
@@ -383,9 +396,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
           </div>
         )}
 
-        {/* Layout: image/details (flex-1) on the left, independent bid card on the right */}
         <section className="flex flex-col md:flex-row md:items-start gap-6">
-          {/* LEFT: image + item details */}
           <div className="min-w-0 flex-1 grid gap-3">
             {imageUrl && (
               <div className="overflow-hidden rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)]">
@@ -413,10 +424,8 @@ export default function AuctionDetailPage(): React.ReactElement | null {
                 )}
               </div>
             )}
-            {/* Add more product facts here later (species, size, etc.) */}
           </div>
 
-          {/* RIGHT: independent bid card (sticky on md+ so it stays in view while scrolling the image) */}
           <div className="w-full md:w-[26rem] shrink-0 md:sticky md:top-8">
             <div className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-4 shadow-[0_10px_30px_var(--theme-shadow)] grid gap-4">
               <h2 className="text-2xl font-semibold">Place a bid</h2>
@@ -465,7 +474,6 @@ export default function AuctionDetailPage(): React.ReactElement | null {
                     {watching ? 'Watching ✓' : 'Watch'}
                   </button>
 
-                  {/* ✅ ADDED: Buy Now button (visible when live and configured) */}
                   {auction.buyNowCents != null && auction.status === 'live' && (
                     <button
                       type="button"
