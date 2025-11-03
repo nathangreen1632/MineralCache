@@ -8,7 +8,7 @@ import {Product} from '../models/product.model.js';
 import {AuctionWatchlist} from '../models/auctionWatchlist.model.js';
 import {bidParamsSchema, createAuctionBodySchema} from '../validation/auctions.schema.js';
 import {emitAuctionEnded} from '../sockets/emitters/auctions.emit.js';
-import {cancelAuctionTx, type EndAuctionReason, endAuctionTx} from '../services/auction.service.js';
+import {cancelAuctionTx, type EndAuctionReason, endAuctionTx, assertAuctionStartAllowed} from '../services/auction.service.js';
 import {logError, logInfo} from '../services/log.service.js';
 
 // Utility: resolve Socket.io instance if registered on app (no-throw)
@@ -29,7 +29,6 @@ export async function createAuction(req: Request, res: Response) {
     return;
   }
 
-  // Require a logged-in vendor; coerce BIGINTs-from-session to number
   const u = (req as any).user ?? null;
   const sessionVendorId = Number(u?.vendorId);
   if (!Number.isFinite(sessionVendorId) || sessionVendorId <= 0) {
@@ -45,62 +44,61 @@ export async function createAuction(req: Request, res: Response) {
 
   try {
     const result = await s.transaction(async (tx: Transaction) => {
-      // Lock the product and verify ownership
-      const product = await Product.findByPk(z.data.productId, { transaction: tx, lock: true });
-      if (!product) {
-        return { ok: false as const, code: 'PRODUCT_NOT_FOUND' };
-      }
+      const product = await Product.findByPk(z.data.productId, { transaction: tx, lock: true as any });
+      if (!product) return { ok: false as const, status: 404 as const, code: 'PRODUCT_NOT_FOUND' as const };
 
-      // PG returns BIGINT as string; normalize both sides before comparing
       const productVendorId = Number(
         (product as any).getDataValue?.('vendorId') ?? (product as any).vendorId
       );
-
       if (!Number.isFinite(productVendorId) || productVendorId !== sessionVendorId) {
         logInfo('auction.create.ownership_mismatch', {
           productId: z.data.productId,
           productVendorId,
           sessionVendorId,
         });
-        return { ok: false as const, code: 'PRODUCT_NOT_OWNED' };
+        return { ok: false as const, status: 403 as const, code: 'PRODUCT_NOT_OWNED' as const };
       }
+
+      await assertAuctionStartAllowed(Number(product.id), tx);
 
       const now = new Date();
       const endAt = new Date(now.getTime() + z.data.durationDays * 24 * 60 * 60 * 1000);
 
-      // Create using columns that exist on the Auction model
       const a = await Auction.create(
         {
           productId: Number(product.id),
           vendorId: sessionVendorId,
           title: z.data.title,
-          status: 'live', // MVP: go live immediately
+          status: 'live',
           startAt: now,
           endAt,
-
-          // ✅ match model column names
           startPriceCents: z.data.startingBidCents ?? 0,
           reservePriceCents: z.data.reserveCents ?? null,
           buyNowPriceCents: z.data.buyNowCents ?? null,
           incrementLadderJson: z.data.incrementLadderJson ?? null,
-
           highBidCents: null,
           highBidUserId: null,
-        },
+        } as any,
         { transaction: tx }
       );
 
-      return { ok: true as const, id: a.id };
+      return { ok: true as const, id: Number(a.id) };
     });
 
     if (!result.ok) {
-      res.status(400).json({ ok: false, code: result.code });
+      const status = result.status ?? 400;
+      res.status(status).json({ ok: false, code: result.code ?? 'INVALID' });
       return;
     }
 
     res.status(201).json({ ok: true, id: result.id });
-  } catch (err: unknown) {
-    logError('auction.create.error', { err: String((err as any)?.message ?? err) });
+  } catch (err: any) {
+    const msg = String(err?.message || '');
+    if (msg === 'AUCTION_EXISTS' || msg === 'AUCTION_LOCK_ACTIVE') {
+      res.status(409).json({ ok: false, code: msg, productId: z.success ? z.data.productId : undefined });
+      return;
+    }
+    logError('auction.create.error', { err: String(msg) });
     res.status(500).json({ ok: false, code: 'AUCTION_CREATE_FAILED' });
   }
 }

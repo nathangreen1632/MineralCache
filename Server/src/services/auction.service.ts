@@ -1,5 +1,6 @@
 // Server/src/services/auction.service.ts
 import { Transaction, Op } from 'sequelize';
+import { subDays } from 'date-fns';
 import { Auction, type IncrementTier } from '../models/auction.model.js';
 import { Bid } from '../models/bid.model.js';
 import { stopAuctionTicker } from '../sockets/tickers/auctionTicker.js';
@@ -216,6 +217,33 @@ async function getAuctionForUpdate(auctionId: number, tx: Transaction): Promise<
   return Auction.findByPk(auctionId, { transaction: tx, lock: true as any });
 }
 
+export async function assertAuctionStartAllowed(productId: number, tx: Transaction): Promise<void> {
+  const active = await Auction.findOne({
+    where: { productId, status: { [Op.in]: ['scheduled', 'live'] } },
+    transaction: tx,
+    lock: (tx as any).LOCK?.UPDATE,
+  });
+  if (active) {
+    const e = new Error('AUCTION_EXISTS') as any;
+    e.status = 409;
+    throw e;
+  }
+  const recentEnded = await Auction.findOne({
+    where: {
+      productId,
+      status: 'ended',
+      endAt: { [Op.gt]: subDays(new Date(), 5) as any },
+    },
+    transaction: tx,
+    lock: (tx as any).LOCK?.UPDATE,
+  });
+  if (recentEnded) {
+    const e = new Error('AUCTION_LOCK_ACTIVE') as any;
+    e.status = 409;
+    throw e;
+  }
+}
+
 export async function endAuctionTx(
   tx: Transaction,
   auctionId: number,
@@ -267,7 +295,12 @@ export async function endAuctionTx(
       lock: (tx as any).LOCK?.UPDATE,
     });
 
-    if (!existingActive) {
+    if (existingActive) {
+      await AuctionLock.update(
+        { userId: winnerUserId, auctionId, priceCents, expiresAt, status: 'active' } as any,
+        { where: { id: (existingActive as any).id }, transaction: tx }
+      );
+    } else {
       await AuctionLock.create(
         { productId, userId: winnerUserId, auctionId, priceCents, expiresAt, status: 'active' } as any,
         { transaction: tx }
