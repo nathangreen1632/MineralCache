@@ -50,5 +50,5 @@ export const env = {
     parsed.SHIP_HANDLING_CENTS === '' ? null : Number(parsed.SHIP_HANDLING_CENTS),
 
   brandName: parsed.BRAND_NAME || 'Mineral Cache',
-  emailFrom: parsed.EMAIL_FROM || 'no-reply@mineralvendors.com',
+  emailFrom: parsed.EMAIL_FROM || 'no-reply@mineralcache.com',
 } as const;
