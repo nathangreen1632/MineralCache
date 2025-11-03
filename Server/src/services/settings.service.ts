@@ -138,7 +138,7 @@ export async function getEffectiveSettings(): Promise<EffectiveSettings> {
 
   // Brand/email fallbacks
   const brandName = s.brandName || envStr('BRAND_NAME', 'Mineral Cache');
-  const emailFrom = s.emailFrom || envStr('EMAIL_FROM', 'no-reply@mineralvendors.com');
+  const emailFrom = s.emailFrom || envStr('EMAIL_FROM', 'no-reply@mineralcache.com');
 
   return {
     commission_bps: typeof s.commission_bps === 'number' ? s.commission_bps : 800,

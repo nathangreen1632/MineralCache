@@ -270,14 +270,15 @@ export async function forgotPassword(req: Request, res: Response) {
     const expiresAt = new Date(Date.now() + ttlMs);
 
     if (user) {
-      await PasswordReset.create({ userId: Number(user.id), codeHash: hash, expiresAt } as any);
+      await PasswordReset.create({userId: Number(user.id), codeHash: hash, expiresAt} as any);
       try {
-        await sendOtpEmail({ to: { email: user.email, name: null }, code, minutes: 10 });
-      } catch {}
-      logInfo('auth.forgot.issued', { ...obsCtx(req), userId: Number(user.id) });
+        await sendOtpEmail({to: {email: user.email, name: null}, code, minutes: 10});
+      } catch (e: any) {
+        logWarn('auth.forgot.email_failed', {...obsCtx(req), userId: Number(user.id), error: e?.message || String(e)});
+      }
     }
 
-    res.json({ ok: true });
+      res.json({ ok: true });
   } catch (e) {
     logWarn('auth.forgot.error', { ...obsCtx(req), msg: String((e as any)?.message || e) });
     res.json({ ok: true });
