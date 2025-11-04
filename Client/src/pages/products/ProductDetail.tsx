@@ -11,19 +11,16 @@ function centsToUsd(cents: number | null | undefined): string {
   const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
   return `$${(n / 100).toFixed(2)}`;
 }
-
 function isSaleActive(p: Product, now = new Date()): boolean {
   if (p.salePriceCents == null) return false;
   const startOk = !p.saleStartAt || new Date(p.saleStartAt) <= now;
   const endOk = !p.saleEndAt || now <= new Date(p.saleEndAt);
   return startOk && endOk;
 }
-
 function effectivePriceCents(p: Product): number {
   if (isSaleActive(p)) return p.salePriceCents as number;
   return p.priceCents;
 }
-
 function sizeLabel(p: Product): string {
   const parts: string[] = [];
   if (p.lengthCm != null) parts.push(String(p.lengthCm));
@@ -33,18 +30,28 @@ function sizeLabel(p: Product): string {
   if (p.sizeNote) return p.sizeNote;
   return '—';
 }
-
 function weightLabel(p: Product): string {
   if (p.weightG != null) return `${p.weightG} g`;
   if (p.weightCt != null) return `${p.weightCt} ct`;
   return '—';
 }
-
 function fluorescenceLabel(p: Product): string {
   if (!p.fluorescenceMode || p.fluorescenceMode === 'none') return '—';
   let out = p.fluorescenceMode;
   if (p.fluorescenceColorNote) out += ` (${p.fluorescenceColorNote})`;
   return out;
+}
+
+const CONDITION_LABELS: Record<string, string> = {
+  pristine: 'Pristine',
+  minor_damage: 'Minor Damage',
+  repaired: 'Repaired',
+  restored: 'Restored',
+};
+
+function conditionLabel(v: string | null | undefined): string {
+  if (!v) return '—';
+  return CONDITION_LABELS[v] ?? v;
 }
 
 type LoadState =
@@ -88,7 +95,6 @@ export default function ProductDetail(): React.ReactElement {
   const images: string[] = useMemo(() => {
     if (state.kind !== 'loaded') return [];
     const p: any = state.product;
-
     const fromArray =
       (Array.isArray(p.images) &&
         p.images
@@ -99,7 +105,6 @@ export default function ProductDetail(): React.ReactElement {
           .map((x: any) => x?.url1600 || x?.url800 || x?.url320 || x?.url)
           .filter(Boolean)) ||
       [];
-
     const singletons = [p.primaryImageUrl, p.imageUrl, p.mainImageUrl].filter(Boolean) as string[];
     return Array.from(new Set<string>([...singletons, ...fromArray]));
   }, [state]);
@@ -118,7 +123,6 @@ export default function ProductDetail(): React.ReactElement {
       </section>
     );
   }
-
   if (state.kind === 'error') {
     return (
       <section className="mx-auto max-w-5xl px-4 py-8">
@@ -133,13 +137,11 @@ export default function ProductDetail(): React.ReactElement {
   }
 
   const p = state.product;
-
   const onSaleNow = isSaleActive(p);
   const effCents = effectivePriceCents(p);
 
   let priceEl: React.ReactNode = <span>{centsToUsd(effCents)}</span>;
   if (onSaleNow) {
-    // show sale price emphasized, original price struck through
     priceEl = (
       <>
         <span className="font-bold text-[var(--theme-button)]">{centsToUsd(effCents)}</span>
@@ -150,15 +152,18 @@ export default function ProductDetail(): React.ReactElement {
     );
   }
 
-  // Auctions: support optional panel if product exposes auctionId
   const auctionId =
     typeof (p as any).auctionId === 'number' && (p as any).auctionId > 0
       ? ((p as any).auctionId as number)
       : undefined;
 
+  const categoryName =
+    (p as any).categoryName ||
+    (p as any).category?.name ||
+    null;
+
   return (
     <section className="mx-auto max-w-6xl px-4 py-8 grid gap-6 lg:grid-cols-2">
-      {/* Left: image carousel with on-sale badge overlay */}
       <div className="relative">
         <ImageCarousel images={images} label="Product images" />
         {onSaleNow && (
@@ -172,17 +177,17 @@ export default function ProductDetail(): React.ReactElement {
         )}
       </div>
 
-      {/* Right: details */}
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold text-[var(--theme-text)]">{p.title}</h1>
+
         <div className="text-sm" style={{ color: 'var(--theme-link)' }}>
-          {p.species}
-          {p.locality ? ` · ${p.locality}` : ''}
+          {categoryName}
+          {p.locality ? ` ${p.locality}` : ''}
         </div>
 
         <div className="mt-0.5 text-xs text-[var(--theme-text)]">
           <span className="opacity-75">Sold by:</span>{' '}
-        {(p as any).vendorSlug ? (
+          {(p as any).vendorSlug ? (
             <Link
               to={`/vendors/${(p as any).vendorSlug}`}
               className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link)]"
@@ -190,27 +195,28 @@ export default function ProductDetail(): React.ReactElement {
             >
               {(p as any).vendorSlug}
             </Link>
-        ) : null}
+          ) : null}
         </div>
 
         <div className="text-xl font-bold text-[var(--theme-text)]">{priceEl}</div>
 
-        {/* Auctions: render panel when auctionId is present */}
         {auctionId ? <AuctionPanel auctionId={auctionId} /> : null}
 
-        {p.description && (
-          <div className="whitespace-pre-wrap text-sm opacity-90 text-[var(--theme-text)]">
-            {p.description}
-          </div>
-        )}
+        {/*{p.description && (*/}
+        {/*  <div className="whitespace-pre-wrap text-sm opacity-90 text-[var(--theme-text)]">*/}
+        {/*    {p.description}*/}
+        {/*  </div>*/}
+        {/*)}*/}
 
         <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
           <dt className="opacity-80">Size</dt>
           <dd>{sizeLabel(p)}</dd>
           <dt className="opacity-80">Weight</dt>
           <dd>{weightLabel(p)}</dd>
+          <dt className="opacity-80">Species</dt>
+          <dd>{p.species || '—'}</dd>
           <dt className="opacity-80">Condition</dt>
-          <dd>{p.condition ?? '—'}</dd>
+          <dd>{conditionLabel((p as any).condition)}</dd>
           <dt className="opacity-80">Provenance</dt>
           <dd>{p.provenanceNote ?? '—'}</dd>
           <dt className="opacity-80">Synthetic</dt>
@@ -219,19 +225,14 @@ export default function ProductDetail(): React.ReactElement {
           <dd>{fluorescenceLabel(p)}</dd>
         </dl>
 
+
         <div className="flex items-center gap-2">
-          {/* Add to Cart */}
           <button
             type="button"
             aria-label="Add this item to your cart"
             aria-busy={adding ? 'true' : 'false'}
             disabled={adding}
-            className="inline-flex rounded-xl px-4 py-2 font-semibold
-                       bg-[var(--theme-button)] text-[var(--theme-text-white)]
-                       hover:bg-[var(--theme-button-hover)]
-                       focus-visible:ring-2 focus-visible:ring-offset-2
-                       focus-visible:ring-[var(--theme-focus)]
-                       focus-visible:ring-offset-[var(--theme-surface)]"
+            className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
             onClick={async () => {
               try {
                 setAdding(true);
