@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { createAuction, type CreateAuctionInput } from '../../api/auctions';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { ChevronDown } from 'lucide-react';
 
 function parseProductId(input: string): number | '' {
   if (!input) return '';
@@ -170,17 +171,24 @@ export default function AuctionCreatePage(): React.ReactElement {
           </label>
           <label className="grid gap-1">
             <span className="text-sm font-semibold">Duration</span>
-            <select
-              className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 py-2"
-              value={durationDays}
-              onChange={(e) => setDurationDays(Number(e.target.value) as 1 | 3 | 5 | 7)}
-            >
-              <option value={1}>1 day</option>
-              <option value={3}>3 days</option>
-              <option value={5}>5 days</option>
-              <option value={7}>7 days</option>
-            </select>
+            <div className="relative">
+              <select
+                className="appearance-none rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 py-2 pr-10 w-full"
+                value={durationDays}
+                onChange={(e) => setDurationDays(Number(e.target.value) as 1 | 3 | 5 | 7)}
+              >
+                <option value={1}>1 day</option>
+                <option value={3}>3 days</option>
+                <option value={5}>5 days</option>
+                <option value={7}>7 days</option>
+              </select>
+              <ChevronDown
+                className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-80"
+                size={18}
+              />
+            </div>
           </label>
+
         </div>
 
         <div className="grid grid-cols-2 gap-4">
