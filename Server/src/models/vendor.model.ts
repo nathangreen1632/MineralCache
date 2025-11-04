@@ -20,13 +20,12 @@ export class Vendor extends Model<
   declare logoUrl: string | null;
   declare country: string | null;
   declare approvalStatus: 'pending' | 'approved' | 'rejected';
-  // --- audit fields ---
   declare approvedBy: number | null;
   declare approvedAt: Date | null;
   declare rejectedReason: string | null;
-
   declare stripeAccountId: string | null;
-  declare commissionOverridePct: string | null; // DECIMAL as string
+  declare commissionOverridePct: string | null;
+  declare commissionPct: string | null;
   declare minFeeOverrideCents: number | null;
   declare newVendorCompletedCount: number;
   declare createdAt: CreationOptional<Date>;
@@ -37,7 +36,6 @@ const sequelize = db.instance();
 
 if (!sequelize) {
   if (process.env.NODE_ENV !== 'production') {
-    // eslint-disable-next-line no-console
     console.warn('[db] DATABASE_URL not set — Vendor model not initialized');
   }
 } else {
@@ -55,13 +53,18 @@ if (!sequelize) {
         allowNull: false,
         defaultValue: 'pending',
       },
-      // --- audit fields ---
       approvedBy: { type: DataTypes.BIGINT, allowNull: true },
       approvedAt: { type: DataTypes.DATE, allowNull: true },
       rejectedReason: { type: DataTypes.TEXT, allowNull: true },
-
       stripeAccountId: { type: DataTypes.STRING(120), allowNull: true },
       commissionOverridePct: { type: DataTypes.DECIMAL(5, 4), allowNull: true },
+      commissionPct: {
+        type: DataTypes.VIRTUAL,
+        get(this: Vendor) {
+          const v = this.getDataValue('commissionOverridePct') as unknown as string | null;
+          return v ?? null;
+        },
+      },
       minFeeOverrideCents: { type: DataTypes.INTEGER, allowNull: true },
       newVendorCompletedCount: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
