@@ -5,6 +5,10 @@ import { listCategories, type PublicCategory } from '../../api/public';
 const VISIBLE = 8;
 const ROTATE_MS = 5000;
 
+const SKELETON_KEYS = Object.freeze([
+  'sk-a','sk-b','sk-c','sk-d','sk-e','sk-f','sk-g','sk-h'
+]);
+
 function getWindow<T>(arr: T[], start: number, size: number): T[] {
   const out: T[] = [];
   const n = arr.length;
@@ -93,18 +97,19 @@ export default function CategoriesRow(): React.ReactElement {
 
       <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-4">
         {visible.length === 0 &&
-          Array.from({ length: VISIBLE }).map((_, i) => (
+          SKELETON_KEYS.map((k) => (
             <li
-              key={`skeleton-${i}`}
+              key={k}
               className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-4"
             >
               <div className="aspect-square rounded-xl bg-[var(--theme-card)] animate-pulse" />
               <div className="h-4 mt-3 rounded bg-[var(--theme-card)] animate-pulse" />
             </li>
-          ))}
+          ))
+        }
 
         {visible.map((cat) => (
-          <li key={cat.id} className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] shadow-[0_2px_5px_var(--theme-shadow-categories)] p-3">
+          <li key={cat.id} className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] shadow-[0_4px_10px_var(--theme-shadow-carousel)] p-3">
             <Link
               to={`/category/${cat.slug}`}
               className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-focus)] rounded-xl"
