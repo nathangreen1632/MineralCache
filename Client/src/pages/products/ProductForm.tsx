@@ -5,51 +5,43 @@ import type { ProductInput } from '../../api/products';
 import { listCategories, type PublicCategory } from '../../api/public';
 import { ChevronDown } from 'lucide-react';
 
+const CONDITION_OPTIONS = [
+  { value: 'pristine', label: 'Pristine' },
+  { value: 'minor_damage', label: 'Minor Damage' },
+  { value: 'repaired', label: 'Repaired' },
+  { value: 'restored', label: 'Restored' },
+];
+const VALID_CONDITIONS = new Set(CONDITION_OPTIONS.map(o => o.value));
 
-/** -------- Relaxed, optional schema (used for hints only; does NOT block submit) -------- */
 const FluorSchema = z.object({
   mode: z.enum(['none', 'SW', 'LW', 'both']).optional().nullable(),
   colorNote: z.string().max(240).optional().nullable(),
-  // Optional; if you later expose this, parse as comma-separated numbers
   wavelengthNm: z.array(z.number().int().positive()).max(4).optional().nullable(),
 });
 
 const Schema = z
   .object({
-    title: z.string().max(160, 'Max 160 chars').optional().nullable(),
-    description: z.string().max(8000, 'Max 8000 chars').optional().nullable(),
-
-    species: z.string().max(120, 'Max 120 chars').optional().nullable(),
+    title: z.string().max(160).optional().nullable(),
+    description: z.string().max(8000).optional().nullable(),
+    species: z.string().max(120).optional().nullable(),
     locality: z.string().max(240).optional().nullable(),
     synthetic: z.boolean().optional().nullable(),
-
-    // Dimensions + weight (all optional)
     lengthCm: z.number().nonnegative().optional().nullable(),
     widthCm: z.number().nonnegative().optional().nullable(),
     heightCm: z.number().nonnegative().optional().nullable(),
     sizeNote: z.string().max(120).optional().nullable(),
-
     weightG: z.number().nonnegative().optional().nullable(),
     weightCt: z.number().nonnegative().optional().nullable(),
-
-    // Structured fluorescence
     fluorescence: FluorSchema.optional().nullable(),
-
-    // Condition + provenance
-    condition: z.string().max(240).optional().nullable(),
+    condition: z.union([z.literal(''), z.enum(['pristine', 'minor_damage', 'repaired', 'restored'])]),
     conditionNote: z.string().max(240).optional().nullable(),
     provenanceNote: z.string().max(240).optional().nullable(),
-
-    // Pricing (optional; no hard minimums)
     priceCents: z.number().int().nonnegative().optional().nullable(),
     salePriceCents: z.number().int().nonnegative().optional().nullable(),
-
-    // ISO strings (optional)
     saleStartAt: z.string().optional().nullable(),
     saleEndAt: z.string().optional().nullable(),
   })
   .superRefine((val, ctx) => {
-    // Compare only when both are present
     if (
       val.priceCents != null &&
       val.salePriceCents != null &&
@@ -63,7 +55,6 @@ const Schema = z
         message: 'Sale price must be less than regular price when both are provided.',
       });
     }
-    // Check order only when both dates present
     if (val.saleStartAt && val.saleEndAt) {
       const start = new Date(val.saleStartAt).getTime();
       const end = new Date(val.saleEndAt).getTime();
@@ -96,7 +87,6 @@ export default function ProductForm({
                                       busy,
                                       serverMessage,
                                     }: Readonly<Props>): React.ReactElement {
-  // ids to associate labels with inputs
   const ids = {
     title: useId(),
     description: useId(),
@@ -118,10 +108,10 @@ export default function ProductForm({
     saleStartAt: useId(),
     saleEndAt: useId(),
     photos: useId(),
-    categoryId: useId(), // ← NEW
+    categoryId: useId(),
+    synthetic: useId(),
   };
 
-  // NEW: categories + required selection
   const [categories, setCategories] = useState<PublicCategory[]>([]);
   const [categoryId, setCategoryId] = useState<string>(() => {
     const cid = (initial as any)?.categoryId;
@@ -132,12 +122,10 @@ export default function ProductForm({
     async function loadCats() {
       try {
         const rows = await listCategories();
-        // Prefer active + ordered; fall back safely
         const sorted = (rows ?? [])
           .filter((c) => c.active)
           .sort((a, b) => (a.homeOrder ?? 0) - (b.homeOrder ?? 0));
         setCategories(sorted);
-        // If editing and initial category present but local state empty, hydrate it
         const cid = (initial as any)?.categoryId;
         if (!categoryId && typeof cid === 'number') setCategoryId(String(cid));
       } catch {
@@ -145,32 +133,24 @@ export default function ProductForm({
       }
     }
     void loadCats();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial]);
 
-  // All fields optional; hydrate from initial without forcing edits later
   const [values, setValues] = useState<ProductFormValues>(() => ({
     title: initial?.title ?? null,
     description: initial?.description ?? null,
-
     species: initial?.species ?? null,
     locality: initial?.locality ?? null,
-    synthetic: (initial?.synthetic as boolean | null | undefined) ?? null,
-
+    synthetic: (initial?.synthetic as boolean | null | undefined) ?? false,
     lengthCm: initial?.lengthCm ?? null,
     widthCm: initial?.widthCm ?? null,
     heightCm: initial?.heightCm ?? null,
     sizeNote: initial?.sizeNote ?? null,
-
     weightG: initial?.weightG ?? null,
     weightCt: initial?.weightCt ?? null,
-
     fluorescence: (initial?.fluorescence as ProductFormValues['fluorescence']) ?? DEFAULT_FLUOR,
-
-    condition: initial?.condition ?? null,
+    condition: VALID_CONDITIONS.has((initial?.condition as string) ?? '') ? (initial?.condition as any) : '',
     conditionNote: initial?.conditionNote ?? null,
     provenanceNote: initial?.provenanceNote ?? null,
-
     priceCents: initial?.priceCents == null ? null : Math.trunc(Number(initial.priceCents)),
     salePriceCents:
       initial?.salePriceCents == null ? null : Math.trunc(Number(initial.salePriceCents)),
@@ -178,35 +158,28 @@ export default function ProductForm({
     saleEndAt: initial?.saleEndAt ?? null,
   }));
 
-  // Keep values in sync if initial changes, but never force re-edits
   useEffect(() => {
     if (!initial) return;
     setValues((prev) => ({
       ...prev,
       title: initial.title ?? prev.title,
       description: initial.description ?? prev.description,
-
       species: initial.species ?? prev.species,
       locality: initial.locality ?? prev.locality,
-      synthetic: (initial.synthetic as boolean | null | undefined) ?? prev.synthetic,
-
+      synthetic: (initial.synthetic as boolean | null | undefined) ?? prev.synthetic ?? false,
       lengthCm: initial.lengthCm ?? prev.lengthCm,
       widthCm: initial.widthCm ?? prev.widthCm,
       heightCm: initial.heightCm ?? prev.heightCm,
       sizeNote: initial.sizeNote ?? prev.sizeNote,
-
       weightG: initial.weightG ?? prev.weightG,
       weightCt: initial.weightCt ?? prev.weightCt,
-
       fluorescence:
         (initial.fluorescence as ProductFormValues['fluorescence']) ??
         prev.fluorescence ??
         DEFAULT_FLUOR,
-
-      condition: initial.condition ?? prev.condition,
+      condition: VALID_CONDITIONS.has((initial?.condition as string) ?? '') ? (initial?.condition as any) : prev.condition ?? '',
       conditionNote: initial.conditionNote ?? prev.conditionNote,
       provenanceNote: initial.provenanceNote ?? prev.provenanceNote,
-
       priceCents:
         initial.priceCents == null ? prev.priceCents : Math.trunc(Number(initial.priceCents)),
       salePriceCents:
@@ -216,7 +189,6 @@ export default function ProductForm({
       saleStartAt: initial.saleStartAt ?? prev.saleStartAt,
       saleEndAt: initial.saleEndAt ?? prev.saleEndAt,
     }));
-    // Also hydrate category from initial if present
     const cid = (initial as any)?.categoryId;
     if (typeof cid === 'number') setCategoryId(String(cid));
   }, [initial]);
@@ -224,14 +196,14 @@ export default function ProductForm({
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [images, setImages] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [touched, setTouched] = useState<{ species: boolean; locality: boolean; price: boolean }>(
-    { species: false, locality: false, price: false }
+  const [touched, setTouched] = useState<{ species: boolean; locality: boolean; price: boolean; condition: boolean }>(
+    { species: false, locality: false, price: false, condition: false }
   );
   const speciesMissing = (values.species ?? '').trim() === '';
   const localityMissing = (values.locality ?? '').trim() === '';
   const priceMissing = !(values.priceCents != null && Number(values.priceCents) > 0);
+  const conditionMissing = (values.condition as string) === '';
 
-  // Save is actionable regardless of form content; only block when busy, >6 images, or missing category
   const canSubmit = useMemo(
     () =>
       !busy &&
@@ -239,17 +211,14 @@ export default function ProductForm({
       categoryId !== '' &&
       !speciesMissing &&
       !localityMissing &&
-      !priceMissing,
-    [busy, images.length, categoryId, speciesMissing, localityMissing, priceMissing]
+      !priceMissing &&
+      !conditionMissing,
+    [busy, images.length, categoryId, speciesMissing, localityMissing, priceMissing, conditionMissing]
   );
-
-
 
   function setField<K extends keyof ProductFormValues>(key: K, value: ProductFormValues[K]) {
     const next = { ...values, [key]: value };
     setValues(next);
-
-    // Run relaxed schema for hints only; never disables Save
     const parsed = Schema.safeParse(next);
     if (parsed.success) {
       setErrs({});
@@ -263,14 +232,10 @@ export default function ProductForm({
     }
   }
 
-  // ---- FIX: use NonNullable so keyof doesn't collapse to 'never'
   type Fluor = NonNullable<ProductFormValues['fluorescence']>;
   function setFluorField<K extends keyof Fluor>(key: K, value: Fluor[K]) {
     const current = (values.fluorescence ?? DEFAULT_FLUOR) as Fluor;
-    setField(
-      'fluorescence',
-      { ...current, [key]: value } as unknown as ProductFormValues['fluorescence']
-    );
+    setField('fluorescence', { ...current, [key]: value } as unknown as ProductFormValues['fluorescence']);
   }
 
   function onPickFiles(e: React.ChangeEvent<HTMLInputElement>) {
@@ -281,71 +246,53 @@ export default function ProductForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-
-    if (speciesMissing || localityMissing || priceMissing) {
-      setTouched({ species: true, locality: true, price: true });
+    if (speciesMissing || localityMissing || priceMissing || conditionMissing) {
+      setTouched({ species: true, locality: true, price: true, condition: true });
       return;
     }
-
-
-    // Guard: must have a category (HTML `required` also prevents)
     if (!categoryId) return;
 
-    // Normalize optional strings to null for server parity
     const normalize = (s?: string | null) => {
       if (s == null) return null;
       const t = s.trim();
       return t === '' ? null : t;
     };
 
-    // Build a payload with nulls for empties; keep types aligned with ProductInput
     const base: ProductInput = {
       title: normalize(values.title ?? null) ?? '',
       description: normalize(values.description ?? null),
       species: normalize(values.species ?? null) ?? '',
       locality: normalize(values.locality ?? null),
       synthetic: Boolean(values.synthetic ?? false),
-
       lengthCm: values.lengthCm ?? null,
       widthCm: values.widthCm ?? null,
       heightCm: values.heightCm ?? null,
       sizeNote: normalize(values.sizeNote ?? null),
-
       weightG: values.weightG ?? null,
       weightCt: values.weightCt ?? null,
-
       fluorescence: {
         mode: values.fluorescence?.mode ?? 'none',
         colorNote: normalize(values.fluorescence?.colorNote ?? null),
         wavelengthNm: values.fluorescence?.wavelengthNm ?? null,
       },
-
-      condition: normalize(values.condition ?? null),
+      condition: normalize(values.condition as string) ?? '',
       conditionNote: normalize(values.conditionNote ?? null),
       provenanceNote: normalize(values.provenanceNote ?? null),
-      provenanceTrail: null, // future: structured entries
-
-      // ProductInput.priceCents is number; send 0 when empty
+      provenanceTrail: null,
       priceCents:
         values.priceCents == null || Number.isNaN(values.priceCents)
           ? 0
           : Math.trunc(Number(values.priceCents)),
-
-      // If your API allows null here, keep null; otherwise default like priceCents
       salePriceCents:
         values.salePriceCents == null || Number.isNaN(values.salePriceCents)
           ? null
           : Math.trunc(Number(values.salePriceCents)),
-
       saleStartAt: normalize(values.saleStartAt ?? null),
       saleEndAt: normalize(values.saleEndAt ?? null),
-
-      images: [], // uploads handled separately
+      images: [],
     };
 
-    // NEW: include categoryId (server expects Number)
     const payload = { ...base, categoryId: Number(categoryId) } as ProductInput;
-
     await onSubmit(payload, images);
   }
 
@@ -356,7 +303,6 @@ export default function ProductForm({
     return `${base} border-[var(--theme-border)] focus:border-[var(--theme-focus)]`;
   }
 
-  // ---- FIX: avoid nested ternary + unused variable
   function submitLabel(): string {
     if (busy) return mode === 'edit' ? 'Saving…' : 'Creating…';
     return mode === 'edit' ? 'Save' : 'Create';
@@ -369,7 +315,6 @@ export default function ProductForm({
     if (!Number.isFinite(n) || n < 0) return null;
     return Math.round(n * 100);
   }
-
   function centsToDollarsString(c: number | null | undefined): string {
     if (c == null || Number.isNaN(c)) return '';
     const s = (c / 100).toFixed(2);
@@ -391,12 +336,10 @@ export default function ProductForm({
         </div>
       )}
 
-      {/* NEW: Category (required) */}
       <div className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-4">
         <label htmlFor={ids.categoryId} className="block text-sm font-semibold mb-1">
           Category <span className="text-[var(--theme-warning)]" aria-hidden="true">*</span>
         </label>
-
         <div className="relative">
           <select
             id={ids.categoryId}
@@ -414,39 +357,30 @@ export default function ProductForm({
           <ChevronDown
             size={18}
             className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-80"
-            aria-hidden="true"
+            aria-hidden
           />
         </div>
-
         <p id="categoryHelp" className="mt-1 text-xs opacity-80">
           Choose the single category this product belongs to.
         </p>
       </div>
 
-
       <div className="grid gap-4 md:grid-cols-2">
         <div className="md:col-span-2">
-          <label htmlFor={ids.title} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-            Title
-          </label>
+          <label htmlFor={ids.title} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Title <span className="text-[var(--theme-warning)]" aria-hidden="true">*</span></label>
           <input
             id={ids.title}
+            required
             className={fieldCls(Boolean(errs.title))}
             value={values.title ?? ''}
             onChange={(e) => setField('title', e.target.value)}
             maxLength={160}
           />
-          {errs.title && (
-            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
-              {errs.title}
-            </p>
-          )}
+          {errs.title && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.title}</p>}
         </div>
 
         <div className="md:col-span-2">
-          <label htmlFor={ids.description} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-            Description
-          </label>
+          <label htmlFor={ids.description} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Description</label>
           <textarea
             id={ids.description}
             className={fieldCls(Boolean(errs.description))}
@@ -455,11 +389,7 @@ export default function ProductForm({
             rows={5}
             maxLength={8000}
           />
-          {errs.description && (
-            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
-              {errs.description}
-            </p>
-          )}
+          {errs.description && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.description}</p>}
         </div>
 
         <div>
@@ -478,15 +408,9 @@ export default function ProductForm({
             maxLength={120}
             placeholder="Required"
           />
-          {errs.species && (
-            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
-              {errs.species}
-            </p>
-          )}
+          {errs.species && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.species}</p>}
           {!errs.species && touched.species && speciesMissing && (
-            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
-              Species is required
-            </p>
+            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>Species is required</p>
           )}
         </div>
 
@@ -506,23 +430,14 @@ export default function ProductForm({
             maxLength={240}
             placeholder="Required"
           />
-          {errs.locality && (
-            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
-              {errs.locality}
-            </p>
-          )}
+          {errs.locality && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.locality}</p>}
           {!errs.locality && touched.locality && localityMissing && (
-            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
-              Locality is required
-            </p>
+            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>Locality is required</p>
           )}
         </div>
 
-        {/* Dimensions */}
         <div>
-          <label htmlFor={ids.lengthCm} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-            Length (cm)
-          </label>
+          <label htmlFor={ids.lengthCm} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Length (cm)</label>
           <input
             id={ids.lengthCm}
             className={fieldCls(Boolean(errs.lengthCm))}
@@ -533,9 +448,7 @@ export default function ProductForm({
           />
         </div>
         <div>
-          <label htmlFor={ids.widthCm} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-            Width (cm)
-          </label>
+          <label htmlFor={ids.widthCm} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Width (cm)</label>
           <input
             id={ids.widthCm}
             className={fieldCls(Boolean(errs.widthCm))}
@@ -546,9 +459,7 @@ export default function ProductForm({
           />
         </div>
         <div>
-          <label htmlFor={ids.heightCm} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-            Height (cm)
-          </label>
+          <label htmlFor={ids.heightCm} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Height (cm)</label>
           <input
             id={ids.heightCm}
             className={fieldCls(Boolean(errs.heightCm))}
@@ -560,9 +471,7 @@ export default function ProductForm({
         </div>
 
         <div className="md:col-span-2">
-          <label htmlFor={ids.sizeNote} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-            Size note
-          </label>
+          <label htmlFor={ids.sizeNote} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Size note</label>
           <input
             id={ids.sizeNote}
             className={fieldCls(Boolean(errs.sizeNote))}
@@ -570,18 +479,11 @@ export default function ProductForm({
             onChange={(e) => setField('sizeNote', e.target.value)}
             maxLength={120}
           />
-          {errs.sizeNote && (
-            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
-              {errs.sizeNote}
-            </p>
-          )}
+          {errs.sizeNote && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.sizeNote}</p>}
         </div>
 
-        {/* Weights */}
         <div>
-          <label htmlFor={ids.weightG} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-            Weight (g)
-          </label>
+          <label htmlFor={ids.weightG} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Weight (g)</label>
           <input
             id={ids.weightG}
             className={fieldCls(Boolean(errs.weightG))}
@@ -592,9 +494,7 @@ export default function ProductForm({
           />
         </div>
         <div>
-          <label htmlFor={ids.weightCt} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-            Weight (ct)
-          </label>
+          <label htmlFor={ids.weightCt} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Weight (ct)</label>
           <input
             id={ids.weightCt}
             className={fieldCls(Boolean(errs.weightCt))}
@@ -605,11 +505,8 @@ export default function ProductForm({
           />
         </div>
 
-        {/* Fluorescence */}
         <div>
-          <label htmlFor={ids.fluorMode} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-            Fluorescence mode
-          </label>
+          <label htmlFor={ids.fluorMode} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Fluorescence mode</label>
           <select
             id={ids.fluorMode}
             className={fieldCls(Boolean((errs as any)['fluorescence.mode']))}
@@ -623,9 +520,7 @@ export default function ProductForm({
           </select>
         </div>
         <div className="md:col-span-2">
-          <label htmlFor={ids.fluorColor} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-            Fluorescence color note
-          </label>
+          <label htmlFor={ids.fluorColor} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Fluorescence color note</label>
           <input
             id={ids.fluorColor}
             className={fieldCls(Boolean((errs as any)['fluorescence.colorNote']))}
@@ -634,7 +529,58 @@ export default function ProductForm({
           />
         </div>
 
-        {/* Pricing */}
+        <div>
+          <label htmlFor={ids.synthetic} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Synthetic <span className="text-[var(--theme-warning)]" aria-hidden="true">*</span></label>
+          <select
+            id={ids.synthetic}
+            required
+            className={fieldCls(false)}
+            value={values.synthetic ? 'yes' : 'no'}
+            onChange={(e) => setField('synthetic', e.target.value === 'yes')}
+          >
+            <option value="no">No</option>
+            <option value="yes">Yes</option>
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor={ids.condition} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
+            Condition <span className="text-[var(--theme-warning)]" aria-hidden="true">*</span>
+          </label>
+          <select
+            id={ids.condition}
+            required
+            aria-required="true"
+            aria-invalid={touched.condition && conditionMissing}
+            className={fieldCls((touched.condition && conditionMissing) || Boolean(errs.condition))}
+            value={values.condition as string}
+            onChange={(e) => setField('condition', e.target.value as any)}
+            onBlur={() => setTouched((t) => ({ ...t, condition: true }))}
+          >
+            <option value="">Select a condition…</option>
+            {CONDITION_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          {errs.condition && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.condition}</p>}
+          {!errs.condition && touched.condition && conditionMissing && (
+            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>Condition is required</p>
+          )}
+        </div>
+
+        <div className="md:col-span-2">
+          <label htmlFor={ids.provenanceNote} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Provenance</label>
+          <input
+            id={ids.provenanceNote}
+            className={fieldCls(Boolean(errs.provenanceNote))}
+            value={values.provenanceNote ?? ''}
+            onChange={(e) => setField('provenanceNote', e.target.value)}
+            maxLength={240}
+            placeholder="Optional provenance details"
+          />
+          {errs.provenanceNote && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.provenanceNote}</p>}
+        </div>
+
         <div>
           <label htmlFor={ids.priceCents} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Price (USD) <span className="text-[var(--theme-warning)]" aria-hidden="true">*</span>
@@ -652,18 +598,11 @@ export default function ProductForm({
             onBlur={() => setTouched((t) => ({ ...t, price: true }))}
             placeholder="e.g. 65"
           />
-          {errs.priceCents && (
-            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
-              {errs.priceCents}
-            </p>
-          )}
+          {errs.priceCents && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.priceCents}</p>}
           {!errs.priceCents && touched.price && priceMissing && (
-            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
-              Price is required
-            </p>
+            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>Price is required</p>
           )}
         </div>
-
 
         <div>
           <label htmlFor={ids.salePriceCents} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
@@ -678,21 +617,12 @@ export default function ProductForm({
             onChange={(e) => setField('salePriceCents', dollarsInputToCents(e.target.value))}
             placeholder="e.g. 59.99"
           />
-          {errs.salePriceCents && (
-            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
-              {errs.salePriceCents}
-            </p>
-          )}
+          {errs.salePriceCents && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.salePriceCents}</p>}
         </div>
       </div>
 
-      {/* Photos (≤6) */}
       <div>
-        <label htmlFor={ids.photos} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-          Photos (up to 6)
-        </label>
-
-        {/* Hidden native input */}
+        <label htmlFor={ids.photos} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Photos (up to 6)</label>
         <input
           ref={fileInputRef}
           id={ids.photos}
@@ -702,8 +632,6 @@ export default function ProductForm({
           onChange={onPickFiles}
           className="sr-only"
         />
-
-        {/* Button to open file dialog */}
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
@@ -711,35 +639,20 @@ export default function ProductForm({
         >
           Choose photos
         </button>
-
-        <span className="ml-3 text-xs text-[var(--theme-link)]">
-          {images.length} selected (max 6)
-        </span>
-
-        <p className="mt-1 text-xs" style={{ color: 'var(--theme-link)' }}>
-          We’ll create 320/800/1600 px derivatives on upload.
-        </p>
-
+        <span className="ml-3 text-xs text-[var(--theme-link)]">{images.length} selected (max 6)</span>
+        <p className="mt-1 text-xs" style={{ color: 'var(--theme-link)' }}>We’ll create 320/800/1600 px derivatives on upload.</p>
         {images.length > 0 && (
           <ul className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
             {images.map((f) => (
-              <li
-                key={f.name}
-                className="rounded-lg border p-2"
-                style={{ borderColor: 'var(--theme-border)' }}
-              >
+              <li key={f.name} className="rounded-lg border p-2" style={{ borderColor: 'var(--theme-border)' }}>
                 <img
                   src={URL.createObjectURL(f)}
                   alt=""
-                  className="h-24 w-full rounded object-cover"
+                  className="h-44 w-full rounded object-cover"
                   onLoad={(ev) => URL.revokeObjectURL((ev.target as HTMLImageElement).src)}
                 />
-                <div className="mt-1 truncate text-xs text-[var(--theme-text)]">
-                  {f.name}
-                </div>
-                <div className="text-[10px] text-[var(--theme-link)]">
-                  {(f.size / 1024).toFixed(0)} KB
-                </div>
+                <div className="mt-1 truncate text-xs text-[var(--theme-text)]">{f.name}</div>
+                <div className="text-[10px] text-[var(--theme-link)]">{(f.size / 1024).toFixed(0)} KB</div>
               </li>
             ))}
           </ul>
