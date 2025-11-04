@@ -2,7 +2,9 @@
 import React, { useEffect, useMemo, useState, useId, useRef } from 'react';
 import { z } from 'zod';
 import type { ProductInput } from '../../api/products';
-import { listCategories, type PublicCategory } from '../../api/public'; // ← NEW
+import { listCategories, type PublicCategory } from '../../api/public';
+import { ChevronDown } from 'lucide-react';
+
 
 /** -------- Relaxed, optional schema (used for hints only; does NOT block submit) -------- */
 const FluorSchema = z.object({
@@ -222,12 +224,26 @@ export default function ProductForm({
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [images, setImages] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [touched, setTouched] = useState<{ species: boolean; locality: boolean; price: boolean }>(
+    { species: false, locality: false, price: false }
+  );
+  const speciesMissing = (values.species ?? '').trim() === '';
+  const localityMissing = (values.locality ?? '').trim() === '';
+  const priceMissing = !(values.priceCents != null && Number(values.priceCents) > 0);
 
   // Save is actionable regardless of form content; only block when busy, >6 images, or missing category
   const canSubmit = useMemo(
-    () => !busy && images.length <= 6 && categoryId !== '',
-    [busy, images.length, categoryId]
+    () =>
+      !busy &&
+      images.length <= 6 &&
+      categoryId !== '' &&
+      !speciesMissing &&
+      !localityMissing &&
+      !priceMissing,
+    [busy, images.length, categoryId, speciesMissing, localityMissing, priceMissing]
   );
+
+
 
   function setField<K extends keyof ProductFormValues>(key: K, value: ProductFormValues[K]) {
     const next = { ...values, [key]: value };
@@ -265,6 +281,12 @@ export default function ProductForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (speciesMissing || localityMissing || priceMissing) {
+      setTouched({ species: true, locality: true, price: true });
+      return;
+    }
+
 
     // Guard: must have a category (HTML `required` also prevents)
     if (!categoryId) return;
@@ -340,6 +362,20 @@ export default function ProductForm({
     return mode === 'edit' ? 'Save' : 'Create';
   }
 
+  function dollarsInputToCents(raw: string): number | null {
+    const t = raw.trim();
+    if (t === '') return null;
+    const n = Number(t);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.round(n * 100);
+  }
+
+  function centsToDollarsString(c: number | null | undefined): string {
+    if (c == null || Number.isNaN(c)) return '';
+    const s = (c / 100).toFixed(2);
+    return s.replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+  }
+
   return (
     <form onSubmit={submit} className="space-y-5">
       {Boolean(serverMessage) && (
@@ -360,23 +396,33 @@ export default function ProductForm({
         <label htmlFor={ids.categoryId} className="block text-sm font-semibold mb-1">
           Category <span className="text-[var(--theme-warning)]" aria-hidden="true">*</span>
         </label>
-        <select
-          id={ids.categoryId}
-          required
-          value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
-          className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 py-2"
-          aria-describedby="categoryHelp"
-        >
-          <option value="">Select a category…</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
+
+        <div className="relative">
+          <select
+            id={ids.categoryId}
+            required
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+            className="w-full appearance-none rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 py-2 pr-10"
+            aria-describedby="categoryHelp"
+          >
+            <option value="">Select a category…</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <ChevronDown
+            size={18}
+            className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-80"
+            aria-hidden="true"
+          />
+        </div>
+
         <p id="categoryHelp" className="mt-1 text-xs opacity-80">
           Choose the single category this product belongs to.
         </p>
       </div>
+
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="md:col-span-2">
@@ -418,36 +464,56 @@ export default function ProductForm({
 
         <div>
           <label htmlFor={ids.species} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-            Species
+            Species <span className="text-[var(--theme-warning)]" aria-hidden="true">*</span>
           </label>
           <input
             id={ids.species}
-            className={fieldCls(Boolean(errs.species))}
+            required
+            aria-required="true"
+            aria-invalid={touched.species && speciesMissing}
+            className={fieldCls(Boolean(errs.species) || (touched.species && speciesMissing))}
             value={values.species ?? ''}
             onChange={(e) => setField('species', e.target.value)}
+            onBlur={() => setTouched((t) => ({ ...t, species: true }))}
             maxLength={120}
+            placeholder="Required"
           />
           {errs.species && (
             <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
               {errs.species}
             </p>
           )}
+          {!errs.species && touched.species && speciesMissing && (
+            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
+              Species is required
+            </p>
+          )}
         </div>
 
         <div>
           <label htmlFor={ids.locality} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-            Locality
+            Locality <span className="text-[var(--theme-warning)]" aria-hidden="true">*</span>
           </label>
           <input
             id={ids.locality}
-            className={fieldCls(Boolean(errs.locality))}
+            required
+            aria-required="true"
+            aria-invalid={touched.locality && localityMissing}
+            className={fieldCls(Boolean(errs.locality) || (touched.locality && localityMissing))}
             value={values.locality ?? ''}
             onChange={(e) => setField('locality', e.target.value)}
+            onBlur={() => setTouched((t) => ({ ...t, locality: true }))}
             maxLength={240}
+            placeholder="Required"
           />
           {errs.locality && (
             <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
               {errs.locality}
+            </p>
+          )}
+          {!errs.locality && touched.locality && localityMissing && (
+            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
+              Locality is required
             </p>
           )}
         </div>
@@ -571,78 +637,50 @@ export default function ProductForm({
         {/* Pricing */}
         <div>
           <label htmlFor={ids.priceCents} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-            Price (¢)
+            Price (USD) <span className="text-[var(--theme-warning)]" aria-hidden="true">*</span>
           </label>
           <input
             id={ids.priceCents}
-            inputMode="numeric"
-            className={fieldCls(Boolean(errs.priceCents))}
-            value={values.priceCents == null ? '' : String(values.priceCents)}
-            onChange={(e) => {
-              const raw = e.target.value.trim();
-              setField('priceCents', raw === '' ? null : Math.trunc(Number(raw) || 0));
-            }}
+            required
+            aria-required="true"
+            aria-invalid={touched.price && priceMissing}
+            inputMode="decimal"
+            step="0.01"
+            className={fieldCls(Boolean(errs.priceCents) || (touched.price && priceMissing))}
+            value={centsToDollarsString(values.priceCents ?? null)}
+            onChange={(e) => setField('priceCents', dollarsInputToCents(e.target.value))}
+            onBlur={() => setTouched((t) => ({ ...t, price: true }))}
+            placeholder="e.g. 65"
           />
           {errs.priceCents && (
             <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
               {errs.priceCents}
             </p>
           )}
+          {!errs.priceCents && touched.price && priceMissing && (
+            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
+              Price is required
+            </p>
+          )}
         </div>
+
 
         <div>
           <label htmlFor={ids.salePriceCents} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-            Sale price (¢) <span className="opacity-60">(optional)</span>
+            Sale price (USD) <span className="opacity-60">(optional)</span>
           </label>
           <input
             id={ids.salePriceCents}
-            inputMode="numeric"
+            inputMode="decimal"
+            step="0.01"
             className={fieldCls(Boolean(errs.salePriceCents))}
-            value={values.salePriceCents == null ? '' : String(values.salePriceCents)}
-            onChange={(e) => {
-              const raw = e.target.value.trim();
-              setField('salePriceCents', raw === '' ? null : Math.trunc(Number(raw) || 0));
-            }}
+            value={centsToDollarsString(values.salePriceCents ?? null)}
+            onChange={(e) => setField('salePriceCents', dollarsInputToCents(e.target.value))}
+            placeholder="e.g. 59.99"
           />
           {errs.salePriceCents && (
             <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
               {errs.salePriceCents}
-            </p>
-          )}
-        </div>
-
-        <div>
-          <label htmlFor={ids.saleStartAt} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-            Sale start (ISO) <span className="opacity-60">(optional)</span>
-          </label>
-          <input
-            id={ids.saleStartAt}
-            className={fieldCls(Boolean(errs.saleStartAt))}
-            placeholder="YYYY-MM-DDTHH:mm:ssZ"
-            value={values.saleStartAt ?? ''}
-            onChange={(e) => setField('saleStartAt', e.target.value || null)}
-          />
-          {errs.saleStartAt && (
-            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
-              {errs.saleStartAt}
-            </p>
-          )}
-        </div>
-
-        <div>
-          <label htmlFor={ids.saleEndAt} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-            Sale end (ISO) <span className="opacity-60">(optional)</span>
-          </label>
-          <input
-            id={ids.saleEndAt}
-            className={fieldCls(Boolean(errs.saleEndAt))}
-            placeholder="YYYY-MM-DDTHH:mm:ssZ"
-            value={values.saleEndAt ?? ''}
-            onChange={(e) => setField('saleEndAt', e.target.value || null)}
-          />
-          {errs.saleEndAt && (
-            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
-              {errs.saleEndAt}
             </p>
           )}
         </div>
