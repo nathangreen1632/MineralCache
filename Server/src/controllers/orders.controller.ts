@@ -4,24 +4,12 @@ import { Op } from 'sequelize';
 import { z } from 'zod';
 import { Order } from '../models/order.model.js';
 import { OrderItem } from '../models/orderItem.model.js';
-
-// NEW: email + buyer fetch
 import { User } from '../models/user.model.js';
 import { sendOrderEmail } from '../services/email.service.js';
-
-// ✅ NEW: cancel PI helper for buyer-initiated cancellations
 import { cancelPaymentIntent } from '../services/stripe.service.js';
-
-// ✅ NEW: validation + carrier helpers
 import { shipOrderSchema, deliverOrderSchema } from '../validation/orders.schema.js';
 import { normalizeCarrier, trackingUrl as buildTrackingUrl } from '../services/shipping.service.js';
-
-// ✅ NEW: receipt PDF builder
-import {
-  buildReceiptPdf,
-  type ReceiptData,
-  type ReceiptItem,
-} from '../services/pdf/receiptPdf.service.js';
+import { buildReceiptPdf, type ReceiptData, type ReceiptItem } from '../services/pdf/receiptPdf.service.js';
 
 function parsePage(v: unknown, def = 1) {
   const n = Number(v);
@@ -34,7 +22,6 @@ function parsePageSize(v: unknown, def = 20) {
   return Math.floor(n);
 }
 
-// Helper: safe read of optional orderNumber (avoids TS2339)
 function readOrderNumberSafe(order: any): string | null {
   const direct = order?.orderNumber;
   if (typeof direct === 'string' && direct.length > 0) return direct;
@@ -115,7 +102,6 @@ export async function listMyOrders(req: Request, res: Response): Promise<void> {
       unitPriceCents: Number(i.unitPriceCents),
       quantity: Number(i.quantity),
       lineTotalCents: Number(i.lineTotalCents),
-      // Optional fulfillment fields (may be null)
       shipCarrier: (i as any).shipCarrier ?? null,
       shipTracking: (i as any).shipTracking ?? null,
       shippedAt: (i as any).shippedAt ?? null,
@@ -185,17 +171,11 @@ export async function getOrder(req: Request, res: Response): Promise<void> {
   });
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Fulfillment: Ship / Deliver with ACL + Validation                         */
-/* -------------------------------------------------------------------------- */
-
-// PATCH /api/orders/:id/ship
 export async function markShipped(req: Request, res: Response): Promise<void> {
-  const { userId, vendorId, isAdmin } = getAuth(req);
-  if (!userId || (!isAdmin && !vendorId)) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
+  const u: any = (req as any).user ?? (req.session as any)?.user ?? null;
+  const role = (u?.role ?? '').toString().toLowerCase();
+  const isAdmin = role === 'admin' || role === 'superadmin' || role === 'owner';
+  const vendorId = (req as any).vendor?.id ?? u?.vendorId ?? null;
 
   const orderId = Number.parseInt(req.params.id, 10);
   if (!Number.isFinite(orderId) || orderId <= 0) {
@@ -214,6 +194,7 @@ export async function markShipped(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'Unsupported carrier' });
     return;
   }
+
   const tracking = parsed.data.tracking && parsed.data.tracking.trim() !== '' ? parsed.data.tracking.trim() : null;
   const itemFilterIds = parsed.data.itemIds && parsed.data.itemIds.length > 0 ? parsed.data.itemIds : null;
 
@@ -227,7 +208,6 @@ export async function markShipped(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // Scope items by role: admin → all; vendor → only their lines; optional itemIds filter
   const where: any = { orderId };
   if (!isAdmin && vendorId) where.vendorId = vendorId;
   if (itemFilterIds) where.id = { [Op.in]: itemFilterIds };
@@ -246,15 +226,6 @@ export async function markShipped(req: Request, res: Response): Promise<void> {
     await it.save();
   }
 
-  // Flip order status → shipped only if *all* lines are shipped (across vendors)
-  const allItems = await OrderItem.findAll({ where: { orderId } });
-  const allShipped = allItems.every((i: any) => !!i.shippedAt);
-  if (allShipped) {
-    (order as any).status = 'shipped';
-    await order.save();
-  }
-
-  // Email buyer (best-effort)
   try {
     const buyer = await User.findByPk((order as any).buyerUserId).catch(() => null);
     if (buyer?.email) {
@@ -268,10 +239,8 @@ export async function markShipped(req: Request, res: Response): Promise<void> {
         lines.push(fragment);
       }
       const itemsBrief = lines.join('<br/>');
-
       const emailTrackingUrl = buildTrackingUrl(carrier, tracking || null);
       const orderNumber = readOrderNumberSafe(order);
-
       await sendOrderEmail('order_shipped', {
         orderId: Number(order.id),
         orderNumber,
@@ -281,24 +250,20 @@ export async function markShipped(req: Request, res: Response): Promise<void> {
         trackingUrl: emailTrackingUrl,
       });
     }
-  } catch {
-    /* ignore */
-  }
+  } catch {}
 
   res.json({
     ok: true,
     updated: items.map((i) => Number(i.id)),
-    orderStatus: (order as any).status,
+    orderStatus: (order as any).status
   });
 }
 
-// PATCH /api/orders/:id/deliver
 export async function markDelivered(req: Request, res: Response): Promise<void> {
-  const { userId, vendorId, isAdmin } = getAuth(req);
-  if (!userId || (!isAdmin && !vendorId)) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
+  const u: any = (req as any).user ?? (req.session as any)?.user ?? null;
+  const role = (u?.role ?? '').toString().toLowerCase();
+  const isAdmin = role === 'admin' || role === 'superadmin' || role === 'owner';
+  const vendorId = (req as any).vendor?.id ?? u?.vendorId ?? null;
 
   const orderId = Number.parseInt(req.params.id, 10);
   if (!Number.isFinite(orderId) || orderId <= 0) {
@@ -335,45 +300,28 @@ export async function markDelivered(req: Request, res: Response): Promise<void> 
     await it.save();
   }
 
-  // Flip order status → delivered only if *all* lines are delivered
-  const allItems = await OrderItem.findAll({ where: { orderId } });
-  const allDelivered = allItems.every((i: any) => !!i.deliveredAt);
-  if (allDelivered) {
-    (order as any).status = 'delivered';
-    await order.save();
-  }
-
-  // Email buyer (best-effort)
   try {
     const buyer = await User.findByPk((order as any).buyerUserId).catch(() => null);
     if (buyer?.email) {
       const orderItems = await OrderItem.findAll({ where: { orderId } });
       const itemsBrief = orderItems.map((i) => `• ${i.title}`).join('<br/>');
-
       const orderNumber = readOrderNumberSafe(order);
       await sendOrderEmail('order_delivered', {
         orderId: Number(order.id),
         orderNumber,
         buyer: { email: buyer.email, name: (buyer as any)?.fullName ?? null },
-        itemsBrief,
+        itemsBrief
       });
     }
-  } catch {
-    /* ignore */
-  }
+  } catch {}
 
   res.json({
     ok: true,
     updated: items.map((i) => Number(i.id)),
-    orderStatus: (order as any).status,
+    orderStatus: (order as any).status
   });
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Receipt + Buyer-initiated Cancel                                          */
-/* -------------------------------------------------------------------------- */
-
-// GET /api/orders/:id/receipt
 export async function getReceiptHtml(req: Request, res: Response): Promise<void> {
   const id = Number(req.params.id);
   const order = await Order.findByPk(id);
@@ -446,8 +394,6 @@ export async function getReceiptHtml(req: Request, res: Response): Promise<void>
   res.status(200).send(html);
 }
 
-// ✅ NEW: PDF receipt download (owner or admin)
-// GET /api/orders/:id/receipt.pdf
 export async function getReceiptPdf(req: Request, res: Response): Promise<void> {
   const { userId, isAdmin } = getAuth(req);
 
@@ -469,14 +415,12 @@ export async function getReceiptPdf(req: Request, res: Response): Promise<void> 
     return;
   }
 
-  // ACL: only owner (buyer) or admin
   const isOwner = userId != null && Number((order as any).buyerUserId) === Number(userId);
   if (!isOwner && !isAdmin) {
     res.status(403).json({ ok: false, message: 'Not authorized to view this receipt' });
     return;
   }
 
-  // Load items and buyer (email/name if available)
   const orderItems = await OrderItem.findAll({ where: { orderId: id } });
   const buyer = await User.findByPk((order as any).buyerUserId).catch(() => null);
 
@@ -529,8 +473,6 @@ export async function getReceiptPdf(req: Request, res: Response): Promise<void> 
   res.status(200).send(pdf);
 }
 
-// ✅ NEW: Buyer cancel (pre-payment)
-// PATCH /api/orders/:id/cancel
 export async function cancelPendingOrder(req: Request, res: Response): Promise<void> {
   const u = (req as any).user ?? (req.session as any)?.user ?? null;
   if (!u?.id) {
@@ -558,7 +500,6 @@ export async function cancelPendingOrder(req: Request, res: Response): Promise<v
     (order as any).paymentIntentId ??
     (typeof (order as any).get === 'function' ? (order as any).get('paymentIntentId') : null);
 
-  // Best-effort cancel the PI if possible; ignore failure (e.g., already succeeded)
   if (piId) {
     await cancelPaymentIntent(piId);
   }
@@ -573,7 +514,7 @@ export async function cancelPendingOrder(req: Request, res: Response): Promise<v
       (obs as any).orderCanceled(req, Number(order.id));
     }
   } catch {
-    // ignore
+    console.error('observability.orderCanceled() failed');
   }
 
   res.json({ ok: true });
