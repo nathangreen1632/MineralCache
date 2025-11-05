@@ -1,9 +1,9 @@
 @import url('https://fonts.googleapis.com/css?family=Inter:wght@400;600;800&display=swap');
 @import "tailwindcss";
 
+/* ------------------------------------ LIGHT (default) ------------------------------------ */
 @layer base {
   :root {
-    /* --------------------- LIGHT MODE (180° complements, lightened) --------------------- */
     /* Base palette (A light ⇢ E dark text) */
     --c-a: #FAFAFA;
     --c-b: #F2EEED;
@@ -24,9 +24,10 @@
     --c-o: #F5AF02;
     --c-p: #000000;
 
-    /* LIGHT MODE theme mapping */
+    /* LIGHT theme mapping */
     --theme-bg: var(--c-b);
     --theme-surface: var(--c-a);
+    --theme-surface-alt: var(--c-b);
     --theme-text: var(--c-e);
     --theme-text-white: var(--c-a);
     --theme-accent: var(--c-e);
@@ -83,12 +84,16 @@
     /* error */
     --theme-error: #ef4444;
     --theme-button-error: #c43838;
+
+    /* LIGHT scrollbar */
+    --theme-scrollbar-track: var(--theme-surface);
+    --theme-scrollbar-thumb: var(--theme-accent);
   }
 }
 
+/* -------------------------- DARK (auto via system preference) -------------------------- */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    /* ---------------------------- DARK MODE (your palette) ---------------------------- */
     /* Base palette (A light text ⇢ E darkest surface) */
     --c-a: #FCFCFC;
     --c-b: #57737A;
@@ -96,7 +101,7 @@
     --c-d: #122932;
     --c-e: #040F0F;
 
-    /* Extended palette (your supplied colors) */
+    /* Extended palette */
     --c-f: #A1A499;
     --c-g: #4DA167;
     --c-h: #2C514C;
@@ -109,9 +114,10 @@
     --c-o: #F5AF02;
     --c-p: #000000;
 
-    /* DARK MODE theme mapping — mirrors your previous logic */
+    /* DARK theme mapping */
     --theme-bg: var(--c-e);
     --theme-surface: var(--c-e);
+    --theme-surface-alt: var(--c-e);
     --theme-text: var(--c-a);
     --theme-text-white: var(--c-e);
     --theme-accent: var(--c-a);
@@ -168,8 +174,106 @@
     /* error */
     --theme-error: #ef4444;
     --theme-button-error: #c43838;
+
+    /* DARK scrollbar */
+    --theme-scrollbar-track: var(--theme-bg);
+    --theme-scrollbar-thumb: var(--theme-accent);
   }
 }
+
+/* ----------------------------- DARK (forced via attribute) ----------------------------- */
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Base palette (A light text ⇢ E darkest surface) */
+  --c-a: #FCFCFC;
+  --c-b: #57737A;
+  --c-c: #85BDBF;
+  --c-d: #122932;
+  --c-e: #040F0F;
+
+  /* Extended palette */
+  --c-f: #A1A499;
+  --c-g: #4DA167;
+  --c-h: #2C514C;
+  --c-i: #A22C29;
+  --c-j: #46ACC2;
+  --c-k: #30332E;
+  --c-l: #41785A;
+  --c-m: #902923;
+  --c-n: #191919;
+  --c-o: #F5AF02;
+  --c-p: #000000;
+
+  /* DARK theme mapping (same as above) */
+  --theme-bg: var(--c-e);
+  --theme-surface: var(--c-e);
+  --theme-text: var(--c-a);
+  --theme-text-white: var(--c-e);
+  --theme-accent: var(--c-a);
+  --theme-border: var(--c-b);
+  --theme-strip: var(--c-d);
+  --theme-strip-text: var(--c-a);
+  --theme-textbox: var(--c-f);
+  --theme-placeholder: var(--c-e);
+  --theme-pencil: var(--c-f);
+  --theme-superscript: var(--c-f);
+  --theme-moveto: var(--c-e);
+  --theme-scripture: var(--c-e);
+  --theme-verse: var(--c-e);
+  --theme-card-number: var(--c-a);
+  --theme-shadow-carousel: rgba(204, 218, 209, 0.25);
+  --theme-shadow-categories: var(--c-o);
+  --theme-shadow-onSale: rgba(204, 218, 209, 0.25);
+  --theme-text-black: var(--c-p);
+  --theme-text-dark: var(--c-a);
+
+  /* buttons */
+  --theme-button: var(--c-a);
+  --theme-button-blue: var(--c-b);
+  --theme-button-blue-hover: var(--c-a);
+  --theme-button-gray: var(--c-b);
+  --theme-button-dark: var(--c-e);
+  --theme-button-hover: var(--c-k);
+  --theme-button-yellow: var(--c-o);
+  --theme-pill-green: var(--c-l);
+  --theme-pill-orange: var(--c-m);
+
+  /* links */
+  --theme-link: var(--c-j);
+  --theme-link-hover: #74C7D6;
+
+  /* semantic */
+  --theme-success: var(--c-g);
+  --theme-warning: var(--c-i);
+  --theme-info: var(--c-j);
+
+  /* cards & interactive */
+  --theme-card: var(--c-d);
+  --theme-card-hover: var(--c-b);
+  --theme-card-hover-alt: var(--c-b);
+  --theme-card-alt: var(--c-h);
+  --theme-card-alt-inverse: var(--c-f);
+  --theme-hover: var(--c-b);
+  --theme-card-alt-hover: var(--c-n);
+
+  /* focus & elevation */
+  --theme-focus: var(--c-a);
+  --theme-shadow: rgba(204, 218, 209, 0.25);
+
+  /* error */
+  --theme-error: #ef4444;
+  --theme-button-error: #c43838;
+
+  /* DARK scrollbar */
+  --theme-scrollbar-track: var(--theme-bg);
+  --theme-scrollbar-thumb: var(--theme-accent);
+}
+
+/* ------------------------------- LIGHT (forced via attr) ------------------------------- */
+html[data-theme="light"] { color-scheme: light; }
+
+/* -------------------------------------- GLOBALS -------------------------------------- */
 
 /* PLACEHOLDER COLOR */
 @layer base {
@@ -191,17 +295,11 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--theme-scrollbar-thumb) var(--theme-scrollbar-track);
 }
-
-.custom-scrollbar::-webkit-scrollbar {
-  width: 10px;
-  border-radius: 8px;
-}
-
+.custom-scrollbar::-webkit-scrollbar { width: 10px; border-radius: 8px; }
 .custom-scrollbar::-webkit-scrollbar-track {
   background: var(--theme-scrollbar-track);
   border-radius: 8px;
 }
-
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: var(--theme-scrollbar-thumb);
   border-radius: 8px;
@@ -209,27 +307,8 @@ body {
 }
 
 /* Hide scrollbars only for the header nav */
-.header-nav--no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-.header-nav--no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
-/* LIGHT MODE scrollbar */
-:root {
-  --theme-scrollbar-track: var(--theme-surface);
-  --theme-scrollbar-thumb: var(--theme-accent);
-}
-
-/* DARK MODE scrollbar (only when not forcing light) */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --theme-scrollbar-track: var(--theme-bg);
-    --theme-scrollbar-thumb: var(--theme-accent);
-  }
-}
+.header-nav--no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.header-nav--no-scrollbar::-webkit-scrollbar { display: none; }
 
 /* --- Mobile WebKit helpers --- */
 html { -webkit-text-size-adjust: 100%; }
@@ -255,80 +334,7 @@ html { -webkit-text-size-adjust: 100%; }
 /* Keep corners pretty with scrollbars present */
 .scrollpad { scrollbar-gutter: stable both-edges; }
 
-/* Forced overrides */
-html[data-theme="light"] { color-scheme: light; }
-
-html[data-theme="dark"] {
-  color-scheme: dark;
-
-  --c-a: #FCFCFC;
-  --c-b: #57737A;
-  --c-c: #85BDBF;
-  --c-d: #122932;
-  --c-e: #040F0F;
-
-  --c-f: #A1A499;
-  --c-g: #4DA167;
-  --c-h: #2C514C;
-  --c-i: #A22C29;
-  --c-j: #46ACC2;
-  --c-k: #30332E;
-  --c-l: #41785A;
-  --c-m: #902923;
-  --c-n: #191919;
-  --c-o: #F5AF02;
-
-  --theme-bg: var(--c-e);
-  --theme-surface: var(--c-e);
-  --theme-text: var(--c-a);
-  --theme-text-white: var(--c-e);
-  --theme-accent: var(--c-a);
-  --theme-border: var(--c-b);
-  --theme-strip: var(--c-d);
-  --theme-strip-text: var(--c-a);
-  --theme-textbox: var(--c-f);
-  --theme-placeholder: var(--c-e);
-  --theme-pencil: var(--c-f);
-  --theme-superscript: var(--c-f);
-  --theme-moveto: var(--c-e);
-  --theme-scripture: var(--c-e);
-  --theme-verse: var(--c-e);
-
-  --theme-button: var(--c-a);
-  --theme-button-blue: var(--c-b);
-  --theme-button-blue-hover: var(--c-a);
-  --theme-button-gray: var(--c-b);
-  --theme-button-dark: var(--c-e);
-  --theme-button-hover: var(--c-k);
-  --theme-button-yellow: var(--c-o);
-  --theme-pill-green: var(--c-l);
-  --theme-pill-orange: var(--c-m);
-
-  --theme-link: var(--c-j);
-  --theme-link-hover: #74C7D6;
-
-  --theme-success: var(--c-g);
-  --theme-warning: var(--c-i);
-  --theme-info: var(--c-j);
-
-  --theme-card: var(--c-d);
-  --theme-card-hover: var(--c-b);
-  --theme-card-hover-alt: var(--c-b);
-  --theme-card-alt: var(--c-h);
-  --theme-card-alt-inverse: var(--c-f);
-  --theme-hover: var(--c-b);
-  --theme-card-alt-hover: var(--c-n);
-
-  --theme-focus: var(--c-a);
-  --theme-shadow: rgba(204, 218, 209, 0.25);
-
-  --theme-error: #ef4444;
-  --theme-button-error: #c43838;
-
-  --theme-scrollbar-track: var(--theme-bg);
-  --theme-scrollbar-thumb: var(--theme-accent);
-}
-
+/* Keyframes + utility */
 @layer keyframes {
   @keyframes mc-bounce-3s {
     0%, 100% { transform: translateY(0); }
@@ -338,7 +344,6 @@ html[data-theme="dark"] {
     12% { transform: translateY(0); }
   }
 }
-
 @layer utilities {
   .animate-bounce-3s {
     animation: mc-bounce-3s 3s ease-in-out infinite;
