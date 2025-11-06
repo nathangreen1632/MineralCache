@@ -167,7 +167,7 @@ export default function VendorApply(): React.ReactElement {
   const submitted = state.kind === 'submitted';
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
+    <div className="mx-auto max-w-5xl px-4 py-8">
       <h1 className="mb-4 text-2xl font-semibold text-[var(--theme-text)]">
         Vendor application
       </h1>
