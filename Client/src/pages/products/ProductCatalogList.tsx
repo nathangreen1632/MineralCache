@@ -14,7 +14,7 @@ declare global {
 
 /** --- CONFIG: where the API is serving /uploads from (prod = same origin) --- */
 const API_BASE =
-  ((import.meta as any)?.env?.VITE_API_BASE as string | undefined) ??
+  ((import.meta?.env?.VITE_API_BASE as string | undefined)) ??
   (typeof window !== 'undefined' ? window.__API_BASE__ : undefined) ??
   '';
 
@@ -421,13 +421,6 @@ export default function ProductCatalogList(): React.ReactElement {
             value={inputQ}
             onChange={(e) => setInputQ(e.target.value)}
             aria-label="Search"
-          />
-
-          <input
-            className="lg:col-span-3 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
-            placeholder="Species"
-            value={form.species}
-            onChange={(e) => setForm((s) => ({ ...s, species: e.target.value }))}
           />
           <input
             className="lg:col-span-3 rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
