@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { getAuction, placeBid } from '../../api/auctions';
 import { getSocket } from '../../lib/socket';
 import { toast } from 'react-hot-toast';
+import { useAuthStore } from '../../stores/useAuthStore';
 
 function centsToUsd(c: number) {
   const n = Math.max(0, Math.trunc(c));
@@ -12,18 +13,20 @@ function centsToUsd(c: number) {
 export default function ProductAuctionPanel(props: Readonly<{ auctionId: number }>) {
   const { auctionId } = props;
 
+  const user = useAuthStore((s) => s.user);
+  const isAuthed = Boolean(user);
+
   const [loading, setLoading] = useState(true);
   const [fatalErr, setFatalErr] = useState<string | null>(null);
 
   const [msRemaining, setMsRemaining] = useState<number>(0);
-  const [highBidCents, setHighBidCents] = useState<number | null>(null);         // ✅ proper value+setter
-  const [minNextBidCents, setMinNextBidCents] = useState<number>(0);             // ✅ proper value+setter
+  const [highBidCents, setHighBidCents] = useState<number | null>(null);
+  const [minNextBidCents, setMinNextBidCents] = useState<number>(0);
 
   const [amountUsd, setAmountUsd] = useState<string>('');
   const [useProxy, setUseProxy] = useState(false);
   const [proxyUsd, setProxyUsd] = useState<string>('');
 
-  // Initial load
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -40,7 +43,6 @@ export default function ProductAuctionPanel(props: Readonly<{ auctionId: number 
 
       const a = resp.data.data;
       setHighBidCents(a.highBidCents);
-      // UI hint only; server enforces exact ladder
       setMinNextBidCents(a.highBidCents != null ? a.highBidCents + 100 : a.startingBidCents);
       setLoading(false);
     })();
@@ -50,7 +52,6 @@ export default function ProductAuctionPanel(props: Readonly<{ auctionId: number 
     };
   }, [auctionId]);
 
-  // Sockets
   useEffect(() => {
     const socket = getSocket();
     socket.emit('auction:join', { auctionId });
@@ -89,6 +90,10 @@ export default function ProductAuctionPanel(props: Readonly<{ auctionId: number 
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!isAuthed) {
+      toast.error('Sign in to bid.');
+      return;
+    }
 
     const amt = toCents(amountUsd);
     if (amt == null) {
@@ -117,9 +122,7 @@ export default function ProductAuctionPanel(props: Readonly<{ auctionId: number 
       setMinNextBidCents(d.minNextBidCents);
       setAmountUsd('');
       setProxyUsd('');
-    } catch {
-      // handled by toast.promise
-    }
+    } catch {}
   }
 
   const mins = Math.floor(msRemaining / 60000);
@@ -157,7 +160,6 @@ export default function ProductAuctionPanel(props: Readonly<{ auctionId: number 
 
       <div className="text-lg">
         <span>Current:</span>
-        {/* ✅ replace {' '} spacer with structural margin to satisfy Sonar (S6772) */}
         <span className="font-semibold ml-1">
           {highBidCents != null ? centsToUsd(highBidCents) : '—'}
         </span>
@@ -167,6 +169,8 @@ export default function ProductAuctionPanel(props: Readonly<{ auctionId: number 
         Next minimum: {minNextBidCents > 0 ? centsToUsd(minNextBidCents) : '—'}
       </div>
 
+      {!isAuthed && <div className="text-sm">Sign in to bid.</div>}
+
       <form onSubmit={submit} className="grid gap-3 md:grid-cols-2">
         <input
           className="rounded border px-3 py-2 bg-[var(--theme-textbox)] border-[var(--theme-border)]"
@@ -174,16 +178,21 @@ export default function ProductAuctionPanel(props: Readonly<{ auctionId: number 
           inputMode="decimal"
           value={amountUsd}
           onChange={(e) => setAmountUsd(e.target.value)}
+          disabled={!isAuthed}
         />
 
-        <label className="inline-flex items-center gap-2 text-sm">
+        <div className="inline-flex items-center gap-2 text-sm">
           <input
+            id={`use-proxy-${auctionId}`}
             type="checkbox"
             checked={useProxy}
             onChange={(e) => setUseProxy(e.target.checked)}
+            disabled={!isAuthed}
           />
-          Use proxy max
-        </label>
+          <label htmlFor={`use-proxy-${auctionId}`} className="select-none">
+            Use proxy max
+          </label>
+        </div>
 
         {useProxy && (
           <input
@@ -192,11 +201,13 @@ export default function ProductAuctionPanel(props: Readonly<{ auctionId: number 
             inputMode="decimal"
             value={proxyUsd}
             onChange={(e) => setProxyUsd(e.target.value)}
+            disabled={!isAuthed}
           />
         )}
 
         <button
           type="submit"
+          disabled={!isAuthed}
           className="md:col-span-2 inline-flex rounded-xl px-4 py-2 font-semibold"
           style={{
             background: 'var(--theme-button)',
