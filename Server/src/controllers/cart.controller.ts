@@ -263,7 +263,7 @@ export async function getCart(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
 
   const userId = (req as any).user.id;
-  const cart = await Cart.findOne({ where: { userId } });
+  let cart = await Cart.findOne({ where: { userId } });
 
   const raw: Array<{ productId: unknown; quantity: unknown }> = (cart?.itemsJson as any) ?? [];
   const items = raw
@@ -275,15 +275,28 @@ export async function getCart(req: Request, res: Response): Promise<void> {
 
   const productIds = items.map((x) => x.productId);
   const avail = await validateAvailability(productIds, userId);
+
+  let removed = [] as Array<{ productId: number; reason: string }>;
+  let workingItems = items;
+
   if (!avail.ok) {
-    res.status(409).json({ unavailable: avail.unavailable });
-    return;
+    const blocked = new Set(avail.unavailable.map((u) => u.productId));
+    workingItems = items.filter((i) => !blocked.has(i.productId));
+    removed = avail.unavailable;
+
+    if (!cart) {
+      await Cart.create({userId, itemsJson: workingItems} as any);
+    } else {
+      (cart as any).itemsJson = workingItems;
+      await cart.save();
+    }
   }
 
-  const totals = await computeTotals(items, userId);
+  const totals = await computeTotals(workingItems, userId);
 
   res.json({
     items: totals.lines,
+    removed,
     totals: {
       subtotal: totals.subtotalCents,
       shipping: totals.shippingCents,
@@ -308,23 +321,23 @@ export async function putCart(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const normalized: Array<{ productId: number; quantity: number }> = parsed.data.items
+  const userId = (req as any).user.id;
+
+  let normalized: Array<{ productId: number; quantity: number }> = parsed.data.items
     .map((x) => ({
       productId: Number(x.productId),
       quantity: Math.max(0, Math.trunc(Number((x as any).quantity ?? (x as any).qty ?? 0))),
     }))
     .filter((x) => Number.isFinite(x.productId) && x.productId > 0 && x.quantity > 0);
 
-  const userId = (req as any).user.id;
   const productIds = normalized.map((x) => x.productId);
   const avail = await validateAvailability(productIds, userId);
+
+  let removed = [] as Array<{ productId: number; reason: string }>;
   if (!avail.ok) {
-    res.status(409).json({
-      error: 'Some items are no longer available',
-      code: 'PRODUCT_UNAVAILABLE',
-      unavailable: avail.unavailable,
-    });
-    return;
+    const blocked = new Set(avail.unavailable.map((u) => u.productId));
+    normalized = normalized.filter((i) => !blocked.has(i.productId));
+    removed = avail.unavailable;
   }
 
   let cart = await Cart.findOne({ where: { userId } });
@@ -340,6 +353,7 @@ export async function putCart(req: Request, res: Response): Promise<void> {
   res.json({
     ok: true,
     items: totals.lines,
+    removed,
     totals: {
       subtotal: totals.subtotalCents,
       shipping: totals.shippingCents,
@@ -365,10 +379,10 @@ export async function checkout(req: Request, res: Response): Promise<void> {
   }
 
   const userId = (req as any).user.id;
-  const cart = await Cart.findOne({ where: { userId } });
+  let cart = await Cart.findOne({ where: { userId } });
 
   const raw: Array<{ productId: unknown; quantity: unknown }> = (cart?.itemsJson as any) ?? [];
-  const items = raw
+  let items = raw
     .map((x) => ({
       productId: Number(x.productId),
       quantity: Math.max(0, Math.trunc(Number(x.quantity ?? 0))),
@@ -377,32 +391,42 @@ export async function checkout(req: Request, res: Response): Promise<void> {
 
   const productIds = items.map((x) => x.productId);
   const avail = await validateAvailability(productIds, userId);
+
+  let removed = [] as Array<{ productId: number; reason: string }>;
   if (!avail.ok) {
-    res.status(409).json({
-      error: 'Some items are no longer available',
-      code: 'PRODUCT_UNAVAILABLE',
-      unavailable: avail.unavailable,
-    });
-    return;
+    const blocked = new Set(avail.unavailable.map((u) => u.productId));
+    items = items.filter((i) => !blocked.has(i.productId));
+    removed = avail.unavailable;
+
+    if (!cart) {
+      await Cart.create({userId, itemsJson: items} as any);
+    } else {
+      (cart as any).itemsJson = items;
+      await cart.save();
+    }
   }
 
   const totals = await computeTotals(items, userId);
 
   if (!totals.totalCents || totals.totalCents < 50) {
-    res.status(400).json({ error: 'Cart total too low' });
+    res.status(400).json({
+      error: 'Cart total too low',
+      removed,
+    });
     return;
   }
 
   const pi = await createPaymentIntent({ amountCents: totals.totalCents });
   if (!pi.ok) {
     const msg = pi.error || 'Failed to start checkout';
-    res.status(502).json({ error: msg });
+    res.status(502).json({ error: msg, removed });
     return;
   }
 
   res.json({
     clientSecret: pi.clientSecret,
     amountCents: totals.totalCents,
+    removed,
     totals: {
       subtotal: totals.subtotalCents,
       shipping: totals.shippingCents,

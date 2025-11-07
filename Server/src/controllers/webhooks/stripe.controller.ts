@@ -13,6 +13,8 @@ import { sendOrderEmail } from '../../services/email.service.js';
 import { User } from '../../models/user.model.js';
 import { AuctionLock } from '../../models/auctionLock.model.js';
 import { Op } from 'sequelize';
+import { AdminSettings } from '../../models/adminSettings.model.js';
+import { Vendor } from '../../models/vendor.model.js';
 
 export async function createPaymentIntent(_req: Request, res: Response): Promise<void> {
   res.status(410).json({ error: 'Use /api/checkout/intent' });
@@ -114,9 +116,34 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
 
           const vendorIds = new Set<number>([...vendorLineTotals.keys(), ...vendorShipping.keys()]);
           for (const vId of vendorIds) {
-            const gross = (vendorLineTotals.get(vId) || 0) + (vendorShipping.get(vId) || 0);
-            const fee = vendorFees.get(vId) || 0;
+            const base = Number(vendorLineTotals.get(vId) || 0);
+            const ship = Number(vendorShipping.get(vId) || 0);
+            const gross = base + ship;
+            const fee = Number(vendorFees.get(vId) || 0);
             const net = Math.max(0, gross - fee);
+
+            const v = await Vendor.findByPk(vId, {
+              transaction: t,
+              attributes: ['commissionOverridePct', 'minFeeOverrideCents'],
+            });
+
+            const admin = await AdminSettings.findOne({ transaction: t, attributes: ['commission_bps'] });
+            const adminCommissionPct =
+              Number.isFinite(Number(admin?.commission_bps))
+                ? Math.round((Number(admin!.commission_bps) / 100) * 100) / 100
+                : 0;
+
+            let commissionPct = Number.isFinite(Number((v as any)?.commissionOverridePct))
+              ? Number((v as any).commissionOverridePct)
+              : adminCommissionPct;
+
+            if ((!Number.isFinite(commissionPct) || commissionPct === 0) && base > 0 && fee > 0) {
+              commissionPct = Math.round((fee / base) * 10000) / 100;
+            }
+
+            const commissionMinCents = Number.isFinite(Number((v as any)?.minFeeOverrideCents))
+              ? Number((v as any).minFeeOverrideCents)
+              : 0;
 
             const [row, created] = await OrderVendor.findOrCreate({
               where: { orderId: Number(order.id), vendorId: vId },
@@ -126,12 +153,15 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
                 vendorGrossCents: gross,
                 vendorFeeCents: fee,
                 vendorNetCents: net,
+                commissionPct,
+                commissionMinCents,
               },
               transaction: t,
             });
+
             if (!created) {
               await row.update(
-                { vendorGrossCents: gross, vendorFeeCents: fee, vendorNetCents: net },
+                { vendorGrossCents: gross, vendorFeeCents: fee, vendorNetCents: net, commissionPct, commissionMinCents },
                 { transaction: t }
               );
             }
