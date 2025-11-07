@@ -151,6 +151,7 @@ export default function AuctionsListPage(): React.ReactElement {
               startingBidCents={a.startingBidCents}
               endAt={a.endAt}
               status={a.status}
+              vendorSlug={a.vendorSlug}
             />
           ))}
         </section>

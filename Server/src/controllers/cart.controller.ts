@@ -13,6 +13,7 @@ import { calcTaxCents, taxFeatureEnabled } from '../services/tax.service.js';
 import { ProductImage } from '../models/productImage.model.js';
 import { UPLOADS_PUBLIC_ROUTE } from './products.controller.js';
 import { AuctionLock } from '../models/auctionLock.model.js';
+import { Vendor } from '../models/vendor.model.js';
 
 function toPublicUrl(rel?: string | null): string | null {
   if (!rel) return null;
@@ -81,6 +82,7 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
   type CartLine = {
     productId: number;
     vendorId: number;
+    vendorSlug: string | null;
     title: string;
     unitPriceCents: number;
     priceCents: number;
@@ -137,6 +139,12 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
           ['sortOrder', 'ASC'],
           ['id', 'ASC'],
         ],
+      },
+      {
+        model: Vendor,
+        as: 'vendor',
+        attributes: ['id', 'slug'],
+        required: false,
       },
     ],
   });
@@ -199,6 +207,7 @@ async function computeTotals(items: Array<{ productId: number; quantity: number 
     lines.push({
       productId: Number(j.id),
       vendorId,
+      vendorSlug: j.vendor?.slug ?? null,
       title: String(j.title || ''),
       unitPriceCents: unitPrice,
       priceCents: unitPrice,
@@ -285,7 +294,7 @@ export async function getCart(req: Request, res: Response): Promise<void> {
     removed = avail.unavailable;
 
     if (!cart) {
-      await Cart.create({userId, itemsJson: workingItems} as any);
+      await Cart.create({ userId, itemsJson: workingItems } as any);
     } else {
       (cart as any).itemsJson = workingItems;
       await cart.save();
@@ -342,7 +351,7 @@ export async function putCart(req: Request, res: Response): Promise<void> {
 
   let cart = await Cart.findOne({ where: { userId } });
   if (!cart) {
-    await Cart.create({userId, itemsJson: normalized} as any);
+    await Cart.create({ userId, itemsJson: normalized } as any);
   } else {
     (cart as any).itemsJson = normalized;
     await cart.save();
@@ -399,7 +408,7 @@ export async function checkout(req: Request, res: Response): Promise<void> {
     removed = avail.unavailable;
 
     if (!cart) {
-      await Cart.create({userId, itemsJson: items} as any);
+      await Cart.create({ userId, itemsJson: items } as any);
     } else {
       (cart as any).itemsJson = items;
       await cart.save();

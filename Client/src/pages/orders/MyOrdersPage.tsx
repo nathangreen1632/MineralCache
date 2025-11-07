@@ -86,7 +86,7 @@ export default function MyOrdersPage(): React.ReactElement {
 
   return (
     <section className="mx-auto max-w-7xl px-6 py-14 space-y-6">
-      <h1 className="text-2xl font-semibold text-[var(--theme-text)]">My Orders</h1>
+      <h1 className="text-4xl font-semibold text-[var(--theme-text)]">My Orders</h1>
       {items.length === 0 ? (
         <div className="rounded-2xl border p-6" style={card}>
           <p>You don’t have any orders yet.</p>

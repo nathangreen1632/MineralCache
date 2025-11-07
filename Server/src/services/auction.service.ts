@@ -85,18 +85,18 @@ async function purgeProductFromOtherCarts(tx: Transaction, productId: number, wi
 
 export function resolveProxies(
   prevProxy: number,
+  prevHigh: number,
+  requested: number,
   challengerProxy: number,
   ladder: Ladder
 ): { winner: 'prev' | 'challenger'; clearingPrice: number } {
   if (challengerProxy <= prevProxy) {
-    const inc = ladderIncrementFor(challengerProxy, ladder);
-    const target = challengerProxy + inc;
-    const clearing = Math.min(prevProxy, target);
+    const inc = ladderIncrementFor(prevHigh, ladder);
+    const next = prevHigh + inc;
+    const clearing = Math.min(prevProxy, Math.max(next, requested));
     return { winner: 'prev', clearingPrice: clearing };
   }
-  const inc = ladderIncrementFor(prevProxy, ladder);
-  const clearing = Math.min(challengerProxy, prevProxy + inc);
-  return { winner: 'challenger', clearingPrice: clearing };
+  return { winner: 'challenger', clearingPrice: requested };
 }
 
 export async function placeBidTx(
@@ -116,6 +116,8 @@ export async function placeBidTx(
   prevLeaderChanged: boolean;
   prevLeaderId: number | null;
   timeExtendedMs?: number;
+  reason?: 'first_bid' | 'you_lead' | 'prev_proxy_higher';
+  message?: string;
 }
   | { ok: false; error: string; minNextBidCents?: number }
 > {
@@ -147,7 +149,7 @@ export async function placeBidTx(
   );
 
   if (prevLeaderId == null) {
-    auction.highBidCents = Math.max(requested, minNext);
+    auction.highBidCents = requested;
     auction.highBidUserId = userId;
 
     let extendedMs = 0;
@@ -168,10 +170,24 @@ export async function placeBidTx(
       prevLeaderChanged: false,
       prevLeaderId: null,
       timeExtendedMs: extendedMs || undefined,
+      reason: 'first_bid',
+      message: ''
     };
   }
 
-  const outcome = resolveProxies(prevHigh, proxy, ladder);
+  let prevLeaderProxy = prevHigh;
+  const lastPrevLeaderBid = await Bid.findOne({
+    where: { auctionId: auction.id, userId: prevLeaderId },
+    order: [['createdAt', 'DESC']],
+    transaction: tx,
+    lock: (tx as any).LOCK?.UPDATE
+  });
+  if (lastPrevLeaderBid) {
+    const p = lastPrevLeaderBid.maxProxyCents ?? lastPrevLeaderBid.amountCents ?? 0;
+    if (p > 0) prevLeaderProxy = p;
+  }
+
+  const outcome = resolveProxies(prevLeaderProxy, prevHigh, requested, proxy, ladder);
 
   auction.highBidCents = outcome.clearingPrice;
   auction.highBidUserId = outcome.winner === 'prev' ? prevLeaderId : userId;
@@ -184,16 +200,21 @@ export async function placeBidTx(
 
   await auction.save({ transaction: tx });
 
+  const nextMin = minimumAcceptableBid(auction);
+  const lostToPrev = outcome.winner === 'prev';
+
   return {
     ok: true,
     persistedBidId: bid.id,
     leaderUserId: auction.highBidUserId,
     highBidCents: auction.highBidCents,
     youAreLeading: auction.highBidUserId === userId,
-    minNextBidCents: minimumAcceptableBid(auction),
+    minNextBidCents: nextMin,
     prevLeaderChanged: auction.highBidUserId !== prevLeaderId,
     prevLeaderId,
     timeExtendedMs: extendedMs || undefined,
+    reason: lostToPrev ? 'prev_proxy_higher' : 'you_lead',
+    message: lostToPrev ? `Outbid by an existing proxy. Next minimum bid is $${(nextMin/100).toFixed(2)}` : ''
   };
 }
 
@@ -232,7 +253,7 @@ export async function assertAuctionStartAllowed(productId: number, tx: Transacti
     where: {
       productId,
       status: 'ended',
-      endAt: { [Op.gt]: subDays(new Date(), 5) as any },
+      endAt: { [Op.gt]: subDays(new Date(), 5) },
     },
     transaction: tx,
     lock: (tx as any).LOCK?.UPDATE,
@@ -343,11 +364,6 @@ export async function cancelAuctionTx(
   if (actor.kind === 'vendor' && a.vendorId !== actor.vendorId) {
     logWarn('auction.cancel.forbidden_vendor_mismatch', { auctionId, vendorId: actor.vendorId, ownerVendorId: a.vendorId });
     throw Object.assign(new Error('Forbidden'), { code: 'FORBIDDEN' as const });
-  }
-
-  if (a.status === 'ended' || a.status === 'canceled') {
-    logInfo('auction.cancel.already_final', { auctionId, status: a.status });
-    return { auction: a, alreadyFinal: true, reason };
   }
 
   if (a.status !== 'live' && a.status !== 'scheduled' && a.status !== 'draft') {

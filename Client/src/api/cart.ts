@@ -12,6 +12,7 @@ export type CartItem = {
   qty?: number;
   quantity?: number;
   imageUrl?: string | null;
+  vendorSlug?: string | null;
 };
 
 export type CartTotals = {
@@ -65,7 +66,6 @@ function pickImageUrl(a: any): string | null {
 function normalizeItem(raw: any): CartItem {
   const productId = toNum(raw?.productId ?? raw?.id ?? raw?.product_id, 0);
   const title = String(raw?.title ?? raw?.name ?? 'Untitled item');
-
   const priceCents = toNum(
     raw?.priceCents ??
     raw?.unitPriceCents ??
@@ -74,9 +74,10 @@ function normalizeItem(raw: any): CartItem {
     raw?.price,
     0
   );
-
   const q = toInt(raw?.quantity ?? raw?.qty);
   const qtySafe = q !== undefined ? Math.max(0, q) : undefined;
+  const vendorSlug =
+    raw?.vendorSlug ?? raw?.vendor_slug ?? raw?.vendor?.slug ?? null;
 
   return {
     productId,
@@ -85,8 +86,10 @@ function normalizeItem(raw: any): CartItem {
     qty: qtySafe,
     quantity: qtySafe,
     imageUrl: pickImageUrl(raw),
+    vendorSlug,
   };
 }
+
 
 function normalizeTotals(raw: any): CartTotals {
   return {

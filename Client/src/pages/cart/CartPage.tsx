@@ -6,6 +6,7 @@ import { EV_CART_CHANGED, EV_SHIPPING_CHANGED } from '../../lib/events';
 import { useCartTotals } from '../../hooks/useCartTotals';
 import CommissionPreview from "../../components/cart/CommissionPreview.tsx";
 import AcceptedCards from "../../components/payment/AcceptedCards.tsx";
+import VendorLink from "../../components/common/VendorLink.tsx";
 
 type Flash = { kind: 'info' | 'error' | 'success'; text: string };
 
@@ -182,7 +183,7 @@ export default function CartPage(): React.ReactElement {
 
   return (
     <section className="mx-auto max-w-6xl px-4 py-8 space-y-6">
-      <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Your Cart</h1>
+      <h1 className="text-4xl font-semibold text-[var(--theme-text)]">Your Cart</h1>
 
       <div className="grid gap-6 md:grid-cols-3">
         {/* LEFT column — same width as item cards */}
@@ -217,6 +218,7 @@ export default function CartPage(): React.ReactElement {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="truncate font-semibold">{(it as any).title ?? 'Untitled item'}</div>
+                  {it.vendorSlug ? <VendorLink slug={it.vendorSlug} /> : null}
                   <div className="text-sm opacity-80">{centsToUsd(priceCents)}</div>
                 </div>
 

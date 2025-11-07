@@ -389,7 +389,7 @@ export default function ProductCatalogList(): React.ReactElement {
 
   return (
     <section className="mx-auto max-w-12xl px-4 py-8 space-y-6">
-      <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Catalog</h1>
+      <h1 className="text-4xl font-semibold text-[var(--theme-text)]">Catalog</h1>
 
       {/* Search + Filters (collapsible 0–1023px; always open at 1024px+) */}
       <div className="w-full rounded-xl border" style={card}>
@@ -621,7 +621,7 @@ export default function ProductCatalogList(): React.ReactElement {
                   {priceEl}
 
                   {/* Vendor line (right after price) */}
-                  <div className="mt-0.5 text-xs text-[var(--theme-text)]">
+                  <div className="mt-0.5 text-sm text-[var(--theme-text)]">
                     <span className="opacity-75">Sold by:</span>{' '}
                   {vendorSlug ? (
                       <Link
@@ -636,7 +636,7 @@ export default function ProductCatalogList(): React.ReactElement {
                   </div>
 
                   {(p as any).species ? (
-                    <div className="text-xs opacity-70">
+                    <div className="text-sm opacity-70">
                       {highlight((p as any).species, qStr)}
                     </div>
                   ) : null}
