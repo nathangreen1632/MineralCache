@@ -87,12 +87,13 @@ export function resolveProxies(
   prevProxy: number,
   prevHigh: number,
   requested: number,
-  _challengerProxy: number,
+  challengerProxy: number,
   ladder: Ladder
 ): { winner: 'prev' | 'challenger'; clearingPrice: number } {
-  const inc = ladderIncrementFor(prevHigh, ladder);
-  if (requested <= prevProxy) {
-    const clearing = Math.min(prevProxy, requested + inc);
+  if (challengerProxy <= prevProxy) {
+    const inc = ladderIncrementFor(prevHigh, ladder);
+    const next = prevHigh + inc;
+    const clearing = Math.min(prevProxy, Math.max(next, requested));
     return { winner: 'prev', clearingPrice: clearing };
   }
   return { winner: 'challenger', clearingPrice: requested };
@@ -115,6 +116,8 @@ export async function placeBidTx(
   prevLeaderChanged: boolean;
   prevLeaderId: number | null;
   timeExtendedMs?: number;
+  reason?: 'first_bid' | 'you_lead' | 'prev_proxy_higher';
+  message?: string;
 }
   | { ok: false; error: string; minNextBidCents?: number }
 > {
@@ -167,11 +170,24 @@ export async function placeBidTx(
       prevLeaderChanged: false,
       prevLeaderId: null,
       timeExtendedMs: extendedMs || undefined,
+      reason: 'first_bid',
+      message: ''
     };
   }
 
-  const outcome = resolveProxies(prevHigh, prevHigh, requested, proxy, ladder);
+  let prevLeaderProxy = prevHigh;
+  const lastPrevLeaderBid = await Bid.findOne({
+    where: { auctionId: auction.id, userId: prevLeaderId },
+    order: [['createdAt', 'DESC']],
+    transaction: tx,
+    lock: (tx as any).LOCK?.UPDATE
+  });
+  if (lastPrevLeaderBid) {
+    const p = lastPrevLeaderBid.maxProxyCents ?? lastPrevLeaderBid.amountCents ?? 0;
+    if (p > 0) prevLeaderProxy = p;
+  }
 
+  const outcome = resolveProxies(prevLeaderProxy, prevHigh, requested, proxy, ladder);
 
   auction.highBidCents = outcome.clearingPrice;
   auction.highBidUserId = outcome.winner === 'prev' ? prevLeaderId : userId;
@@ -184,16 +200,21 @@ export async function placeBidTx(
 
   await auction.save({ transaction: tx });
 
+  const nextMin = minimumAcceptableBid(auction);
+  const lostToPrev = outcome.winner === 'prev';
+
   return {
     ok: true,
     persistedBidId: bid.id,
     leaderUserId: auction.highBidUserId,
     highBidCents: auction.highBidCents,
     youAreLeading: auction.highBidUserId === userId,
-    minNextBidCents: minimumAcceptableBid(auction),
+    minNextBidCents: nextMin,
     prevLeaderChanged: auction.highBidUserId !== prevLeaderId,
     prevLeaderId,
     timeExtendedMs: extendedMs || undefined,
+    reason: lostToPrev ? 'prev_proxy_higher' : 'you_lead',
+    message: lostToPrev ? `Outbid by an existing proxy. Next minimum bid is $${(nextMin/100).toFixed(2)}` : ''
   };
 }
 
@@ -343,11 +364,6 @@ export async function cancelAuctionTx(
   if (actor.kind === 'vendor' && a.vendorId !== actor.vendorId) {
     logWarn('auction.cancel.forbidden_vendor_mismatch', { auctionId, vendorId: actor.vendorId, ownerVendorId: a.vendorId });
     throw Object.assign(new Error('Forbidden'), { code: 'FORBIDDEN' as const });
-  }
-
-  if (a.status === 'ended' || a.status === 'canceled') {
-    logInfo('auction.cancel.already_final', { auctionId, status: a.status });
-    return { auction: a, alreadyFinal: true, reason };
   }
 
   if (a.status !== 'live' && a.status !== 'scheduled' && a.status !== 'draft') {
