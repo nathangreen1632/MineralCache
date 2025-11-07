@@ -85,18 +85,17 @@ async function purgeProductFromOtherCarts(tx: Transaction, productId: number, wi
 
 export function resolveProxies(
   prevProxy: number,
-  challengerProxy: number,
+  prevHigh: number,
+  requested: number,
+  _challengerProxy: number,
   ladder: Ladder
 ): { winner: 'prev' | 'challenger'; clearingPrice: number } {
-  if (challengerProxy <= prevProxy) {
-    const inc = ladderIncrementFor(challengerProxy, ladder);
-    const target = challengerProxy + inc;
-    const clearing = Math.min(prevProxy, target);
+  const inc = ladderIncrementFor(prevHigh, ladder);
+  if (requested <= prevProxy) {
+    const clearing = Math.min(prevProxy, requested + inc);
     return { winner: 'prev', clearingPrice: clearing };
   }
-  const inc = ladderIncrementFor(prevProxy, ladder);
-  const clearing = Math.min(challengerProxy, prevProxy + inc);
-  return { winner: 'challenger', clearingPrice: clearing };
+  return { winner: 'challenger', clearingPrice: requested };
 }
 
 export async function placeBidTx(
@@ -147,7 +146,7 @@ export async function placeBidTx(
   );
 
   if (prevLeaderId == null) {
-    auction.highBidCents = Math.max(requested, minNext);
+    auction.highBidCents = requested;
     auction.highBidUserId = userId;
 
     let extendedMs = 0;
@@ -171,7 +170,8 @@ export async function placeBidTx(
     };
   }
 
-  const outcome = resolveProxies(prevHigh, proxy, ladder);
+  const outcome = resolveProxies(prevHigh, prevHigh, requested, proxy, ladder);
+
 
   auction.highBidCents = outcome.clearingPrice;
   auction.highBidUserId = outcome.winner === 'prev' ? prevLeaderId : userId;
@@ -232,7 +232,7 @@ export async function assertAuctionStartAllowed(productId: number, tx: Transacti
     where: {
       productId,
       status: 'ended',
-      endAt: { [Op.gt]: subDays(new Date(), 5) as any },
+      endAt: { [Op.gt]: subDays(new Date(), 5) },
     },
     transaction: tx,
     lock: (tx as any).LOCK?.UPDATE,
