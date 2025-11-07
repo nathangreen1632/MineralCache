@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import { useAuthStore } from '../../stores/useAuthStore';
 import { getSocket, auctionRoomName } from '../../helpers/socket.helper';
 import {
   getAuction,
@@ -29,6 +30,8 @@ export default function AuctionDetailPage(): React.ReactElement | null {
 
   const navigate = useNavigate();
   const location = useLocation();
+  const user = useAuthStore((s) => s.user);
+  const isAuthed = Boolean(user);
 
   const preload = (location.state as {
     imageUrl?: string | null;
@@ -306,7 +309,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
 
   return (
     <main className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)]">
-      <div className="mx-auto max-w-5xl px-6 py-14 grid gap-8">
+      <div className="mx-auto max-w-7xl px-6 py-14 grid gap-8">
         <header className="grid gap-2">
           <div>
             <button
@@ -403,7 +406,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
                 <img
                   src={imageUrl}
                   alt={productTitle ?? headerTitle}
-                  className="w-full h-[35rem] object-cover"
+                  className="w-full h-[45rem] object-contain"
                   loading="lazy"
                 />
               </div>
@@ -428,14 +431,16 @@ export default function AuctionDetailPage(): React.ReactElement | null {
 
           <div className="w-full md:w-[26rem] shrink-0 md:sticky md:top-8">
             <div className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-4 shadow-[0_10px_30px_var(--theme-shadow)] grid gap-4">
-              <h2 className="text-2xl font-semibold">Place a bid</h2>
+              {isAuthed && <h2 className="text-2xl font-semibold">Place a bid</h2>}
+              {!isAuthed && <div className="text-lg text-[var(--theme-link)]">Sign in, or create an account, to bid.</div>}
               <form onSubmit={onSubmitBid} className="grid gap-3">
                 <div className="grid gap-1">
                   <label htmlFor="amount" className="text-lg">Your bid (USD)</label>
                   <input
                     id="amount"
                     inputMode="decimal"
-                    placeholder="e.g. 125.00"
+                    disabled={!isAuthed}
+                    placeholder="e.g. $125.00"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     className="rounded-xl border bg-[var(--theme-surface)] border-[var(--theme-border)] px-4 py-2"
@@ -447,7 +452,8 @@ export default function AuctionDetailPage(): React.ReactElement | null {
                   <input
                     id="proxy"
                     inputMode="decimal"
-                    placeholder="e.g. 200.00"
+                    disabled={!isAuthed}
+                    placeholder="e.g. $200.00"
                     value={proxy}
                     onChange={(e) => setProxy(e.target.value)}
                     className="rounded-xl border bg-[var(--theme-surface)] border-[var(--theme-border)] px-4 py-2"
@@ -458,7 +464,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
                 <div className="flex items-center gap-3">
                   <button
                     type="submit"
-                    disabled={busy}
+                    disabled={!isAuthed || busy}
                     className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)] disabled:opacity-60"
                   >
                     {buttonLabel}
@@ -467,6 +473,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
                   <button
                     type="button"
                     onClick={toggleWatch}
+                    disabled={!isAuthed}
                     className="inline-flex rounded-xl px-4 py-2 font-semibold border border-[var(--theme-border)] bg-[var(--theme-surface)] hover:bg-[var(--theme-card)]"
                     aria-pressed={watching}
                     aria-label={watching ? 'Remove from watchlist' : 'Add to watchlist'}
@@ -478,7 +485,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
                     <button
                       type="button"
                       onClick={onBuyNow}
-                      disabled={buyBusy}
+                      disabled={!isAuthed || buyBusy}
                       className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)] disabled:opacity-60"
                     >
                       {buyBusy
