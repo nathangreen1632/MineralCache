@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { Order } from '../models/order.model.js';
 import { OrderItem } from '../models/orderItem.model.js';
 import { User } from '../models/user.model.js';
+import { Vendor } from '../models/vendor.model.js';
 import { sendOrderEmail } from '../services/email.service.js';
 import { cancelPaymentIntent } from '../services/stripe.service.js';
 import { shipOrderSchema, deliverOrderSchema } from '../validation/orders.schema.js';
@@ -140,6 +141,16 @@ export async function getOrder(req: Request, res: Response): Promise<void> {
 
   const items = await OrderItem.findAll({ where: { orderId: id } });
 
+  const vendorIds = [...new Set(items.map(i => Number(i.vendorId)).filter(Number.isFinite))];
+  const vendors = vendorIds.length
+    ? await Vendor.findAll({
+      where: { id: { [Op.in]: vendorIds } },
+      attributes: ['id', 'slug'],
+    })
+    : [];
+  const vendorSlugById = new Map(vendors.map(v => [Number(v.id), String(v.slug)]));
+
+
   res.json({
     item: {
       id: Number(order.id),
@@ -158,6 +169,7 @@ export async function getOrder(req: Request, res: Response): Promise<void> {
       items: items.map((i) => ({
         productId: Number(i.productId),
         vendorId: Number(i.vendorId),
+        vendorSlug: vendorSlugById.get(Number(i.vendorId)) ?? null,
         title: String(i.title),
         unitPriceCents: Number(i.unitPriceCents),
         quantity: Number(i.quantity),
@@ -167,6 +179,7 @@ export async function getOrder(req: Request, res: Response): Promise<void> {
         shippedAt: (i as any).shippedAt ?? null,
         deliveredAt: (i as any).deliveredAt ?? null,
       })),
+
     },
   });
 }
