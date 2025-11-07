@@ -214,11 +214,13 @@ export default function OrderDetailPage(): React.ReactElement {
             <tbody>
             {o.items.map((it: any) => {
               const tUrl = trackingUrl(it.shipCarrier, it.shipTracking);
-              // --- FIX (L179): use a stable key, never the array index ---
               const rowKey: string =
-                (it.id as string | number | undefined)?.toString()
-                ?? `${it.productId ?? 'p'}-${it.vendorId ?? 'v'}-${it.title}`;
-              // -----------------------------------------------------------
+                (it.id as string | number | undefined)?.toString() ??
+                `${it.productId ?? 'p'}-${it.vendorId ?? 'v'}-${it.title}`;
+
+              const vendorSlug: string | null =
+                it.vendorSlug ?? it.vendor_slug ?? it.vendor?.slug ?? null;
+
               return (
                 <tr
                   key={rowKey}
@@ -235,7 +237,13 @@ export default function OrderDetailPage(): React.ReactElement {
                           style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
                         />
                       ) : null}
-                      <span className="font-medium">{it.title}</span>
+
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{it.title}</div>
+                        {vendorSlug ? (
+                          <div className="text-xs opacity-80">Sold by: <span className="font-semibold text-[var(--theme-link)]">{vendorSlug}</span></div>
+                        ) : null}
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3">{it.quantity}</td>
