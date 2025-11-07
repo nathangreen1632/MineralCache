@@ -9,7 +9,7 @@ export type MyOrderListItem = {
   createdAt: string;
   subtotalCents: number;
   shippingCents: number;
-  taxCents: number;          // ✅ NEW
+  taxCents: number;
   totalCents: number;
   itemCount: number;
 };
@@ -27,6 +27,7 @@ export function listMyOrders(page = 1, pageSize = 20) {
 export type OrderDetailItem = {
   productId: number;
   vendorId: number;
+  vendorSlug?: string | null;
   title: string;
   unitPriceCents: number;
   quantity: number;
