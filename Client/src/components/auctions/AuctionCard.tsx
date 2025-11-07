@@ -1,7 +1,7 @@
-// Client/src/components/auctions/AuctionCard.tsx
 import React from 'react';
 import { Link } from 'react-router-dom';
 import Countdown from './Countdown';
+import VendorLink from '../common/VendorLink';
 
 function cents(v: number | null | undefined): string {
   let n = 0;
@@ -16,17 +16,15 @@ type Props = Readonly<{
   highBidCents: number | null;
   startingBidCents: number;
   endAt: string | Date | null;
-  imageUrl?: string | null;       // NEW
-  productTitle?: string | null;   // NEW (optional subtitle)
-  // NEW (optional): pass to show "Closed"/"Canceled" pill
+  imageUrl?: string | null;
+  productTitle?: string | null;
   status?: 'draft' | 'scheduled' | 'live' | 'ended' | 'canceled';
+  vendorSlug?: string | null;
 }>;
 
 export default function AuctionCard(props: Props): React.ReactElement {
   const displayTitle =
-    typeof props.title === 'string' && props.title.length > 0
-      ? props.title
-      : `Auction #${props.id}`;
+    typeof props.title === 'string' && props.title.length > 0 ? props.title : `Auction #${props.id}`;
 
   let display = props.startingBidCents;
   if (typeof props.highBidCents === 'number') {
@@ -38,14 +36,13 @@ export default function AuctionCard(props: Props): React.ReactElement {
     productTitle: props.productTitle ?? (props.title || `Auction #${props.id}`),
   };
 
-  // NEW: compute a label if this card is final
   let statusLabel: string | null = null;
   if (props.status === 'ended') statusLabel = 'Closed';
   else if (props.status === 'canceled') statusLabel = 'Canceled';
 
   return (
     <article
-      className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-4 shadow-[0_10px_30px_var(--theme-shadow)] grid gap-3"
+      className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-4 shadow-[0_10px_30px_var(--theme-shadow)] grid gap-2"
       aria-labelledby={`auction-${props.id}-title`}
     >
       {props.imageUrl && (
@@ -64,7 +61,7 @@ export default function AuctionCard(props: Props): React.ReactElement {
         </Link>
       )}
 
-      <h3 id={`auction-${props.id}-title`} className="text-lg font-semibold">
+      <h3 id={`auction-${props.id}-title`} className="text-base font-semibold leading-tight">
         <Link
           className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
           to={`/auctions/${props.id}`}
@@ -74,22 +71,25 @@ export default function AuctionCard(props: Props): React.ReactElement {
         </Link>
       </h3>
 
-      {/* NEW: status pill under the title (shown only when final) */}
-      {statusLabel && (
-        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-[var(--theme-card)] border border-[var(--theme-border)]">
-          {statusLabel}
-        </span>
-      )}
+      <div className="grid gap-1">
+        {statusLabel && (
+          <span className="justify-self-center inline-flex items-center rounded-full px-2 py-0.5 text-base font-semibold bg-[var(--theme-card)] border border-[var(--theme-border)] leading-none">
+            {statusLabel}
+          </span>
+        )}
 
-      {props.productTitle && (
-        <div className="text-sm text-[var(--theme-muted)]">{props.productTitle}</div>
-      )}
+        {props.vendorSlug ? <VendorLink slug={props.vendorSlug} className="text-sm leading-snug" /> : null}
 
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-[var(--theme-text)]">
-          Current: <strong>{cents(display)}</strong>
-        </span>
-        <Countdown endAt={props.endAt} />
+        {props.productTitle && (
+          <div className="text-sm text-[var(--theme-muted)] leading-snug">{props.productTitle}</div>
+        )}
+
+        <div className="flex items-center justify-between text-sm leading-snug">
+          <span className="text-[var(--theme-text)]">
+            Current: <strong>{cents(display)}</strong>
+          </span>
+          <Countdown endAt={props.endAt} />
+        </div>
       </div>
 
       <div className="flex justify-end">
