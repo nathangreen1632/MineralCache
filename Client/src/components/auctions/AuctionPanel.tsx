@@ -1,6 +1,7 @@
 // Client/src/components/auctions/AuctionPanel.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getAuction, getMinimumBid, placeBid, type AuctionDto } from '../../api/auctions';
+import { useAuthStore } from '../../stores/useAuthStore';
 import { joinRoom, leaveRoom, on, off } from '../../lib/socket';
 
 function centsToUsd(cents: number | null | undefined): string {
@@ -27,6 +28,8 @@ export default function AuctionPanel({ auctionId }: Readonly<Props>): React.Reac
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [remainingSec, setRemainingSec] = useState<number | null>(null);
+  const user = useAuthStore((s) => s.user);
+  const isAuthed = Boolean(user);
 
   const intervalRef = useRef<number | null>(null);
 
@@ -212,6 +215,7 @@ export default function AuctionPanel({ auctionId }: Readonly<Props>): React.Reac
       </div>
 
       <form onSubmit={submitBid} className="grid gap-3" aria-describedby={`auction-help-${auction.id}`}>
+        {!isAuthed && <div className="text-lg">Sign in to bid.</div>}
         <label className="grid gap-1">
           <span className="text-sm font-medium">Your bid (USD)</span>
           <input
@@ -219,6 +223,7 @@ export default function AuctionPanel({ auctionId }: Readonly<Props>): React.Reac
             step="0.01"
             min="0"
             inputMode="decimal"
+            disabled={!isAuthed}
             value={inputUsd}
             onChange={(e) => setInputUsd(e.target.value)}
             className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-focus)]"
@@ -234,7 +239,7 @@ export default function AuctionPanel({ auctionId }: Readonly<Props>): React.Reac
         <div className="flex items-center gap-2">
           <button
             type="submit"
-            disabled={busy}
+            disabled={!isAuthed || busy}
             className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)] disabled:opacity-60"
           >
             Place bid
