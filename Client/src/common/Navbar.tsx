@@ -164,7 +164,7 @@ function NavContent(): React.ReactElement {
       ) : (
         <SideNavLink to="/products" end label="Shop" Icon={Store} />
       )}
-      {AUCTIONS_ENABLED && isAuthed && (
+      {AUCTIONS_ENABLED && (
         <SideNavLink to="/auctions" end label="Auctions" Icon={ClipboardList} />
       )}
       {isVendor && (
