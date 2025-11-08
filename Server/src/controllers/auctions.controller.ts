@@ -388,3 +388,4 @@ export async function buyNow(req: Request, res: Response): Promise<void> {
     res.status(500).json({ ok: false, code: 'SERVER_ERROR' });
   }
 }
+
