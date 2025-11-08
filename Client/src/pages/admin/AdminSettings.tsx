@@ -2,10 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { getAdminSettings, updateAdminSettings, type AdminSettings } from '../../api/admin';
 import { getHealth } from '../../api/health';
-
-function centsToUsd(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
+import { centsToUsd } from '../../utils/money.util';
 
 /** ===== Server DTO (what /admin/settings returns) ===== */
 type ServerAdminSettingsDTO = {
