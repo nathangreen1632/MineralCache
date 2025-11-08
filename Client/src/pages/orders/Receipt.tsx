@@ -2,17 +2,13 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getMyOrder, type GetOrderRes, getReceiptPdfUrl } from '../../api/orders';
+import { centsToUsd } from '../../utils/money.util';
 
 type Load =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'loaded'; order: GetOrderRes['item'] }
   | { kind: 'error'; message: string };
-
-function centsToUsd(cents: number | undefined) {
-  if (typeof cents !== 'number') return '$0.00';
-  return `$${(cents / 100).toFixed(2)}`;
-}
 
 export default function Receipt(): React.ReactElement {
   const params = useParams();
