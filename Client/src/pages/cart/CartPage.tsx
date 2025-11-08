@@ -219,7 +219,7 @@ export default function CartPage(): React.ReactElement {
                 <div className="flex-1 min-w-0">
                   <div className="truncate font-semibold">{(it as any).title ?? 'Untitled item'}</div>
                   {it.vendorSlug ? <VendorLink slug={it.vendorSlug} /> : null}
-                  <div className="text-sm opacity-80">{centsToUsd(priceCents)}</div>
+                  <div className="text-sm opacity-80 text-[var(--theme-success)]">{centsToUsd(priceCents)}</div>
                 </div>
 
                 <label className="inline-flex items-center gap-2 text-sm">
