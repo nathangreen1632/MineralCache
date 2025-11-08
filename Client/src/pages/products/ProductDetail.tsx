@@ -144,8 +144,8 @@ export default function ProductDetail(): React.ReactElement {
   if (onSaleNow) {
     priceEl = (
       <>
-        <span className="font-bold text-[var(--theme-button)]">{centsToUsd(effCents)}</span>
-        <span className="ml-2 line-through text-[var(--theme-muted)] opacity-70">
+        <span className="font-bold text-[var(--theme-success)]">{centsToUsd(effCents)}</span>
+        <span className="ml-2 line-through text-[var(--theme-button)] opacity-80">
           {centsToUsd(p.priceCents)}
         </span>
       </>
@@ -198,7 +198,7 @@ export default function ProductDetail(): React.ReactElement {
           ) : null}
         </div>
 
-        <div className="text-xl font-bold text-[var(--theme-text)]">{priceEl}</div>
+        <div className="text-xl font-bold text-[var(--theme-success)]">{priceEl}</div>
 
         {auctionId ? <AuctionPanel auctionId={auctionId} /> : null}
 
