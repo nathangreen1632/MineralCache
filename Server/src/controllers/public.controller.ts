@@ -5,6 +5,7 @@ import { getPublicConfigSvc } from '../services/publicConfig.service.js';
 import { Category } from '../models/category.model.js';
 import { Product } from '../models/product.model.js';
 import { ProductImage } from '../models/productImage.model.js';
+import { Vendor } from '../models/vendor.model.js';
 import { Op, literal, where, type Order as SqlOrder } from 'sequelize';
 
 export async function listPublicCategories(_req: Request, res: Response) {
@@ -78,7 +79,10 @@ export async function listPublicProductsCtrl(req: Request, res: Response) {
       }
       const rows = await Product.findAll({
         where: { id: { [Op.in]: ids }, archivedAt: { [Op.is]: null } as any },
-        include: [{ model: ProductImage, as: 'images', separate: false, required: false }],
+        include: [
+          { model: ProductImage, as: 'images', separate: false, required: false },
+          { model: Vendor, as: 'vendor', attributes: ['id', 'slug', 'displayName'], required: false },
+        ],
         order: [['id', 'ASC']],
       });
       const out = rows.map((p) => {
@@ -106,6 +110,8 @@ export async function listPublicProductsCtrl(req: Request, res: Response) {
           imageUrl,
           slug: typeof j.slug === 'string' ? j.slug : null,
           vendorId: Number(j.vendorId ?? 0) || null,
+          vendorSlug: j.vendor?.slug ?? null,
+          vendorName: j.vendor?.displayName ?? null,
         };
       });
       res.json(out);
@@ -229,6 +235,12 @@ export async function listPublicProductsCtrl(req: Request, res: Response) {
         required: true,
       });
     }
+    include.push({
+      model: Vendor,
+      as: 'vendor',
+      attributes: ['id', 'slug', 'displayName'],
+      required: false,
+    });
 
     const offset = (page - 1) * pageSize;
 
@@ -308,7 +320,10 @@ export async function listPublicProductsCtrl(req: Request, res: Response) {
         salePriceCents: salePriceValue,
         primaryImageUrl,
         vendorId: vendorIdValue,
-        vendor: null,
+        vendorSlug: j.vendor?.slug ?? null,
+        vendorName: j.vendor?.displayName ?? null,
+        vendor: undefined,
+        images: undefined,
       };
     });
 
@@ -344,7 +359,10 @@ export async function getPublicProductCtrl(req: Request, res: Response) {
   try {
     const row = await Product.findOne({
       where: { id, archivedAt: { [Op.is]: null } as any },
-      include: [{ model: ProductImage, as: 'images', separate: false, required: false }],
+      include: [
+        { model: ProductImage, as: 'images', separate: false, required: false },
+        { model: Vendor, as: 'vendor', attributes: ['id', 'slug', 'displayName'], required: false },
+      ],
     });
     if (!row) {
       res.status(404).json({ error: 'Not found' });
@@ -374,9 +392,10 @@ export async function getPublicProductCtrl(req: Request, res: Response) {
       imageUrl,
       slug: typeof j.slug === 'string' ? j.slug : null,
       vendorId: Number(j.vendorId ?? 0) || null,
+      vendorSlug: j.vendor?.slug ?? null,
+      vendorName: j.vendor?.displayName ?? null,
     });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || 'Failed to load product' });
   }
 }
-
