@@ -531,7 +531,7 @@ export default function ProductCatalogList(): React.ReactElement {
                   </span>
                 </div>
               ) : (
-                <span className="font-bold text-[var(--theme-text)]">
+                <span className="font-bold text-[var(--theme-success)]">
                   {centsToUsd(eff)}
                 </span>
               );
