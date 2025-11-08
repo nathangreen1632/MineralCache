@@ -1,5 +1,6 @@
 // Client/src/components/vendor/VendorProductsTable.tsx
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   listVendorProducts,
   setProductOnSale,
@@ -7,17 +8,13 @@ import {
   type VendorProductRow,
   type ListVendorProductsParams,
 } from '../../api/vendor';
-import { Link } from 'react-router-dom';
+import { centsToUsd } from '../../utils/money.util';
 
 type Load =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'loaded'; items: VendorProductRow[]; total: number }
   | { kind: 'error'; message: string };
-
-function centsToUsd(c: number) {
-  return `$${(c / 100).toFixed(2)}`;
-}
 
 export default function VendorProductsTable(): React.ReactElement {
   const [state, setState] = useState<Load>({ kind: 'idle' });
