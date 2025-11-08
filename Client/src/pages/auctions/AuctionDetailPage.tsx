@@ -325,11 +325,6 @@ export default function AuctionDetailPage(): React.ReactElement | null {
 
           <h1 className="text-2xl font-bold flex items-center gap-2">
             {headerTitle}
-            {auction.status === 'ended' && (
-              <span className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-[var(--theme-card)] border border-[var(--theme-border)]">
-                Closed
-              </span>
-            )}
             {auction.status === 'canceled' && (
               <span className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-[var(--theme-card)] border border-[var(--theme-border)]">
                 Canceled
