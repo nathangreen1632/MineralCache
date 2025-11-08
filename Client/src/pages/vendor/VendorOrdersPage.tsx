@@ -2,13 +2,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { buildPackingSlipUrl } from '../../api/vendorOrders';
 import { markOrderDelivered, markOrderShipped, type ShipCarrier } from '../../api/orders';
+import { centsToUsd } from '../../utils/money.util';
 
 type Tab = 'paid' | 'shipped' | 'refunded';
 type OrderStatus = 'paid' | 'shipped' | 'refunded';
-
-function centsToUsd(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
 
 // Allowed carriers for the modal’s select
 const ALLOWED_CARRIERS = ['usps', 'ups', 'fedex', 'dhl', 'other'] as const;
