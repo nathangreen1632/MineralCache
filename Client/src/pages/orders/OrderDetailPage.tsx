@@ -4,6 +4,7 @@ import { useParams, Link } from 'react-router-dom';
 import { getMyOrder, type GetOrderRes, cancelMyOrder } from '../../api/orders';
 import {carrierLabel, trackingUrl} from '../../utils/tracking.util';
 import ShippedBanner from '../../components/orders/ShippedBanner';
+import { centsToUsd } from '../../utils/money.util';
 
 type Load =
   | { kind: 'idle' }
@@ -11,9 +12,6 @@ type Load =
   | { kind: 'loaded'; order: GetOrderRes['item'] }
   | { kind: 'error'; message: string };
 
-function centsToUsd(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
 
 export default function OrderDetailPage(): React.ReactElement {
   const params = useParams();
