@@ -199,11 +199,18 @@ export default function VendorMainPage(): React.ReactElement {
 
                 const priceEl = onSaleNow ? (
                   <div className="text-sm">
-                    <span className="line-through opacity-60 mr-1">{centsToUsd((p as any).priceCents)}</span>
-                    <span>{centsToUsd(eff)}</span>
+
+                    <span className="text-[var(--theme-success)] text-base font-semibold">
+                      {centsToUsd(eff)}
+                    </span> {''}
+                    <span className="line-through opacity-60 mr-1">
+                      {centsToUsd((p as any).priceCents)}
+                    </span>
                   </div>
                 ) : (
-                  <div className="text-sm">{centsToUsd(eff)}</div>
+                  <div className="text-sm text-[var(--theme-success)] font-semibold">
+                    {centsToUsd(eff)}
+                  </div>
                 );
 
                 return (
@@ -234,7 +241,7 @@ export default function VendorMainPage(): React.ReactElement {
                     <div className="truncate font-semibold">{(p as any).title}</div>
                     {priceEl}
                     {(p as any).species ? (
-                      <div className="text-xs opacity-70">{(p as any).species}</div>
+                      <div className="text-sm opacity-70">{(p as any).species}</div>
                     ) : null}
                     {(p as any).locality ? (
                       <div className="text-xs opacity-70">{(p as any).locality}</div>
