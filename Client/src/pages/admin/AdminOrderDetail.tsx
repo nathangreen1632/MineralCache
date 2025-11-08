@@ -2,11 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getAdminOrder } from '../../api/admin';
-import AdminRefundButton from '../../components/admin/AdminRefundButton'; // ✅ NEW
-
-function centsToUsd(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
+import AdminRefundButton from '../../components/admin/AdminRefundButton';
+import { centsToUsd } from '../../utils/money.util';
 
 export default function AdminOrderDetail(): React.ReactElement | null {
   const params = useParams<{ id: string }>();
