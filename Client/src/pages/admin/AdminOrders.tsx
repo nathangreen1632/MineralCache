@@ -2,16 +2,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   listAdminOrders,
-  adminOrdersCsvUrl,            // ✅ NEW
+  adminOrdersCsvUrl,
   type AdminOrderStatus,
   type AdminOrderListItem,
 } from '../../api/admin';
+import { centsToUsd } from '../../utils/money.util';
 
 type StatusFilter = 'all' | AdminOrderStatus;
-
-function centsToUsd(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
 
 export default function AdminOrders(): React.ReactElement {
   const [status, setStatus] = useState<StatusFilter>('all');
