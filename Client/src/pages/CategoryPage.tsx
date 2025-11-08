@@ -176,7 +176,7 @@ export default function CategoryPage(): React.ReactElement {
 
   return (
     <main className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)]">
-      <div className="mx-auto max-w-6xl px-6 py-10 grid gap-8">
+      <div className="mx-auto max-w-8xl px-6 py-10 grid gap-8">
         <header>
           <nav aria-label="Breadcrumb">
             <ol className="flex gap-2 text-sm">
