@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getMyOrder, type GetOrderRes, cancelMyOrder } from '../../api/orders';
-import { trackingUrl } from '../../utils/tracking.util';
+import {carrierLabel, trackingUrl} from '../../utils/tracking.util';
 import ShippedBanner from '../../components/orders/ShippedBanner';
 
 type Load =
@@ -157,10 +157,8 @@ export default function OrderDetailPage(): React.ReactElement {
                 (
                   v: { vendorId: number; vendorName?: string | null; label?: string | null; amountCents: number }
                 ) => {
-                  // --- FIX (L152): remove nested ternary ---
                   const name = v.vendorName ?? v.label ?? null;
                   const caption = name ? ` · ${name}` : '';
-                  // ----------------------------------------
                   return (
                     <div key={`ship-${v.vendorId}`} className="flex gap-2">
                       <span>Shipping{caption}:</span>
@@ -253,7 +251,7 @@ export default function OrderDetailPage(): React.ReactElement {
                     {it.shipTracking ? (
                       <div className="flex flex-col gap-0.5">
                         <div>
-                          <span className="opacity-80">Carrier:</span> {it.shipCarrier ?? '—'}
+                          <span className="opacity-80">Carrier:</span> {((it).shipCarrierLabel ?? carrierLabel(it.shipCarrier)) || '—'}
                         </div>
                         <div className="truncate">
                           <span className="opacity-80">Tracking:</span>{' '}
