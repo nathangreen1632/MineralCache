@@ -13,13 +13,15 @@ type LoadState =
 type ProductListItem = {
   id: number;
   slug?: string | null;
-  title?: string | null;          // server field
-  name?: string | null;           // in case the server already maps
+  title?: string | null;
+  name?: string | null;
   priceCents: number;
   salePriceCents?: number | null;
   primaryImageUrl?: string | null;
+  imageUrl?: string | null;
   vendorId?: number | null;
-  vendor?: { name?: string | null } | null;
+  vendorSlug?: string | null;
+  vendorName?: string | null;
 };
 
 const PAGE_SIZE = 24;
@@ -129,15 +131,23 @@ export default function CategoryPage(): React.ReactElement {
   const items: ProductListItem[] = state.kind === 'loaded' ? state.items : [];
 
   // Build vendor select options from loaded items
+  // Build vendor select options from loaded items
   const vendorOptions = useMemo(() => {
     const map = new Map<number, string>();
     for (const it of items) {
-      const vid = Number(it?.vendorId);
-      const vname = String(it?.vendor?.name ?? `Vendor #${vid || ''}`);
-      if (Number.isFinite(vid) && !map.has(vid)) map.set(vid, vname);
+      const vid = Number(it.vendorId);
+      if (!Number.isFinite(vid) || vid <= 0) continue;
+
+      const label =
+        (it.vendorName?.trim()) ||
+        (it.vendorSlug?.trim()) ||
+        `Vendor #${vid}`;
+
+      if (!map.has(vid)) map.set(vid, label);
     }
-    return Array.from(map.entries()); // [ [id, name], ... ]
+    return Array.from(map.entries());
   }, [items]);
+
 
   const total = state.kind === 'loaded' ? state.total : 0;
   const totalPages = total > 0 ? Math.ceil(total / PAGE_SIZE) : 1;
@@ -312,8 +322,12 @@ export default function CategoryPage(): React.ReactElement {
                       imageUrl={p.primaryImageUrl ?? undefined}
                       price={Math.round(p.priceCents) / 100}
                       salePrice={
-                        typeof p.salePriceCents === 'number' ? Math.round(p.salePriceCents) / 100 : undefined
+                        typeof p.salePriceCents === 'number'
+                          ? Math.round(p.salePriceCents) / 100
+                          : undefined
                       }
+                      vendorSlug={p.vendorSlug ?? undefined}
+                      vendorName={p.vendorName ?? undefined}
                     />
                   ))}
                 </div>
