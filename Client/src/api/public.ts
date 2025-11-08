@@ -8,6 +8,7 @@ export type OnSaleProduct = {
   salePrice?: number | null;
   imageUrl?: string | null;
   vendorSlug?: string | null;
+  vendorName?: string | null;
 };
 
 type ListResponse<T> = { items: T };

@@ -2,17 +2,13 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getMyOrder, type GetOrderRes, getReceiptPdfUrl } from '../../api/orders';
+import { centsToUsd } from '../../utils/money.util';
 
 type Load =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'loaded'; order: GetOrderRes['item'] }
   | { kind: 'error'; message: string };
-
-function centsToUsd(cents: number | undefined) {
-  if (typeof cents !== 'number') return '$0.00';
-  return `$${(cents / 100).toFixed(2)}`;
-}
 
 export default function Receipt(): React.ReactElement {
   const params = useParams();
@@ -84,7 +80,6 @@ export default function Receipt(): React.ReactElement {
             Print
           </button>
 
-          {/* ✅ NEW: Download PDF button */}
           <a
             href={getReceiptPdfUrl(o.id)}
             className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
@@ -135,7 +130,14 @@ export default function Receipt(): React.ReactElement {
                 className="border-b last:border-b-0"
                 style={{ borderColor: 'var(--theme-border)' }}
               >
-                <td className="px-4 py-3">{it.title}</td>
+                <td className="px-4 py-3">
+                  <div className="font-medium">{it.title}</div>
+                  {((it).vendorSlug ?? (it).vendor?.slug) ? (
+                    <div className="text-xs opacity-75 mt-0.5">
+                      Sold by:<span className="text-[var(--theme-link)]"> {(it).vendorSlug ?? (it).vendor?.slug}</span>
+                    </div>
+                  ) : null}
+                </td>
                 <td className="px-4 py-3">{it.quantity}</td>
                 <td className="px-4 py-3">{centsToUsd(it.unitPriceCents)}</td>
                 <td className="px-4 py-3 text-right">{centsToUsd(lineTotal)}</td>
@@ -155,12 +157,14 @@ export default function Receipt(): React.ReactElement {
         {/* Vendor shipping lines if present */}
         {Array.isArray((o as any).shippingVendors) && (o as any).shippingVendors.length > 0 ? (
           (o as any).shippingVendors.map(
-            (v: { vendorId: number; vendorName?: string | null; label?: string | null; amountCents: number }) => {
-              const label = v.vendorName
-                ? `Shipping · ${v.vendorName}`
-                : v.label
-                  ? `Shipping · ${v.label}`
-                  : 'Shipping';
+            (v: { vendorId: number; vendorName?: string | null; label?: string | null; amountCents: number }): React.ReactElement => {
+              let label = 'Shipping';
+              if (v.vendorName) {
+                label = `Shipping · ${v.vendorName}`;
+              } else if (v.label) {
+                label = `Shipping · ${v.label}`;
+              }
+
               return (
                 <div key={`ship-${v.vendorId}`} className="flex items-center justify-between">
                   <div>{label}</div>
@@ -190,7 +194,6 @@ export default function Receipt(): React.ReactElement {
         </div>
       </div>
 
-      {/* Print hints for paper */}
       <style>{`
         @media print {
           .print\\:hidden { display: none !important; }

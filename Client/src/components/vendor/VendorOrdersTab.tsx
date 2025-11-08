@@ -1,16 +1,13 @@
 // Client/src/components/vendor/VendorOrdersTab.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { listVendorOrders, type VendorOrderListItem, type OrderStatus } from '../../api/vendor';
+import { centsToUsd } from '../../utils/money.util';
 
 type Load =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'loaded'; items: VendorOrderListItem[]; total: number }
   | { kind: 'error'; message: string };
-
-function centsToUsd(c: number) {
-  return `$${(c / 100).toFixed(2)}`;
-}
 
 export default function VendorOrdersTab(): React.ReactElement {
   const [state, setState] = useState<Load>({ kind: 'idle' });

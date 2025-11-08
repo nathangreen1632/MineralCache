@@ -112,7 +112,7 @@ export default function ProductCard({
               </span>
             </div>
           ) : (
-            <span className="font-bold text-[var(--theme-text)]">${price.toFixed(2)}</span>
+            <span className="font-bold text-[var(--theme-success)]">${price.toFixed(2)}</span>
           )}
         </div>
       </div>

@@ -2,16 +2,13 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { listMyOrders, type MyOrderListItem } from '../../api/orders';
+import { centsToUsd } from '../../utils/money.util';
 
 type Load =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'loaded'; items: MyOrderListItem[]; total: number }
   | { kind: 'error'; message: string };
-
-function centsToUsd(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
 
 function fmtDate(iso: string | null | undefined) {
   try {

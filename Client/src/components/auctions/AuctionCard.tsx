@@ -2,13 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import Countdown from './Countdown';
 import VendorLink from '../common/VendorLink';
-
-function cents(v: number | null | undefined): string {
-  let n = 0;
-  if (typeof v === 'number' && Number.isFinite(v)) n = v;
-  const dollars = (n / 100).toFixed(2);
-  return `$${dollars}`;
-}
+import {centsToUsd} from "../../utils/money.util.ts";
 
 type Props = Readonly<{
   id: number;
@@ -73,7 +67,7 @@ export default function AuctionCard(props: Props): React.ReactElement {
 
       <div className="grid gap-1">
         {statusLabel && (
-          <span className="justify-self-center inline-flex items-center rounded-full px-2 py-0.5 text-base font-semibold bg-[var(--theme-card)] border border-[var(--theme-border)] leading-none">
+          <span className="justify-self-center inline-flex items-center rounded-full px-2 py-0.5 text-base font-semibold bg-[var(--theme-card)] text-[var(--theme-error)] border border-[var(--theme-border)] leading-none">
             {statusLabel}
           </span>
         )}
@@ -86,7 +80,7 @@ export default function AuctionCard(props: Props): React.ReactElement {
 
         <div className="flex items-center justify-between text-sm leading-snug">
           <span className="text-[var(--theme-text)]">
-            Current: <strong>{cents(display)}</strong>
+            Current: <span className="text-[var(--theme-success)]"><strong>{centsToUsd(display)}</strong></span>
           </span>
           <Countdown endAt={props.endAt} />
         </div>

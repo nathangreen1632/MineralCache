@@ -375,3 +375,20 @@ export function trackingUrl(
       return null;
   }
 }
+export function carrierLabel(code?: string | null): string {
+  const v = (code ?? '').toLowerCase();
+  switch (v) {
+    case 'ups':
+      return 'UPS';
+    case 'usps':
+      return 'USPS';
+    case 'fedex':
+      return 'FedEx';
+    case 'dhl':
+      return 'DHL';
+    default:
+      return v ? v[0].toUpperCase() + v.slice(1) : '';
+  }
+}
+
+

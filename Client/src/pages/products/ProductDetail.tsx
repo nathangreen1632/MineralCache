@@ -6,11 +6,8 @@ import ImageCarousel from '../../components/products/ImageCarousel';
 import AuctionPanel from '../../components/auctions/AuctionPanel';
 import { addToCart } from '../../api/cart';
 import toast from 'react-hot-toast';
+import { centsToUsd } from '../../utils/money.util';
 
-function centsToUsd(cents: number | null | undefined): string {
-  const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
-  return `$${(n / 100).toFixed(2)}`;
-}
 function isSaleActive(p: Product, now = new Date()): boolean {
   if (p.salePriceCents == null) return false;
   const startOk = !p.saleStartAt || new Date(p.saleStartAt) <= now;
@@ -144,8 +141,8 @@ export default function ProductDetail(): React.ReactElement {
   if (onSaleNow) {
     priceEl = (
       <>
-        <span className="font-bold text-[var(--theme-button)]">{centsToUsd(effCents)}</span>
-        <span className="ml-2 line-through text-[var(--theme-muted)] opacity-70">
+        <span className="font-bold text-[var(--theme-success)]">{centsToUsd(effCents)}</span>
+        <span className="ml-2 line-through text-[var(--theme-button)] opacity-80">
           {centsToUsd(p.priceCents)}
         </span>
       </>
@@ -198,7 +195,7 @@ export default function ProductDetail(): React.ReactElement {
           ) : null}
         </div>
 
-        <div className="text-xl font-bold text-[var(--theme-text)]">{priceEl}</div>
+        <div className="text-xl font-bold text-[var(--theme-success)]">{priceEl}</div>
 
         {auctionId ? <AuctionPanel auctionId={auctionId} /> : null}
 

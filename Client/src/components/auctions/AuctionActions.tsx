@@ -29,11 +29,10 @@ export default function AuctionActions({ auction, onStatusChange, className }: R
     return Number.isFinite(vId) && vId > 0 && vId === auction.vendorId;
   }, [user, auction.vendorId]);
 
-  // Final state + label used for badge
   const isFinal = auction.status === 'ended' || auction.status === 'canceled';
   let statusLabel: string | null = null;
-  if (auction.status === 'ended') statusLabel = 'Closed';
-  else if (auction.status === 'canceled') statusLabel = 'Canceled';
+  if (auction.status === 'ended') statusLabel = 'Auction Closed';
+  else if (auction.status === 'canceled') statusLabel = 'Auction Canceled';
 
   // If user can't manage and it's not final, hide entirely (same behavior as before)
   if (!canManage && !isFinal) return null;
@@ -99,7 +98,7 @@ export default function AuctionActions({ auction, onStatusChange, className }: R
       aria-label="Auction management actions"
     >
       {isFinal && statusLabel && (
-        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-[var(--theme-card)] border border-[var(--theme-border)]">
+        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-lg font-semibold bg-[var(--theme-card)] text-[var(--theme-error)] border border-[var(--theme-border)]">
           {statusLabel}
         </span>
       )}

@@ -2,16 +2,13 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { listMyOrders, type MyOrderListItem } from '../../api/orders';
+import { centsToUsd } from '../../utils/money.util';
 
 type Load =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'loaded'; order: MyOrderListItem | null }
   | { kind: 'error'; message: string };
-
-function centsToUsd(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
 
 export default function OrderConfirmationPage(): React.ReactElement {
   const location = useLocation() as { state?: { amountCents?: number } };

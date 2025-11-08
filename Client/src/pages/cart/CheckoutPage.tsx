@@ -10,16 +10,13 @@ import { emit } from '../../lib/eventBus';
 import { EV_CART_CHANGED } from '../../lib/events';
 import CommissionPreview from "../../components/cart/CommissionPreview.tsx";
 import AcceptedCards from "../../components/payment/AcceptedCards.tsx";
+import { centsToUsd } from '../../utils/money.util';
 
 type LoadHealth =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'loaded'; enabled: boolean; ready: boolean }
   | { kind: 'error'; message: string };
-
-function centsToUsd(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
 
 function useStripePk(): { pk: string | null; error: string | null } {
   const pk = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY ?? null;

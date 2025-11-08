@@ -9,7 +9,7 @@ import { Vendor } from '../models/vendor.model.js';
 import { sendOrderEmail } from '../services/email.service.js';
 import { cancelPaymentIntent } from '../services/stripe.service.js';
 import { shipOrderSchema, deliverOrderSchema } from '../validation/orders.schema.js';
-import { normalizeCarrier, trackingUrl as buildTrackingUrl } from '../services/shipping.service.js';
+import { normalizeCarrier, trackingUrl as buildTrackingUrl, carrierLabel } from '../services/shipping.service.js';
 import { buildReceiptPdf, type ReceiptData, type ReceiptItem } from '../services/pdf/receiptPdf.service.js';
 
 function parsePage(v: unknown, def = 1) {
@@ -75,10 +75,13 @@ export async function listMyOrders(req: Request, res: Response): Promise<void> {
   });
 
   const ids = rows.map((r) => Number(r.id));
-  const items =
-    ids.length > 0
-      ? await OrderItem.findAll({ where: { orderId: { [Op.in]: ids } } })
-      : [];
+  const items = ids.length > 0 ? await OrderItem.findAll({ where: { orderId: { [Op.in]: ids } } }) : [];
+
+  const vendorIds = [...new Set(items.map(i => Number(i.vendorId)).filter(Number.isFinite))];
+  const vendors = vendorIds.length
+    ? await Vendor.findAll({ where: { id: { [Op.in]: vendorIds } }, attributes: ['id', 'slug'] })
+    : [];
+  const vendorSlugById = new Map(vendors.map(v => [Number(v.id), String(v.slug)]));
 
   const byOrderId = new Map<number, OrderItem[]>();
   for (const it of items) {
@@ -94,29 +97,27 @@ export async function listMyOrders(req: Request, res: Response): Promise<void> {
     createdAt: r.createdAt,
     subtotalCents: r.subtotalCents,
     shippingCents: r.shippingCents,
-    taxCents: Number((r as any).taxCents ?? 0), // ✅ NEW
+    taxCents: Number((r as any).taxCents ?? 0),
     totalCents: r.totalCents,
     items: (byOrderId.get(Number(r.id)) ?? []).map((i) => ({
       productId: Number(i.productId),
       vendorId: Number(i.vendorId),
+      vendorSlug: vendorSlugById.get(Number(i.vendorId)) ?? null,
       title: String(i.title),
       unitPriceCents: Number(i.unitPriceCents),
       quantity: Number(i.quantity),
       lineTotalCents: Number(i.lineTotalCents),
       shipCarrier: (i as any).shipCarrier ?? null,
+      shipCarrierLabel: carrierLabel((i as any).shipCarrier),
       shipTracking: (i as any).shipTracking ?? null,
       shippedAt: (i as any).shippedAt ?? null,
       deliveredAt: (i as any).deliveredAt ?? null,
     })),
   }));
 
-  res.json({
-    page,
-    pageSize,
-    total: count,
-    items: out,
-  });
+  res.json({ page, pageSize, total: count, items: out });
 }
+
 
 export async function getOrder(req: Request, res: Response): Promise<void> {
   const u = (req as any).user ?? (req.session as any)?.user ?? null;
@@ -175,6 +176,7 @@ export async function getOrder(req: Request, res: Response): Promise<void> {
         quantity: Number(i.quantity),
         lineTotalCents: Number(i.lineTotalCents),
         shipCarrier: (i as any).shipCarrier ?? null,
+        shipCarrierLabel: carrierLabel((i as any).shipCarrier),
         shipTracking: (i as any).shipTracking ?? null,
         shippedAt: (i as any).shippedAt ?? null,
         deliveredAt: (i as any).deliveredAt ?? null,
@@ -344,13 +346,24 @@ export async function getReceiptHtml(req: Request, res: Response): Promise<void>
   }
   const items = await OrderItem.findAll({ where: { orderId: order.id } });
 
+  const vendorIds = [...new Set(items.map(i => Number(i.vendorId)).filter(Number.isFinite))];
+  const vendors = vendorIds.length
+    ? await Vendor.findAll({ where: { id: { [Op.in]: vendorIds } }, attributes: ['id', 'slug'] })
+    : [];
+  const vendorSlugById = new Map(vendors.map(v => [Number(v.id), String(v.slug)]));
+
   const rows = items
     .map((i) => {
       const qty = i.quantity;
       const unit = i.unitPriceCents;
+      const slug = vendorSlugById.get(Number(i.vendorId)) ?? '';
+      const soldBy = slug ? `<div style="font-size:12px;opacity:.75">Sold by: ${slug}</div>` : '';
       return `
     <tr>
-      <td style="padding:8px;border-bottom:1px solid #eee">${i.title}</td>
+      <td style="padding:8px;border-bottom:1px solid #eee">
+        <div>${i.title}</div>
+        ${soldBy}
+      </td>
       <td style="padding:8px;border-bottom:1px solid #eee">${qty}</td>
       <td style="padding:8px;border-bottom:1px solid #eee;text-align:right">$${(unit / 100).toFixed(2)}</td>
     </tr>`;
@@ -360,7 +373,6 @@ export async function getReceiptHtml(req: Request, res: Response): Promise<void>
   const totalCents = typeof (order as any).totalCents === 'number' ? (order as any).totalCents : 0;
   const total = totalCents / 100;
 
-  // ✅ NEW: tax row if present
   const taxCents = Number((order as any).taxCents ?? 0);
   const taxHtml =
     taxCents > 0
@@ -444,7 +456,7 @@ export async function getReceiptPdf(req: Request, res: Response): Promise<void> 
 
     return {
       title: String((it as any).title ?? (it as any).productTitle ?? (it as any).name ?? `Item #${it.id}`),
-      vendorName: (it as any).vendorName ?? (it as any).vendor?.name ?? null,
+      vendorName: (it as any).vendorSlug ?? (it as any).vendorName ?? (it as any).vendor?.name ?? null,
       sku: (it as any).sku ?? (it as any).productSku ?? null,
       quantity: qty,
       unitPriceCents: unitCents,

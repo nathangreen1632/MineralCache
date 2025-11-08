@@ -3,7 +3,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { listProducts, type ListQuery, type Product } from '../../api/products';
 import { searchProducts } from '../../api/search';
-import { ChevronDown } from 'lucide-react'; // ⬅️ mobile collapse icon
+import { ChevronDown } from 'lucide-react';
+import { centsToUsd } from '../../utils/money.util';
 
 // Allow an optional runtime-injected API base (e.g., set on window at boot)
 declare global {
@@ -45,11 +46,6 @@ function normalizeVendorToSlugish(input: string): string {
     .replace(/[^a-z0-9\s-]/g, '')
     .replace(/[\s_]+/g, '-')   // spaces/underscores → dashes
     .replace(/-+/g, '-');      // collapse multiple dashes
-}
-
-function centsToUsd(cents?: number | null): string {
-  const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
-  return `$${(n / 100).toFixed(2)}`;
 }
 
 function isSaleActive(p: Product, now = new Date()): boolean {
@@ -531,7 +527,7 @@ export default function ProductCatalogList(): React.ReactElement {
                   </span>
                 </div>
               ) : (
-                <span className="font-bold text-[var(--theme-text)]">
+                <span className="font-bold text-[var(--theme-success)]">
                   {centsToUsd(eff)}
                 </span>
               );

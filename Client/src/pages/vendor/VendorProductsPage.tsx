@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PlusCircle } from 'lucide-react';
+import { centsToUsd } from '../../utils/money.util';
 
 type VendorProduct = {
   id: number;
@@ -14,11 +15,6 @@ type VendorProduct = {
   primaryPhotoUrl?: string | null; // matches server field
   updatedAt?: string;
 };
-
-function centsToUsd(cents: number | null | undefined): string {
-  const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
-  return `$${(n / 100).toFixed(2)}`;
-}
 
 export default function VendorProductsPage(): React.ReactElement {
   const [items, setItems] = useState<VendorProduct[]>([]);

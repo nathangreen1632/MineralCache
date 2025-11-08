@@ -4,11 +4,7 @@ import { getAuction, placeBid } from '../../api/auctions';
 import { getSocket } from '../../lib/socket';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../../stores/useAuthStore';
-
-function centsToUsd(c: number) {
-  const n = Math.max(0, Math.trunc(c));
-  return `$${(n / 100).toFixed(2)}`;
-}
+import { centsToUsd } from '../../utils/money.util';
 
 export default function ProductAuctionPanel(props: Readonly<{ auctionId: number }>) {
   const { auctionId } = props;

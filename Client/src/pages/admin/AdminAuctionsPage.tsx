@@ -1,11 +1,7 @@
 // Client/src/pages/admin/AdminAuctionsPage.tsx
 import React, { useEffect, useState } from 'react';
 import { listActiveAuctions, type AuctionDto } from '../../api/auctions';
-
-function centsToUsd(cents: number | null | undefined): string {
-  const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
-  return `$${(n / 100).toFixed(2)}`;
-}
+import { centsToUsd } from '../../utils/money.util';
 
 export default function AdminAuctionsPage(): React.ReactElement {
   const [rows, setRows] = useState<AuctionDto[]>([]);

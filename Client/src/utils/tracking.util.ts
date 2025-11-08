@@ -1,8 +1,6 @@
 // Client/src/utils/tracking.ts
 export type ShipCarrier = 'usps' | 'ups' | 'fedex' | 'dhl' | 'other';
 
-export const ALLOWED_CARRIERS: ShipCarrier[] = ['usps', 'ups', 'fedex', 'dhl', 'other'];
-
 export function trackingUrl(carrier?: string | null, tracking?: string | null): string | null {
   if (!carrier || !tracking) return null;
   const c = carrier.toLowerCase().trim() as ShipCarrier;
@@ -19,5 +17,21 @@ export function trackingUrl(carrier?: string | null, tracking?: string | null): 
       return `https://www.dhl.com/global-en/home/tracking.html?tracking-id=${t}`;
     default:
       return null; // 'other' or unknown → no deep link
+  }
+}
+
+export function carrierLabel(code?: string | null): string {
+  const v = (code ?? '').toLowerCase();
+  switch (v) {
+    case 'ups':
+      return 'UPS';
+    case 'usps':
+      return 'USPS';
+    case 'fedex':
+      return 'FedEx';
+    case 'dhl':
+      return 'DHL';
+    default:
+      return v ? v[0].toUpperCase() + v.slice(1) : '';
   }
 }

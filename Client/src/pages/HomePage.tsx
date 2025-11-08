@@ -153,11 +153,8 @@ export default function HomePage(): React.ReactElement {
               imageUrl={p.imageUrl || undefined}
               price={p.price}
               salePrice={p.salePrice ?? undefined}
-              vendorSlug={
-                (p as any).vendorSlug ??
-                (p as any).vendor?.slug ??
-                null
-              }
+              vendorSlug={p.vendorSlug ?? undefined}
+              vendorName={p.vendorName ?? undefined}
             />
           ))}
         </div>

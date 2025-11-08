@@ -15,12 +15,7 @@ import {
 } from '../../api/auctions';
 import Countdown from '../../components/auctions/Countdown';
 import AuctionActions from '../../components/auctions/AuctionActions';
-
-function cents(v: number | null | undefined): string {
-  let n = 0;
-  if (typeof v === 'number' && Number.isFinite(v)) n = v;
-  return `$${(n / 100).toFixed(2)}`;
-}
+import {centsToUsd} from "../../utils/money.util.ts";
 
 type Flash = { kind: 'info' | 'error' | 'success'; text: string };
 
@@ -200,7 +195,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
 
           if (hint && Number.isFinite(hint)) {
             setMinNext(hint);
-            showFlash({ kind: 'error', text: `Bid too low. Next minimum is ${cents(hint)}.` });
+            showFlash({ kind: 'error', text: `Bid too low. Next minimum is ${centsToUsd(hint)}.` });
           } else {
             showFlash({ kind: 'error', text: 'Bid failed.' });
           }
@@ -299,7 +294,7 @@ export default function AuctionDetailPage(): React.ReactElement | null {
 
   let minHint = '';
   if (typeof minNext === 'number') {
-    minHint = `Minimum next bid: ${cents(minNext)}`;
+    minHint = `Minimum next bid: ${centsToUsd(minNext)}`;
   }
 
   let buttonLabel = 'Place bid';
@@ -325,11 +320,6 @@ export default function AuctionDetailPage(): React.ReactElement | null {
 
           <h1 className="text-2xl font-bold flex items-center gap-2">
             {headerTitle}
-            {auction.status === 'ended' && (
-              <span className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-[var(--theme-card)] border border-[var(--theme-border)]">
-                Closed
-              </span>
-            )}
             {auction.status === 'canceled' && (
               <span className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-[var(--theme-card)] border border-[var(--theme-border)]">
                 Canceled
@@ -384,8 +374,8 @@ export default function AuctionDetailPage(): React.ReactElement | null {
 
           <div className="text-lg flex items-center gap-3">
             <span>
-              Current: <strong>{cents(display)}</strong>
-            </span>
+              Current: <span className="text-[var(--theme-success)]"><strong>{centsToUsd(display)}</strong>
+          </span></span>
             <span>•</span>
             <span>
               Ends in: <Countdown endAt={auction.endAt} />

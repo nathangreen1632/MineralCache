@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { listProducts, type Product } from '../../api/products';
+import { centsToUsd } from '../../utils/money.util';
 
-/** Optional runtime API base (mirrors ProductList.tsx) */
 declare global {
   interface Window {
     __API_BASE__?: string;
@@ -48,6 +48,7 @@ function selectImageRecord(p: any): AnyImage | null {
   }
   return null;
 }
+
 function imageUrlForCard(p: any): string | null {
   const rec = selectImageRecord(p);
   if (!rec) return null;
@@ -56,22 +57,19 @@ function imageUrlForCard(p: any): string | null {
   const withPrefix = rel.startsWith('/uploads/') ? rel : `/uploads/${rel}`;
   return joinUrl(API_BASE, withPrefix);
 }
-function centsToUsd(cents?: number | null): string {
-  const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
-  return `$${(n / 100).toFixed(2)}`;
-}
+
 function isSaleActive(p: Product, now = new Date()): boolean {
   if ((p as any).salePriceCents == null) return false;
   const startOk = !(p as any).saleStartAt || new Date((p as any).saleStartAt) <= now;
   const endOk = !(p as any).saleEndAt || now <= new Date((p as any).saleEndAt);
   return startOk && endOk;
 }
+
 function effectivePriceCents(p: Product): number {
   const sale = (p as any).salePriceCents;
   return isSaleActive(p) && typeof sale === 'number' ? sale : (p as any).priceCents;
 }
 
-/** --- Page component --- */
 type LoadState =
   | { kind: 'idle' }
   | { kind: 'loading' }
@@ -83,7 +81,6 @@ export default function VendorMainPage(): React.ReactElement {
   const [params, setParams] = useSearchParams();
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
 
-  // read pagination/sort from URL
   const page = useMemo(() => Math.max(1, Number(params.get('page') || 1)), [params]);
   const pageSize = useMemo(() => Math.max(1, Number(params.get('pageSize') || 24)), [params]);
   const sort = (params.get('sort') as 'newest' | 'price_asc' | 'price_desc') || 'newest';
@@ -123,7 +120,7 @@ export default function VendorMainPage(): React.ReactElement {
   function updateParam(k: string, v: string) {
     const next = new URLSearchParams(params);
     next.set(k, v);
-    if (k !== 'page') next.set('page', '1'); // reset page when changing other controls
+    if (k !== 'page') next.set('page', '1');
     setParams(next, { replace: true });
   }
   function goToPage(n: number) {
@@ -199,11 +196,18 @@ export default function VendorMainPage(): React.ReactElement {
 
                 const priceEl = onSaleNow ? (
                   <div className="text-sm">
-                    <span className="line-through opacity-60 mr-1">{centsToUsd((p as any).priceCents)}</span>
-                    <span>{centsToUsd(eff)}</span>
+
+                    <span className="text-[var(--theme-success)] text-base font-semibold">
+                      {centsToUsd(eff)}
+                    </span> {''}
+                    <span className="line-through opacity-60 mr-1">
+                      {centsToUsd((p as any).priceCents)}
+                    </span>
                   </div>
                 ) : (
-                  <div className="text-sm">{centsToUsd(eff)}</div>
+                  <div className="text-sm text-[var(--theme-success)] font-semibold">
+                    {centsToUsd(eff)}
+                  </div>
                 );
 
                 return (
@@ -234,7 +238,7 @@ export default function VendorMainPage(): React.ReactElement {
                     <div className="truncate font-semibold">{(p as any).title}</div>
                     {priceEl}
                     {(p as any).species ? (
-                      <div className="text-xs opacity-70">{(p as any).species}</div>
+                      <div className="text-sm opacity-70">{(p as any).species}</div>
                     ) : null}
                     {(p as any).locality ? (
                       <div className="text-xs opacity-70">{(p as any).locality}</div>
