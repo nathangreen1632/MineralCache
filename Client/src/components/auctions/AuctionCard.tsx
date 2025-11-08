@@ -73,7 +73,7 @@ export default function AuctionCard(props: Props): React.ReactElement {
 
       <div className="grid gap-1">
         {statusLabel && (
-          <span className="justify-self-center inline-flex items-center rounded-full px-2 py-0.5 text-base font-semibold bg-[var(--theme-card)] border border-[var(--theme-border)] leading-none">
+          <span className="justify-self-center inline-flex items-center rounded-full px-2 py-0.5 text-base font-semibold bg-[var(--theme-card)] text-[var(--theme-error)] border border-[var(--theme-border)] leading-none">
             {statusLabel}
           </span>
         )}
