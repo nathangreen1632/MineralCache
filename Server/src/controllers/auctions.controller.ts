@@ -160,12 +160,35 @@ export async function getAuction(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  const UPLOADS_PUBLIC_ROUTE = process.env.UPLOADS_PUBLIC_ROUTE ?? '/uploads';
+  function toPublicUrl(rel?: string | null): string | null {
+    if (!rel) return null;
+    const s = String(rel).replace(/^\/+/, '');
+    return `${UPLOADS_PUBLIC_ROUTE}/${encodeURI(s)}`;
+  }
+
   const a: any = await Auction.findByPk(id, {
     include: [
       {
         model: Vendor,
         as: 'vendor',
         attributes: ['id', 'slug'],
+      },
+      {
+        model: Product,
+        as: 'product',
+        attributes: ['id', 'title'],
+        include: [
+          {
+            model: ProductImage,
+            as: 'images',
+            attributes: ['id', 'isPrimary', 'sortOrder', 'v320Path', 'v800Path', 'v1600Path', 'origPath'],
+            required: false,
+            separate: true,
+            limit: 1,
+            order: [['isPrimary', 'DESC'], ['sortOrder', 'ASC'], ['id', 'ASC']],
+          },
+        ],
       },
     ],
   });
@@ -174,6 +197,10 @@ export async function getAuction(req: Request, res: Response): Promise<void> {
     res.status(404).json({ error: 'Auction not found' });
     return;
   }
+
+  const p = a.product ?? null;
+  const img = p?.images?.[0] ?? null;
+  const imageUrl = toPublicUrl(img?.v800Path ?? img?.v320Path ?? img?.v1600Path ?? img?.origPath ?? null);
 
   const data = {
     id: Number(a.id),
@@ -189,6 +216,8 @@ export async function getAuction(req: Request, res: Response): Promise<void> {
     reserveCents: a.reservePriceCents != null ? Number(a.reservePriceCents) : null,
     buyNowCents: a.buyNowPriceCents != null ? Number(a.buyNowPriceCents) : null,
     vendorSlug: a.vendor?.slug ?? null,
+    productTitle: p?.title ?? null,
+    imageUrl,
   };
 
   res.json({ data });
@@ -359,3 +388,4 @@ export async function buyNow(req: Request, res: Response): Promise<void> {
     res.status(500).json({ ok: false, code: 'SERVER_ERROR' });
   }
 }
+
