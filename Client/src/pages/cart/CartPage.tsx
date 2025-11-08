@@ -7,6 +7,7 @@ import { useCartTotals } from '../../hooks/useCartTotals';
 import CommissionPreview from "../../components/cart/CommissionPreview.tsx";
 import AcceptedCards from "../../components/payment/AcceptedCards.tsx";
 import VendorLink from "../../components/common/VendorLink.tsx";
+import { centsToUsd } from '../../utils/money.util';
 
 type Flash = { kind: 'info' | 'error' | 'success'; text: string };
 
@@ -15,15 +16,6 @@ type LoadState =
   | { kind: 'loading' }
   | { kind: 'loaded'; items: CartItem[]; subtotal: number; shipping: number; total: number }
   | { kind: 'error'; message: string };
-
-function centsToUsd(cents: unknown) {
-  let n: number;
-  if (typeof cents === 'number') n = cents;
-  else if (typeof cents === 'string') n = Number(cents);
-  else n = 0;
-  if (!Number.isFinite(n)) n = 0;
-  return `$${(n / 100).toFixed(2)}`;
-}
 
 function resolvePriceCents(it: CartItem): number {
   const a = it as any;
