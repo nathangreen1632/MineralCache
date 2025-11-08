@@ -6,11 +6,8 @@ import ImageCarousel from '../../components/products/ImageCarousel';
 import AuctionPanel from '../../components/auctions/AuctionPanel';
 import { addToCart } from '../../api/cart';
 import toast from 'react-hot-toast';
+import { centsToUsd } from '../../utils/money.util';
 
-function centsToUsd(cents: number | null | undefined): string {
-  const n = typeof cents === 'number' ? Math.max(0, Math.trunc(cents)) : 0;
-  return `$${(n / 100).toFixed(2)}`;
-}
 function isSaleActive(p: Product, now = new Date()): boolean {
   if (p.salePriceCents == null) return false;
   const startOk = !p.saleStartAt || new Date(p.saleStartAt) <= now;
