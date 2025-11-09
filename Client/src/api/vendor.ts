@@ -12,6 +12,25 @@ function unwrapStrict<T>(res: any): NonNullable<T> {
   return value;
 }
 
+const ORDER_STATUSES: ReadonlyArray<OrderStatus> = [
+  'pending_payment',
+  'paid',
+  'failed',
+  'refunded',
+  'cancelled',
+] as const;
+
+function asOrderStatus(v: unknown): OrderStatus {
+  return (ORDER_STATUSES as readonly string[]).includes(String(v))
+    ? (v as OrderStatus)
+    : 'paid';
+}
+
+function toInt(n: unknown, fallback = 0): number {
+  const x = Number(n);
+  return Number.isFinite(x) ? x : fallback;
+}
+
 export type VendorApprovalStatus = 'pending' | 'approved' | 'rejected';
 
 export type VendorMeResponse = {
@@ -189,7 +208,7 @@ export type VendorOrderListItem = {
   totalCents: number;
 };
 
-export function listVendorOrders(
+export async function listVendorOrders(
   params: {
     status?: OrderStatus | 'shipped';
     from?: string;
@@ -204,9 +223,35 @@ export function listVendorOrders(
   if (params.to) search.set('to', params.to);
   search.set('page', String(params.page ?? 1));
   search.set('pageSize', String(params.pageSize ?? 50));
-  const query = search.toString();
-  const qs = query ? `?${query}` : '';
-  return get<{ items: VendorOrderListItem[]; total: number }>(`/vendors/me/orders${qs}`);
+  const qs = search.toString() ? `?${search.toString()}` : '';
+
+  const res = await get<{ page?: number; pageSize?: number; total?: number; orders?: any[]; items?: any[] }>(
+    `/vendors/me/orders${qs}`
+  );
+
+  const raw = res.data || null;
+  const src = raw?.orders ?? raw?.items ?? [];
+
+  const items: VendorOrderListItem[] = Array.isArray(src)
+    ? src.map((o: any): VendorOrderListItem => ({
+      id: toInt(o.orderId ?? o.id),
+      createdAt: String(o.createdAt ?? o.created_at ?? ''),
+      status: asOrderStatus(o.status),
+      itemCount: Number.isFinite(o?.itemCount)
+        ? toInt(o.itemCount)
+        : Array.isArray(o.items)
+          ? o.items.length
+          : 0,
+      totalCents: toInt(o.totalCents ?? o.total_cents),
+    }))
+    : [];
+
+
+  return {
+    data: { items, total: Number(raw?.total ?? items.length) },
+    error: res.error,
+    status: res.status,
+  };
 }
 
 export type ProductPhoto = {
