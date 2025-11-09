@@ -79,9 +79,19 @@ export async function listVendorOrders(req: Request, res: Response): Promise<voi
 
     bucket.items.push({
       id: Number(it.id),
+      orderItemId: Number(it.id),
+      orderId: Number(it.orderId),
+      productId: Number(it.productId),
+      vendorId: Number(it.vendorId),
       title: readTitle(it),
       qty: readQty(it),
       priceCents: readPriceCents(it),
+      unitPriceCents: Number(it.unitPriceCents ?? it.unit_price_cents ?? 0),
+      lineTotalCents: Number(it.lineTotalCents ?? it.line_total_cents ?? 0),
+      shipCarrier: it.shipCarrier ?? it.ship_carrier ?? null,
+      shipTracking: it.shipTracking ?? it.ship_tracking ?? null,
+      shippedAt: it.shippedAt ?? it.shipped_at ?? null,
+      deliveredAt: it.deliveredAt ?? it.delivered_at ?? null,
     });
   }
 
