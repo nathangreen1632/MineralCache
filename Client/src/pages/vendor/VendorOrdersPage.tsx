@@ -190,7 +190,7 @@ export default function VendorOrdersPage(): React.ReactElement {
   return (
     <section className="mx-auto max-w-12xl px-6 py-10 space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Vendor · Orders</h1>
+        <h1 className="text-4xl font-semibold text-[var(--theme-text)]">Customer Orders</h1>
       </div>
 
       {/* Tabs */}
