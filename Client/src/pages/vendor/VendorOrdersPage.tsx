@@ -23,7 +23,7 @@ function normalizeCarrier(input: string | null | undefined): ShipCarrier | null 
 }
 
 type VendorOrderItem = {
-  id: number;                 // sanitized id (positive or -1)
+  id: number;
   orderItemId?: number | null;
   orderId: number;
   productId: number;
@@ -130,7 +130,6 @@ export default function VendorOrdersPage(): React.ReactElement {
             })
             : [];
 
-          // Filter items per tab so checkboxes are available where they should be
           const filtered =
             tab === 'paid'
               ? items.filter((it) => !it.shippedAt && !it.deliveredAt)
@@ -148,13 +147,10 @@ export default function VendorOrdersPage(): React.ReactElement {
         })
         : [];
 
-      // Remove orders with no remaining items after filtering
       list = list.filter((o) => o.items.length > 0);
 
-      // Keep original delivered logic for the overall order, just in case
       if (tab === 'delivered') list = list.filter(isDelivered);
 
-      // Dedupe by orderId for safety
       list = dedupeByOrderId(list);
 
       setRows(list);
