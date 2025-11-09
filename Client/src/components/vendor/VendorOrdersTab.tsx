@@ -1,6 +1,6 @@
 // Client/src/components/vendor/VendorOrdersTab.tsx
 import React, { useEffect, useMemo, useState } from 'react';
-import { listVendorOrders, type VendorOrderListItem, type OrderStatus } from '../../api/vendor';
+import { listVendorOrders, type VendorOrderListItem } from '../../api/vendor';
 import { centsToUsd } from '../../utils/money.util';
 
 type Load =
@@ -9,15 +9,24 @@ type Load =
   | { kind: 'loaded'; items: VendorOrderListItem[]; total: number }
   | { kind: 'error'; message: string };
 
+type StatusOpt =
+  | 'all'
+  | 'pending_payment'
+  | 'paid'
+  | 'failed'
+  | 'refunded'
+  | 'cancelled'
+  | 'shipped';
+
 export default function VendorOrdersTab(): React.ReactElement {
   const [state, setState] = useState<Load>({ kind: 'idle' });
-  const [status, setStatus] = useState<OrderStatus | ''>('');
+  const [status, setStatus] = useState<StatusOpt>('all');
   const [from, setFrom] = useState<string>('');
   const [to, setTo] = useState<string>('');
 
   const filters = useMemo(
     () => ({
-      status: status || undefined,
+      status: status === 'all' ? undefined : status,
       from: from || undefined,
       to: to || undefined,
     }),
@@ -28,7 +37,13 @@ export default function VendorOrdersTab(): React.ReactElement {
     let alive = true;
     (async () => {
       setState({ kind: 'loading' });
-      const { data, error } = await listVendorOrders(filters);
+      const { data, error } = await listVendorOrders({
+        status: filters.status as any,
+        from: filters.from,
+        to: filters.to,
+        page: 1,
+        pageSize: 50,
+      });
       if (!alive) return;
       if (error || !data) {
         setState({ kind: 'error', message: error || 'Failed to load orders' });
@@ -36,10 +51,16 @@ export default function VendorOrdersTab(): React.ReactElement {
       }
       setState({ kind: 'loaded', items: data.items ?? [], total: data.total ?? 0 });
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [filters]);
 
-  const card = { background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' } as const;
+  const card = {
+    background: 'var(--theme-surface)',
+    borderColor: 'var(--theme-border)',
+    color: 'var(--theme-text)',
+  } as const;
 
   return (
     <div className="grid gap-4">
@@ -50,14 +71,15 @@ export default function VendorOrdersTab(): React.ReactElement {
             className="rounded border px-2 py-1 bg-[var(--theme-textbox)]"
             style={{ borderColor: 'var(--theme-border)' }}
             value={status}
-            onChange={(e) => setStatus(e.target.value as OrderStatus | '')}
+            onChange={(e) => setStatus(e.target.value as StatusOpt)}
           >
-            <option value="">All</option>
+            <option value="all">All</option>
             <option value="pending_payment">Pending payment</option>
             <option value="paid">Paid</option>
             <option value="failed">Failed</option>
             <option value="refunded">Refunded</option>
             <option value="cancelled">Cancelled</option>
+            <option value="shipped">Shipped</option>
           </select>
         </div>
         <div className="grid gap-1">
@@ -84,7 +106,9 @@ export default function VendorOrdersTab(): React.ReactElement {
 
       <div className="rounded-2xl border" style={card}>
         {state.kind === 'error' ? (
-          <div className="px-4 py-2 text-sm" style={{ color: 'var(--theme-error)' }}>{state.message}</div>
+          <div className="px-4 py-2 text-sm" style={{ color: 'var(--theme-error)' }}>
+            {state.message}
+          </div>
         ) : null}
         {state.kind === 'idle' || state.kind === 'loading' ? (
           <div className="p-6">
