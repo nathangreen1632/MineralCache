@@ -15,7 +15,14 @@ export default function VendorOrdersTab(): React.ReactElement {
   const [from, setFrom] = useState<string>('');
   const [to, setTo] = useState<string>('');
 
-  const filters = useMemo(() => ({ status: status || undefined, from: from || undefined, to: to || undefined }), [status, from, to]);
+  const filters = useMemo(
+    () => ({
+      status: status || undefined,
+      from: from || undefined,
+      to: to || undefined,
+    }),
+    [status, from, to]
+  );
 
   useEffect(() => {
     let alive = true;
