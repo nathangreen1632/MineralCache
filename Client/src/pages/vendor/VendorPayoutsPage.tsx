@@ -1,10 +1,7 @@
 // Client/src/pages/vendor/PayoutsPage.tsx
 import React, { useEffect, useState } from 'react';
 import { getMyPayouts, type VendorPayoutRow } from '../../api/vendor';
-
-function cents(n: number) {
-  return `$${(n / 100).toFixed(2)}`;
-}
+import { centsToUsd} from "../../utils/money.util.ts";
 
 export default function VendorPayoutsPage(): React.ReactElement {
   const [rows, setRows] = useState<VendorPayoutRow[]>([]);
@@ -113,14 +110,14 @@ export default function VendorPayoutsPage(): React.ReactElement {
               rows.map((r) => (
                 <tr
                   key={`${r.orderId}-${r.vendorId}`}
-                  className="border-b last:border-b-0"
+                  className="border-b last:border-b-3"
                   style={{ borderColor: 'var(--theme-border)' }}
                 >
                   <td className="px-4 py-3">{new Date(r.paidAt).toLocaleString()}</td>
                   <td className="px-4 py-3">#{r.orderId}</td>
-                  <td className="px-4 py-3">{cents(r.grossCents)}</td>
-                  <td className="px-4 py-3">{cents(r.feeCents)}</td>
-                  <td className="px-4 py-3 font-semibold">{cents(r.netCents)}</td>
+                  <td className="px-4 py-3">{centsToUsd(r.grossCents)}</td>
+                  <td className="px-4 py-3">{centsToUsd(r.feeCents)}</td>
+                  <td className="px-4 py-3 font-semibold">{centsToUsd(r.netCents)}</td>
                 </tr>
               ))
             )}
@@ -129,9 +126,9 @@ export default function VendorPayoutsPage(): React.ReactElement {
             <tr>
               <td className="px-4 py-3 font-semibold">Totals</td>
               <td />
-              <td className="px-4 py-3 font-semibold">{cents(totals.gross)}</td>
-              <td className="px-4 py-3 font-semibold">{cents(totals.fee)}</td>
-              <td className="px-4 py-3 font-semibold">{cents(totals.net)}</td>
+              <td className="px-4 py-3 font-semibold">{centsToUsd(totals.gross)}</td>
+              <td className="px-4 py-3 font-semibold">{centsToUsd(totals.fee)}</td>
+              <td className="px-4 py-3 font-semibold">{centsToUsd(totals.net)}</td>
             </tr>
             </tfoot>
           </table>
