@@ -182,7 +182,7 @@ export default function VendorOrdersPage(): React.ReactElement {
   );
 
   const card = {
-    background: 'var(--theme-surface)',
+    background: 'var(--theme-card)',
     color: 'var(--theme-text)',
     borderColor: 'var(--theme-border)',
   } as const;
