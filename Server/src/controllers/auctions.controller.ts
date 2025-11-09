@@ -3,6 +3,8 @@ import type { Request, Response } from 'express';
 import type { Server as IOServer } from 'socket.io';
 import { z } from 'zod';
 import type { Transaction } from 'sequelize';
+import { Op } from 'sequelize';
+import { subHours } from 'date-fns';
 
 import { db } from '../models/sequelize.js';
 import { Auction } from '../models/auction.model.js';
@@ -80,6 +82,19 @@ export async function listAuctions(req: Request, res: Response): Promise<void> {
       limit = Math.min(parsedLimit, 100);
     }
 
+    const cutoff = subHours(new Date(), 120); // 5 days
+    const endedWindow = {
+      [Op.and]: [
+        { status: 'ended' },
+        { endAt: { [Op.gte]: cutoff } },
+      ],
+    };
+    const notEnded = { status: { [Op.ne]: 'ended' } };
+
+    if (!where.status) {
+      (where as any)[Op.or] = [notEnded, endedWindow];
+    }
+
     const UPLOADS_PUBLIC_ROUTE = process.env.UPLOADS_PUBLIC_ROUTE ?? '/uploads';
     function toPublicUrl(rel?: string | null): string | null {
       if (!rel) return null;
@@ -95,11 +110,7 @@ export async function listAuctions(req: Request, res: Response): Promise<void> {
       ],
       limit,
       include: [
-        {
-          model: Vendor,
-          as: 'vendor',
-          attributes: ['id', 'slug'],
-        },
+        { model: Vendor, as: 'vendor', attributes: ['id', 'slug'] },
         {
           model: Product,
           as: 'product',
@@ -388,4 +399,3 @@ export async function buyNow(req: Request, res: Response): Promise<void> {
     res.status(500).json({ ok: false, code: 'SERVER_ERROR' });
   }
 }
-

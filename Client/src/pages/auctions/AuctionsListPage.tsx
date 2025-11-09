@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
 import AuctionCard from '../../components/auctions/AuctionCard';
 import { listAuctions, type AuctionListItem } from '../../api/auctions';
-import AuctionFilters from '../../components/auctions/AuctionFilters'; // ✅ ADDED
+import AuctionFilters, { type Vendor as FilterVendor, type Filters as FilterState } from '../../components/auctions/AuctionFilters';
 
 function byEndingSoon(a: AuctionListItem, b: AuctionListItem) {
   const ea = a.endAt ? new Date(a.endAt).getTime() : Number.MAX_SAFE_INTEGER;
@@ -29,23 +30,49 @@ export default function AuctionsListPage(): React.ReactElement {
   const [sort, setSort] = useState<'ending' | 'newest'>('newest');
   const [err, setErr] = useState<string | null>(null);
 
-  // ✅ NEW: server-side filter model (vendor/species/synthetic)
-  const [filters, setFilters] = useState<{
-    vendorId?: number | null;
-    species?: string;
-    synthetic?: boolean | null;
-  }>({ vendorId: null, species: '', synthetic: null });
+  const [params, setParams] = useSearchParams();
+  const initialVendorId = (() => {
+    const v = params.get('vendorId');
+    return v ? Number(v) : null;
+  })();
+  const [filters, setFilters] = useState<FilterState>({ vendorId: initialVendorId });
+
+  const vendorOptions: FilterVendor[] = useMemo(() => {
+    const base = items ?? [];
+    const seen = new Map<number, string>();
+    for (const it of base) {
+      const id = typeof it.vendorId === 'number' ? it.vendorId : undefined;
+      if (id == null) continue;
+      const label =
+        (typeof (it as any).vendorName === 'string' && (it as any).vendorName) ||
+        (typeof it.vendorSlug === 'string' && it.vendorSlug) ||
+        `Vendor #${id}`;
+      if (!seen.has(id)) seen.set(id, label);
+    }
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
+  }, [items]);
+
+  useEffect(() => {
+    const v = filters.vendorId;
+    const next = new URLSearchParams(params);
+    if (v == null) {
+      if (next.has('vendorId')) {
+        next.delete('vendorId');
+        setParams(next, { replace: true });
+      }
+    } else if (next.get('vendorId') !== String(v)) {
+      next.set('vendorId', String(v));
+      setParams(next, {replace: true});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.vendorId]);
 
   useEffect(() => {
     let isMounted = true;
-
-    // ✅ re-fetch whenever query/sort/filters change (server can ignore unknown params)
     listAuctions({
       q,
       sort,
       vendorId: filters.vendorId ?? undefined,
-      species: (filters.species ?? '').trim() || undefined,
-      synthetic: filters.synthetic === null ? undefined : filters.synthetic,
     })
       .then((json) => {
         if (!isMounted) return;
@@ -55,39 +82,48 @@ export default function AuctionsListPage(): React.ReactElement {
       .catch(() => {
         if (isMounted) setErr('Failed to load auctions');
       });
-
     return () => {
       isMounted = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, sort, filters.vendorId, filters.species, filters.synthetic]); // ✅ dependencies
+  }, [q, sort, filters.vendorId]);
 
   const filtered = useMemo(() => {
     const base = items ?? [];
     const trimmed = q.trim().toLowerCase();
 
-    let searched = base;
-    if (trimmed.length > 0) {
-      searched = base.filter((x) => titleSafe(x).toLowerCase().includes(trimmed));
+    let out = base;
+
+    if (filters.vendorId != null) {
+      out = out.filter((x) => x.vendorId === filters.vendorId);
     }
 
-    const out = [...searched];
-    if (sort === 'ending') out.sort(byEndingSoon);
-    else out.sort(byNewest);
-    return out;
-  }, [items, q, sort]);
+    if (trimmed.length > 0) {
+      out = out.filter((x) => titleSafe(x).toLowerCase().includes(trimmed));
+    }
+
+    const sorted = [...out];
+    if (sort === 'ending') sorted.sort(byEndingSoon);
+    else sorted.sort(byNewest);
+    return sorted;
+  }, [items, q, sort, filters.vendorId]);
+
 
   return (
     <main className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)]">
       <div className="mx-auto max-w-12xl px-6 py-14 grid gap-10">
-        {/* Standalone, left-aligned page title */}
         <div>
           <h1 className="text-4xl font-bold">Auctions</h1>
         </div>
 
-        {/* Header with centered controls */}
         <header aria-label="Filters" className="grid gap-3 max-w-3xl mx-auto">
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-center sm:justify-center sm:gap-4">
+            <AuctionFilters
+              value={filters}
+              onChange={setFilters}
+              vendors={vendorOptions}
+              inline
+            />
+
             <input
               aria-label="Search auctions"
               value={q}
@@ -95,9 +131,9 @@ export default function AuctionsListPage(): React.ReactElement {
               placeholder="Search by title..."
               className="w-full sm:w-[28rem] rounded-xl border bg-[var(--theme-surface)] border-[var(--theme-border)] px-4 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-focus)]"
             />
+
             <div className="flex items-center gap-2">
               <label htmlFor="sort" className="text-sm">Sort</label>
-
               <div className="relative">
                 <select
                   id="sort"
@@ -108,8 +144,6 @@ export default function AuctionsListPage(): React.ReactElement {
                   <option value="ending">Ending soon</option>
                   <option value="newest">Newest</option>
                 </select>
-
-                {/* overlay chevron */}
                 <ChevronDown
                   aria-hidden="true"
                   className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--theme-text)] opacity-70"
@@ -117,13 +151,6 @@ export default function AuctionsListPage(): React.ReactElement {
               </div>
             </div>
           </div>
-
-          {/* ✅ NEW: extra filters (vendor/species/synthetic) */}
-          <AuctionFilters
-            value={filters}
-            onChange={setFilters}
-            className="mt-2"
-          />
         </header>
 
         {err && (

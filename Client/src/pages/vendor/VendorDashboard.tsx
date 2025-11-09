@@ -1,5 +1,6 @@
 // Client/src/pages/VendorDashboard.tsx
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   createStripeOnboardingLink,
   getMyVendorFull,
@@ -39,9 +40,21 @@ function StatusChip({ status }: Readonly<{ status: 'pending' | 'approved' | 'rej
 export default function VendorDashboard() {
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<'products' | 'orders'>('products');
+  const [search, setSearch] = useSearchParams();
+  const initialTab = (search.get('tab') === 'orders' ? 'orders' : 'products') as 'products' | 'orders';
+  const [tab, setTab] = useState<'products' | 'orders'>(initialTab);
 
   const vendor = state.kind === 'loaded' ? state.data : null;
+
+  useEffect(() => {
+    const current = search.get('tab');
+    const desired = tab;
+    if (current !== desired) {
+      const next = new URLSearchParams(search);
+      next.set('tab', desired);
+      setSearch(next, { replace: true });
+    }
+  }, [tab, search, setSearch]);
 
   useEffect(() => {
     let alive = true;

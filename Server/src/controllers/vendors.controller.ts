@@ -325,13 +325,13 @@ export async function getVendorOrders(req: Request, res: Response): Promise<void
   }
 
   const q = req.query as any;
+
   const page = Number(q?.page) > 0 ? Math.floor(Number(q.page)) : 1;
   const pageSize =
     Number(q?.pageSize) > 0 && Number(q.pageSize) <= 100
       ? Math.floor(Number(q.pageSize))
       : 20;
 
-  // Optional date range (UTC ISO or YYYY-MM-DD)
   const from = q?.from ? new Date(String(q.from)) : null;
   const to = q?.to ? new Date(String(q.to)) : null;
 
@@ -343,25 +343,46 @@ export async function getVendorOrders(req: Request, res: Response): Promise<void
     whereRange.createdAt = { ...(whereRange.createdAt || {}), [Op.lte]: to };
   }
 
-  // Collect order items for this vendor, then join orders
-  const { rows: items, count } = await OrderItem.findAndCountAll({
-    where: { vendorId: Number(vendor.id) },
+  const ALLOWED: ReadonlySet<string> = new Set([
+    'pending_payment',
+    'paid',
+    'failed',
+    'refunded',
+    'cancelled',
+    'shipped',
+  ]);
+  const reqStatus = typeof q?.status === 'string' && ALLOWED.has(q.status) ? (q.status as string) : undefined;
+
+  const itemWhere: any = { vendorId: Number(vendor.id) };
+  if (reqStatus === 'shipped') {
+    itemWhere.shippedAt = { [Op.ne]: null };
+  }
+
+  const { rows: items } = await OrderItem.findAndCountAll({
+    where: itemWhere,
     order: [['createdAt', 'DESC']],
     limit: pageSize,
     offset: (page - 1) * pageSize,
   });
 
   const orderIds = [...new Set(items.map((i) => Number(i.orderId)))];
+
+  const orderWhere: any = { id: { [Op.in]: orderIds }, ...whereRange };
+  if (reqStatus && reqStatus !== 'shipped') {
+    orderWhere.status = reqStatus;
+  }
+
   const orders =
     orderIds.length > 0
-      ? await Order.findAll({ where: { id: { [Op.in]: orderIds }, ...whereRange } })
+      ? await Order.findAll({ where: orderWhere })
       : [];
 
   const byId = new Map(orders.map((o) => [Number(o.id), o]));
   const grouped = new Map<number, typeof items>();
+
   for (const it of items) {
     const oid = Number(it.orderId);
-    if (!byId.has(oid)) continue; // outside date range
+    if (!byId.has(oid)) continue;
     const arr = grouped.get(oid) ?? [];
     arr.push(it);
     grouped.set(oid, arr);
@@ -390,6 +411,7 @@ export async function getVendorOrders(req: Request, res: Response): Promise<void
           unitPriceCents: Number(i.unitPriceCents),
           quantity: Number(i.quantity),
           lineTotalCents: Number(i.lineTotalCents),
+          shippedAt: (i as any).shippedAt ?? null,
         })),
       };
     });
@@ -397,7 +419,7 @@ export async function getVendorOrders(req: Request, res: Response): Promise<void
   res.json({
     page,
     pageSize,
-    total: count,
+    total: list.length,
     orders: list,
   });
 }
