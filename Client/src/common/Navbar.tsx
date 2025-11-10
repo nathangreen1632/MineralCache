@@ -27,16 +27,16 @@ import mcLogo from '../assets/mc_logo_256.webp';
 
 function BrandName({ className }: Readonly<{ className?: string }>) {
   return (
-    <span className={['inline-flex items-center gap-2', className || ''].join(' ')}>
+    <span className={['inline-flex items-center gap-2 text-2xl', className || ''].join(' ')}>
       <img
         src={mcLogo}
         alt=""
         aria-hidden="true"
-        className="h-7 w-7 rounded-lg"
-        style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
+        className="h-9 w-9 rounded-lg"
+        style={{ filter: 'drop-shadow(0 1px 2px var(--theme-shadow-carousel))' }}
       />
       <span>
-        Mineral<span className="italic">Cache</span>
+        MINERAL<span className="text-2xl italic text-[var(--theme-button-yellow)]">CACHE</span>
       </span>
     </span>
   );
