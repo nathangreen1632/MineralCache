@@ -73,6 +73,20 @@ export default function VendorDashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    if (search.get('stripe') !== 'return') return;
+    (async () => {
+      try {
+        await fetch('/api/vendors/me/stripe/sync', { method: 'POST' });
+      } catch {}
+      const { data } = await getMyVendorFull();
+      setState({ kind: 'loaded', data: data?.vendor ?? null });
+      const next = new URLSearchParams(search);
+      next.delete('stripe');
+      setSearch(next, { replace: true });
+    })();
+  }, [search, setSearch]);
+
   const heading = useMemo(() => {
     if (state.kind === 'loaded' && vendor) return vendor.displayName || 'Vendor Dashboard';
     return 'Vendor Dashboard';
@@ -100,7 +114,6 @@ export default function VendorDashboard() {
     }
   }
 
-  // Common styles via CSS variables
   const cardStyle: React.CSSProperties = {
     background: 'var(--theme-card)',
     color: 'var(--theme-text)',
@@ -120,7 +133,6 @@ export default function VendorDashboard() {
   const mutedText: React.CSSProperties = { color: 'var(--theme-text)' };
   const subtleText: React.CSSProperties = { color: 'var(--theme-link)' };
 
-  // ---- Render states
   if (state.kind === 'loading' || state.kind === 'idle') {
     return (
       <div className="mx-auto max-w-4xl px-4 py-8">
@@ -148,7 +160,6 @@ export default function VendorDashboard() {
     );
   }
 
-  // loaded
   if (!vendor) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-8 space-y-4">
@@ -189,7 +200,6 @@ export default function VendorDashboard() {
         <StatusChip status={vendor.approvalStatus} />
       </div>
 
-      {/* Status panels */}
       {vendor.approvalStatus === 'pending' && (
         <div className="rounded-lg border p-4" style={altCardStyle}>
           <p style={mutedText}>
@@ -229,26 +239,71 @@ export default function VendorDashboard() {
 
       {vendor.approvalStatus === 'approved' && (
         <div className="rounded-lg border p-4 space-y-3" style={cardStyle}>
-          <p style={mutedText}>
-            You’re <strong>approved</strong>! Connect your Stripe account to start receiving payouts.
-          </p>
-          <div>
-            <button
-              type="button"
-              onClick={handleStripeOnboarding}
-              disabled={busy}
-              className="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-60"
-              style={ctaPrimaryStyle}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--theme-button-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--theme-pill-green)')}
-            >
-              {busy ? 'Starting…' : 'Start Stripe Onboarding'}
-            </button>
-          </div>
+          {(() => {
+            const chargesEnabled = Boolean((vendor as any).stripeChargesEnabled);
+            const payoutsEnabled = Boolean((vendor as any).stripePayoutsEnabled);
+            const requirementsDue = Number((vendor as any).stripeRequirementsDue ?? 0);
+            const isConnected = chargesEnabled && payoutsEnabled;
+
+            if (isConnected) {
+              return (
+                <>
+                  <p style={mutedText}>You’re connected to Stripe. Payouts will flow to your linked account.</p>
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-70"
+                    style={ctaPrimaryStyle}
+                  >
+                    You’re Connected to Stripe
+                  </button>
+                </>
+              );
+            }
+
+            if (!isConnected && requirementsDue > 0) {
+              return (
+                <>
+                  <p style={mutedText}>Your Stripe account needs more information before payouts can be enabled.</p>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={handleStripeOnboarding}
+                      disabled={busy}
+                      className="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                      style={ctaPrimaryStyle}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--theme-button-hover)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--theme-pill-green)')}
+                    >
+                      {busy ? 'Opening…' : 'Complete Stripe Setup'}
+                    </button>
+                  </div>
+                </>
+              );
+            }
+
+            return (
+              <>
+                <p style={mutedText}>You’re approved. Connect your Stripe account to start receiving payouts.</p>
+                <div>
+                  <button
+                    type="button"
+                    onClick={handleStripeOnboarding}
+                    disabled={busy}
+                    className="inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                    style={ctaPrimaryStyle}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--theme-button-hover)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--theme-pill-green)')}
+                  >
+                    {busy ? 'Starting…' : 'Start Stripe Onboarding'}
+                  </button>
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
 
-      {/* Vendor Dashboard v2 — Tabs */}
       <div className="mt-2 rounded-2xl border" style={cardStyle}>
         <div className="flex gap-2 border-b p-2" style={{ borderColor: 'var(--theme-border)' }}>
           <button
