@@ -181,9 +181,9 @@ function NavContent(): React.ReactElement {
       {isAdmin && (
         <NavGroup baseTo="/admin" label="Admin Dashboard" Icon={LayoutDashboard}>
           <SideNavLink to="/admin/vendor-apps" label="Vendor Applications" Icon={ClipboardList} />
-          <SideNavLink to="/admin/orders" label="Orders" Icon={Package} />
+          <SideNavLink to="/admin/orders" label="Customer Orders" Icon={Package} />
           {AUCTIONS_ENABLED && (
-            <SideNavLink to="/admin/auctions" label="Auctions" Icon={ShieldCheck} />
+            <SideNavLink to="/admin/auctions" label="Live Auctions" Icon={ShieldCheck} />
           )}
           <SideNavLink to="/admin/settings" label="Settings" Icon={Settings} />
         </NavGroup>
