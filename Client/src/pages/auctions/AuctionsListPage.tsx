@@ -110,7 +110,7 @@ export default function AuctionsListPage(): React.ReactElement {
 
   return (
     <main className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)]">
-      <div className="mx-auto max-w-12xl px-6 py-14 grid gap-10">
+      <div className="mx-auto max-w-8xl px-6 py-14 grid gap-10">
         <div>
           <h1 className="text-4xl font-bold">Auctions</h1>
         </div>
