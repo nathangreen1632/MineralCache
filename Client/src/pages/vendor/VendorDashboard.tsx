@@ -190,10 +190,10 @@ export default function VendorDashboard() {
     <div className="mx-auto max-w-8xl px-4 py-8 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold" style={mutedText}>
+          <h1 className="text-4xl font-semibold" style={mutedText}>
             {vendor.displayName}
           </h1>
-          <p className="text-sm" style={subtleText}>
+          <p className="text-xl" style={subtleText}>
             /{vendor.slug}
           </p>
         </div>
