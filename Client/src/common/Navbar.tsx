@@ -27,16 +27,16 @@ import mcLogo from '../assets/mc_logo_256.webp';
 
 function BrandName({ className }: Readonly<{ className?: string }>) {
   return (
-    <span className={['inline-flex items-center gap-2', className || ''].join(' ')}>
+    <span className={['inline-flex items-center gap-2 text-2xl', className || ''].join(' ')}>
       <img
         src={mcLogo}
-        alt=""
+        alt="MineralCache logo"
         aria-hidden="true"
-        className="h-7 w-7 rounded-lg"
-        style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
+        className="h-9 w-9 rounded-lg"
+        style={{ filter: 'drop-shadow(0 1px 2px var(--theme-shadow-carousel))' }}
       />
       <span>
-        Mineral<span className="italic">Cache</span>
+        MINERAL<span className="text-2xl italic text-[var(--theme-button-yellow)]">CACHE</span>
       </span>
     </span>
   );
@@ -160,7 +160,7 @@ function NavContent(): React.ReactElement {
     <nav className="mt-6 grid gap-1" aria-label="Main">
       <SideNavLink to="/" end label="Home" Icon={Home} />
       {(isVendor || isAdmin) ? (
-        <SideNavLink to="/products" label="Catalog" Icon={Store} />
+        <SideNavLink to="/products" label="Shop" Icon={Store} />
       ) : (
         <SideNavLink to="/products" end label="Shop" Icon={Store} />
       )}
@@ -181,9 +181,9 @@ function NavContent(): React.ReactElement {
       {isAdmin && (
         <NavGroup baseTo="/admin" label="Admin Dashboard" Icon={LayoutDashboard}>
           <SideNavLink to="/admin/vendor-apps" label="Vendor Applications" Icon={ClipboardList} />
-          <SideNavLink to="/admin/orders" label="Orders" Icon={Package} />
+          <SideNavLink to="/admin/orders" label="Customer Orders" Icon={Package} />
           {AUCTIONS_ENABLED && (
-            <SideNavLink to="/admin/auctions" label="Auctions" Icon={ShieldCheck} />
+            <SideNavLink to="/admin/auctions" label="Live Auctions" Icon={ShieldCheck} />
           )}
           <SideNavLink to="/admin/settings" label="Settings" Icon={Settings} />
         </NavGroup>

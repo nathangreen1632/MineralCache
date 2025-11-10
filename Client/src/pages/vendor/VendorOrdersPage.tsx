@@ -3,11 +3,18 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { buildPackingSlipUrl } from '../../api/vendorOrders';
 import { markOrderDelivered, markOrderShipped, type ShipCarrier } from '../../api/orders';
 import { centsToUsd } from '../../utils/money.util';
+import { get } from '../../lib/api';
 
-type Tab = 'paid' | 'shipped' | 'refunded';
-type OrderStatus = 'paid' | 'shipped' | 'refunded';
+type Tab = 'paid' | 'shipped' | 'delivered';
+type OrderStatus =
+  | 'pending_payment'
+  | 'paid'
+  | 'failed'
+  | 'refunded'
+  | 'cancelled'
+  | 'delivered'
+  | 'shipped';
 
-// Allowed carriers for the modal’s select
 const ALLOWED_CARRIERS = ['usps', 'ups', 'fedex', 'dhl', 'other'] as const;
 
 function normalizeCarrier(input: string | null | undefined): ShipCarrier | null {
@@ -15,9 +22,9 @@ function normalizeCarrier(input: string | null | undefined): ShipCarrier | null 
   return (ALLOWED_CARRIERS as readonly string[]).includes(v) ? (v as ShipCarrier) : null;
 }
 
-/* ---------- Types for the expanded vendor order payload ---------- */
 type VendorOrderItem = {
-  id: number; // orderItem id
+  id: number;
+  orderItemId?: number | null;
   orderId: number;
   productId: number;
   vendorId: number;
@@ -34,10 +41,26 @@ type VendorOrderItem = {
 type VendorOrderRow = {
   orderId: number;
   createdAt: string;
-  status: OrderStatus;
+  status: OrderStatus | string;
   items: VendorOrderItem[];
   totalCents: number;
 };
+
+function isDelivered(o: VendorOrderRow) {
+  if (String(o.status) === 'delivered') return true;
+  if (!Array.isArray(o.items) || o.items.length === 0) return false;
+  for (const it of o.items) if (!it?.deliveredAt) return false;
+  return true;
+}
+
+function dedupeByOrderId(rows: VendorOrderRow[]): VendorOrderRow[] {
+  const m = new Map<number, VendorOrderRow>();
+  for (const r of rows) {
+    const k = Number(r.orderId);
+    if (!m.has(k)) m.set(k, r);
+  }
+  return Array.from(m.values());
+}
 
 export default function VendorOrdersPage(): React.ReactElement {
   const [tab, setTab] = useState<Tab>('paid');
@@ -45,13 +68,7 @@ export default function VendorOrdersPage(): React.ReactElement {
   const [msg, setMsg] = useState<string | null>(null);
   const [rows, setRows] = useState<VendorOrderRow[]>([]);
   const [page, setPage] = useState(1);
-
-  const statusParam: OrderStatus = tab === 'paid' ? 'paid' : tab === 'refunded' ? 'refunded' : 'shipped';
-
-  // selection state: orderId -> Set<orderItemId>
   const [selectedByOrder, setSelectedByOrder] = useState<Record<number, Set<number>>>({});
-
-  // ship modal state
   const [shipDialog, setShipDialog] = useState<{
     open: boolean;
     orderId: number | null;
@@ -59,51 +76,84 @@ export default function VendorOrdersPage(): React.ReactElement {
     tracking: string;
   }>({ open: false, orderId: null, carrier: 'usps', tracking: '' });
 
-  async function load(p = page) {
+  const query = useMemo(() => {
+    const p = new URLSearchParams();
+    p.set('page', String(page));
+    p.set('pageSize', '50');
+    if (tab === 'paid') p.set('status', 'paid');
+    if (tab === 'shipped') p.set('status', 'shipped');
+    if (tab === 'delivered') p.set('status', 'delivered');
+    p.set('expanded', '1'); // ensure server includes per-item ids
+    return p.toString();
+  }, [tab, page]);
+
+  async function load() {
     setBusy(true);
     setMsg(null);
     try {
-      // Ensure your server returns items per order for vendors here.
-      const qs = new URLSearchParams({
-        status: statusParam,
-        page: String(p),
-        pageSize: '50',
-        expanded: '1', // harmless hint if your API supports it
-      }).toString();
+      const path = `/vendors/me/orders?${query}`;
+      const res = await get<{ orders?: any[]; total?: number }>(path);
+      const raw = (res as any)?.data ?? res;
 
-      const res = await fetch(`/api/vendor/orders?${qs}`, { credentials: 'include' });
-      const ok = res.ok;
-      const body = await res.json().catch(() => ({}));
-      if (!ok) throw new Error(body?.error || `HTTP ${res.status}`);
+      let list: VendorOrderRow[] = Array.isArray(raw?.orders)
+        ? raw.orders.map((o: any): VendorOrderRow => {
+          const items: VendorOrderItem[] = Array.isArray(o.items)
+            ? o.items.map((it: any) => {
+              const rawId =
+                it.orderItemId ??
+                it.order_item_id ??
+                it.orderItem?.id ??
+                it.id;
+              const n = Number(rawId);
+              const cleanId = Number.isFinite(n) && n > 0 ? n : null;
 
-      // Expecting { items: Array<VendorOrderRow-like> }
-      const payload: VendorOrderRow[] =
-        (body?.items ?? []).map((o: any) => ({
-          orderId: Number(o.orderId ?? o.id),
-          createdAt: String(o.createdAt),
-          status: String(o.status) as OrderStatus,
-          totalCents: Number(o.totalCents ?? o.total_cents ?? 0),
-          items: Array.isArray(o.items)
-            ? o.items.map((it: any) => ({
-              id: Number(it.id ?? it.orderItemId ?? it.productId),
-              orderId: Number(it.orderId ?? o.orderId ?? o.id),
-              productId: Number(it.productId),
-              vendorId: Number(it.vendorId),
-              title: String(it.title ?? it.productTitle ?? 'Item'),
-              quantity: Number(it.quantity ?? 1),
-              unitPriceCents: Number(it.unitPriceCents ?? it.priceCents ?? 0),
-              lineTotalCents: Number(
-                it.lineTotalCents ?? it.totalCents ?? (Number(it.quantity ?? 1) * Number(it.unitPriceCents ?? 0))
-              ),
-              shipCarrier: (it.shipCarrier ?? null) as ShipCarrier | null,
-              shipTracking: (it.shipTracking ?? null) as string | null,
-              shippedAt: it.shippedAt ?? null,
-              deliveredAt: it.deliveredAt ?? null,
-            }))
-            : [],
-        })) as VendorOrderRow[];
+              const qty = Number(it.quantity ?? 1);
+              const unit = Number(it.unitPriceCents ?? it.priceCents ?? 0);
+              const line =
+                Number(it.lineTotalCents ?? it.totalCents) ?? qty * unit;
 
-      setRows(payload);
+              return {
+                id: cleanId ?? -1,
+                orderItemId: cleanId,
+                orderId: Number(it.orderId ?? o.orderId ?? o.id),
+                productId: Number(it.productId),
+                vendorId: Number(it.vendorId),
+                title: String(it.title ?? it.productTitle ?? 'Item'),
+                quantity: qty,
+                unitPriceCents: unit,
+                lineTotalCents: Number(line),
+                shipCarrier: (it.shipCarrier ?? null) as ShipCarrier | null,
+                shipTracking: (it.shipTracking ?? null) as string | null,
+                shippedAt: it.shippedAt ?? null,
+                deliveredAt: it.deliveredAt ?? null,
+              } as VendorOrderItem;
+            })
+            : [];
+
+          const filtered =
+            tab === 'paid'
+              ? items.filter((it) => !it.shippedAt && !it.deliveredAt)
+              : tab === 'shipped'
+                ? items.filter((it) => !!it.shippedAt && !it.deliveredAt)
+                : items.filter((it) => !!it.deliveredAt);
+
+          return {
+            orderId: Number(o.orderId ?? o.id),
+            createdAt: String(o.createdAt ?? o.created_at ?? ''),
+            status: String(o.status) as OrderStatus,
+            totalCents: Number(o.totalCents ?? o.total_cents ?? 0),
+            items: filtered,
+          };
+        })
+        : [];
+
+      list = list.filter((o) => o.items.length > 0);
+
+      if (tab === 'delivered') list = list.filter(isDelivered);
+
+      list = dedupeByOrderId(list);
+
+      setRows(list);
     } catch (e: any) {
       setMsg(e?.message || 'Failed to load');
     } finally {
@@ -112,19 +162,12 @@ export default function VendorOrdersPage(): React.ReactElement {
   }
 
   useEffect(() => {
-    void load(1);
-    // Reset selection when context changes
     setSelectedByOrder({});
-    setPage(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
-
-  useEffect(() => {
-    void load(page);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+    void load();
+  }, [tab, page]);
 
   function toggleItem(orderId: number, itemId: number) {
+    if (!Number.isFinite(itemId) || itemId <= 0) return;
     setSelectedByOrder((prev) => {
       const cur = new Set(prev[orderId] ?? []);
       if (cur.has(itemId)) cur.delete(itemId);
@@ -138,48 +181,29 @@ export default function VendorOrdersPage(): React.ReactElement {
   }
 
   async function doShip(orderId: number) {
-    const itemIds = Array.from(selectedByOrder[orderId] ?? []);
+    const itemIds = Array.from(selectedByOrder[orderId] ?? []).filter((n) => Number.isFinite(n) && n > 0);
     if (itemIds.length === 0) return;
     const carrier = normalizeCarrier(shipDialog.carrier) ?? 'other';
     const tracking = shipDialog.tracking.trim() || null;
-
     setBusy(true);
     const r = await markOrderShipped(orderId, carrier, tracking, itemIds);
     setBusy(false);
-
-    if (!r.ok) {
-      setMsg(r.error || 'Ship failed');
-      return;
-    }
+    if (!r.ok) { setMsg(r.error || 'Ship failed'); return; }
     setShipDialog({ open: false, orderId: null, carrier: 'usps', tracking: '' });
     clearSelection(orderId);
     await load();
   }
 
   async function doDeliver(orderId: number) {
-    const itemIds = Array.from(selectedByOrder[orderId] ?? []);
+    const itemIds = Array.from(selectedByOrder[orderId] ?? []).filter((n) => Number.isFinite(n) && n > 0);
     if (itemIds.length === 0) return;
-
     setBusy(true);
     const r = await markOrderDelivered(orderId, itemIds);
     setBusy(false);
-
-    if (!r.ok) {
-      setMsg(r.error || 'Deliver failed');
-      return;
-    }
+    if (!r.ok) { setMsg(r.error || 'Deliver failed'); return; }
     clearSelection(orderId);
     await load();
   }
-
-  const tabs: Array<{ key: Tab; label: string }> = useMemo(
-    () => [
-      { key: 'paid', label: 'Paid' },
-      { key: 'shipped', label: 'Shipped' },
-      { key: 'refunded', label: 'Refunded' },
-    ],
-    []
-  );
 
   const card = {
     background: 'var(--theme-card)',
@@ -193,22 +217,37 @@ export default function VendorOrdersPage(): React.ReactElement {
         <h1 className="text-4xl font-semibold text-[var(--theme-text)]">Customer Orders</h1>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-2">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={[
-              'rounded-xl px-3 py-1.5 text-sm font-semibold border focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]',
-              tab === t.key
-                ? 'bg-[var(--theme-card)] border-[var(--theme-border)]'
-                : 'border-transparent hover:bg-[var(--theme-surface)]',
-            ].join(' ')}
-          >
-            {t.label}
-          </button>
-        ))}
+        <button
+          onClick={() => setTab('paid')}
+          className={`rounded-xl px-3 py-1.5 text-sm font-semibold border ${
+            tab === 'paid'
+              ? 'bg-[var(--theme-card)] border-[var(--theme-border)]'
+              : 'border-transparent hover:bg-[var(--theme-surface)]'
+          }`}
+        >
+          Paid
+        </button>
+        <button
+          onClick={() => setTab('shipped')}
+          className={`rounded-xl px-3 py-1.5 text-sm font-semibold border ${
+            tab === 'shipped'
+              ? 'bg-[var(--theme-card)] border-[var(--theme-border)]'
+              : 'border-transparent hover:bg-[var(--theme-surface)]'
+          }`}
+        >
+          Shipped
+        </button>
+        <button
+          onClick={() => setTab('delivered')}
+          className={`rounded-xl px-3 py-1.5 text-sm font-semibold border ${
+            tab === 'delivered'
+              ? 'bg-[var(--theme-card)] border-[var(--theme-border)]'
+              : 'border-transparent hover:bg-[var(--theme-surface)]'
+          }`}
+        >
+          Delivered
+        </button>
       </div>
 
       {msg && (
@@ -224,13 +263,15 @@ export default function VendorOrdersPage(): React.ReactElement {
       ) : (
         rows.map((o) => {
           const selected = selectedByOrder[o.orderId] ?? new Set<number>();
-          const hasSelection = selected.size > 0;
+          const showShip = tab === 'paid';
+          const showDeliver = tab === 'shipped';
+
           return (
             <div key={o.orderId} className="rounded-2xl border p-4 grid gap-3" style={card}>
               <div className="flex items-center justify-between">
                 <div className="text-sm opacity-80">Order #{o.orderId}</div>
                 <div className="flex items-center gap-2">
-                  {tab !== 'refunded' ? (
+                  {tab !== 'delivered' ? (
                     <a
                       href={buildPackingSlipUrl(o.orderId)}
                       target="_blank"
@@ -242,24 +283,32 @@ export default function VendorOrdersPage(): React.ReactElement {
                   ) : (
                     <span className="opacity-60">—</span>
                   )}
-                  <button
-                    type="button"
-                    disabled={!hasSelection}
-                    onClick={() => setShipDialog({ open: true, orderId: o.orderId, carrier: 'usps', tracking: '' })}
-                    className="rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-60"
-                    style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
-                  >
-                    Mark Shipped
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!hasSelection}
-                    onClick={() => void doDeliver(o.orderId)}
-                    className="rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-60"
-                    style={{ borderColor: 'var(--theme-border)' }}
-                  >
-                    Mark Delivered
-                  </button>
+
+                  {showShip && (
+                    <button
+                      type="button"
+                      disabled={selected.size === 0}
+                      onClick={() =>
+                        setShipDialog({ open: true, orderId: o.orderId, carrier: 'usps', tracking: '' })
+                      }
+                      className="rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-60"
+                      style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
+                    >
+                      Mark Shipped
+                    </button>
+                  )}
+
+                  {showDeliver && (
+                    <button
+                      type="button"
+                      disabled={selected.size === 0}
+                      onClick={() => void doDeliver(o.orderId)}
+                      className="rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-60"
+                      style={{ borderColor: 'var(--theme-border)' }}
+                    >
+                      Mark Delivered
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -276,33 +325,46 @@ export default function VendorOrdersPage(): React.ReactElement {
                   </tr>
                   </thead>
                   <tbody>
-                  {o.items.map((it) => (
-                    <tr key={it.id} className="border-b last:border-b-0" style={{ borderColor: 'var(--theme-border)' }}>
-                      <td className="px-3 py-2">
-                        <input
-                          type="checkbox"
-                          checked={selected.has(it.id)}
-                          onChange={() => toggleItem(o.orderId, it.id)}
-                        />
-                      </td>
-                      <td className="px-3 py-2">{it.title}</td>
-                      <td className="px-3 py-2">{it.quantity}</td>
-                      <td className="px-3 py-2">{centsToUsd(it.unitPriceCents)}</td>
-                      <td className="px-3 py-2">{centsToUsd(it.lineTotalCents)}</td>
-                      <td className="px-3 py-2">
-                        {it.deliveredAt ? (
-                          <span>Delivered {new Date(it.deliveredAt).toLocaleString()}</span>
-                        ) : it.shippedAt ? (
-                          <span>
-                              Shipped {new Date(it.shippedAt).toLocaleString()}{' '}
-                            {it.shipTracking ? `• ${it.shipTracking}` : ''}
-                            </span>
-                        ) : (
-                          <span className="opacity-60">Not shipped</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {o.items.map((it, idx) => {
+                    const selectId =
+                      Number.isFinite(it.orderItemId) && (it.orderItemId as number) > 0
+                        ? (it.orderItemId as number)
+                        : Number.isFinite(it.id) && it.id > 0
+                          ? it.id
+                          : null;
+
+                    const selectable =
+                      selectId != null &&
+                      (tab === 'paid'
+                        ? !it.shippedAt && !it.deliveredAt
+                        : tab === 'shipped'
+                          ? !!it.shippedAt && !it.deliveredAt
+                          : false);
+
+                    const selectedSet = selectedByOrder[o.orderId] ?? new Set<number>();
+                    const isChecked = selectId != null ? selectedSet.has(selectId) : false;
+
+                    return (
+                      <tr key={`${o.orderId}-${selectId ?? idx}`} className="border-b last:border-b-0" style={{ borderColor: 'var(--theme-border)' }}>
+                        <td className="px-3 py-2">
+                          {selectId != null ? (
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleItem(o.orderId, selectId)}
+                            />
+                          ) : (
+                            <span className="opacity-60">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">{it.title}</td>
+                        <td className="px-3 py-2">{it.quantity}</td>
+                        <td className="px-3 py-2">{centsToUsd(it.unitPriceCents)}</td>
+                        <td className="px-3 py-2">{centsToUsd(it.lineTotalCents)}</td>
+                        <td className="px-3 py-2">{selectable}</td>
+                      </tr>
+                    );
+                  })}
                   </tbody>
                 </table>
               </div>
@@ -316,7 +378,6 @@ export default function VendorOrdersPage(): React.ReactElement {
         })
       )}
 
-      {/* Simple pager */}
       <div className="flex items-center gap-2">
         <button
           onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -335,7 +396,6 @@ export default function VendorOrdersPage(): React.ReactElement {
         </button>
       </div>
 
-      {/* Ship modal */}
       {shipDialog.open && shipDialog.orderId != null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" />

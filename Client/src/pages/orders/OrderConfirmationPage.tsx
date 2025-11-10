@@ -138,18 +138,39 @@ export default function OrderConfirmationPage(): React.ReactElement {
                 <span className="ml-2 opacity-70">(charged: {centsToUsd(hintedAmount)})</span>
               ) : null}
             </p>
-            {isPaid ? (
-              <div className="mt-4">
-                <a
-                  href={`/orders/${order.id}/receipt`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-xl border border-[var(--theme-border)] px-4 py-2 text-sm hover:bg-[var(--theme-card)]"
-                >
-                  🖨️ Print receipt
-                </a>
-              </div>
-            ) : null}
+        {/*    {isPaid ? (*/}
+        {/*      <div className="mt-4">*/}
+        {/*        <a*/}
+        {/*          href={`/orders/${order.id}/receipt`}*/}
+        {/*          target="_blank"*/}
+        {/*          rel="noopener noreferrer"*/}
+        {/*          className="inline-flex items-center gap-2 rounded-xl border border-[var(--theme-border)] px-4 py-2 text-sm hover:bg-[var(--theme-card)]"*/}
+        {/*        >*/}
+        {/*          🖨️ Print receipt*/}
+        {/*        </a>*/}
+        {/*      </div>*/}
+        {/*    ) : null}*/}
+        {/*  </>*/}
+        {/*) : (*/}
+        {/*  <>*/}
+        {/*    <p>*/}
+        {/*      <strong>Order #</strong> pending…*/}
+        {/*    </p>*/}
+        {/*    {typeof hintedAmount === 'number' ? (*/}
+        {/*      <p>*/}
+        {/*        <strong>Total</strong> {centsToUsd(hintedAmount)}*/}
+        {/*      </p>*/}
+        {/*    ) : null}*/}
+            <p className="text-sm opacity-80">
+              Your order will appear in{' '}
+              <Link
+                to="/account/orders"
+                className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
+              >
+                My Orders
+              </Link>{' '}
+              shortly.
+            </p>
           </>
         ) : (
           <>
@@ -161,16 +182,6 @@ export default function OrderConfirmationPage(): React.ReactElement {
                 <strong>Total</strong> {centsToUsd(hintedAmount)}
               </p>
             ) : null}
-            <p className="text-sm opacity-80">
-              It will appear in{' '}
-              <Link
-                to="/account/orders"
-                className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
-              >
-                My Orders
-              </Link>{' '}
-              shortly.
-            </p>
           </>
         )}
       </div>
@@ -189,7 +200,7 @@ export default function OrderConfirmationPage(): React.ReactElement {
             rel="noopener noreferrer"
             className="inline-flex rounded-xl px-4 py-2 font-semibold border border-[var(--theme-border)] hover:bg-[var(--theme-card)]"
           >
-            Print receipt
+            🖨️ Print receipt
           </a>
         ) : null}
       </div>

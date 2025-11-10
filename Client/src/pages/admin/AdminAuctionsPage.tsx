@@ -28,9 +28,9 @@ export default function AdminAuctionsPage(): React.ReactElement {
 
   return (
     <section className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)]">
-      <div className="mx-auto max-w-5xl px-6 py-10 grid gap-6">
+      <div className="mx-auto max-w-8xl px-6 py-10 grid gap-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Admin · Live Auctions</h1>
+          <h1 className="text-4xl font-semibold">Live Auctions</h1>
         </div>
 
         <div

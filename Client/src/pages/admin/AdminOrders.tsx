@@ -104,8 +104,8 @@ export default function AdminOrders(): React.ReactElement {
   // -------------------------------------------------
 
   return (
-    <section className="mx-auto max-w-6xl px-6 py-10 space-y-4">
-      <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Admin · Orders</h1>
+    <section className="mx-auto max-w-8xl px-6 py-10 space-y-4">
+      <h1 className="text-4xl font-semibold text-[var(--theme-text)]">All Customer Orders</h1>
 
       {flash && (
         <div

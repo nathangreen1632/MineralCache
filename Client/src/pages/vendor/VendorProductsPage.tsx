@@ -92,9 +92,9 @@ export default function VendorProductsPage(): React.ReactElement {
 
   return (
     <div className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text)]">
-      <div className="mx-auto max-w-6xl px-6 py-14 grid gap-10">
+      <div className="mx-auto max-w-8xl px-6 py-14 grid gap-10">
         <header className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">My Products</h1>
+          <h1 className="text-4xl font-semibold">My Products</h1>
           <Link
             to="/products/new"
             className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
@@ -147,11 +147,11 @@ export default function VendorProductsPage(): React.ReactElement {
                       <div className="grid gap-1">
                         <Link
                           to={`/products/${p.id}`}
-                          className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
+                          className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)] text-lg font-semibold"
                         >
                           {p.title}
                         </Link>
-                        <div className="text-sm opacity-80">
+                        <div className="text-base opacity-80">
                           Price: {centsToUsd(effCents)}
                           {p.onSale && typeof p.salePriceCents === 'number' ? (
                             <span className="ml-2 line-through opacity-60">
@@ -160,14 +160,14 @@ export default function VendorProductsPage(): React.ReactElement {
                           ) : null}
                         </div>
                         {p.updatedAt ? (
-                          <div className="text-xs opacity-60">
+                          <div className="text-sm opacity-60">
                             Updated {new Date(p.updatedAt).toLocaleString()}
                           </div>
                         ) : null}
 
                         {/* Actions: show ID + quick “Create auction” */}
                         <div className="mt-2 flex items-center gap-3">
-                          <span className="text-xs rounded-md border border-[var(--theme-border)] px-2 py-0.5">
+                          <span className="text-sm rounded-md border border-[var(--theme-border)] px-2 py-0.5">
                             ID: {p.id}
                           </span>
                           {AUCTIONS_ENABLED && (
@@ -180,7 +180,7 @@ export default function VendorProductsPage(): React.ReactElement {
                               title="Create auction"
                             >
                               <PlusCircle className="h-4 w-4" />
-                              <span className="text-sm font-semibold">Create auction</span>
+                              <span className="text-base font-semibold">Create auction</span>
                             </Link>
                           )}
                         </div>
@@ -190,8 +190,8 @@ export default function VendorProductsPage(): React.ReactElement {
                         <img
                           src={p.primaryPhotoUrl}
                           alt=""
-                          className="w-20 h-20 object-cover rounded-lg"
-                          style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow))' }}
+                          className="w-50 h-50 object-cover rounded-lg"
+                          style={{ filter: 'drop-shadow(0 6px 18px var(--theme-shadow-carousel))' }}
                           onError={(ev) => {
                             ev.currentTarget.style.display = 'none';
                           }}

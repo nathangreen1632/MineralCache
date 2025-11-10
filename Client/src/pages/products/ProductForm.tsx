@@ -336,7 +336,7 @@ export default function ProductForm({
         </div>
       )}
 
-      <div className="rounded-2xl border bg-[var(--theme-surface-alt)] border-[var(--theme-border)] p-4">
+      <div className="rounded-2xl border bg-[var(--theme-category)] border-[var(--theme-border)] p-4">
         <label htmlFor={ids.categoryId} className="block text-sm font-semibold mb-1">
           Category <span className="text-[var(--theme-error)]" aria-hidden="true">*</span>
         </label>
@@ -346,7 +346,7 @@ export default function ProductForm({
             required
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            className="w-full appearance-none rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface-alt)] px-3 py-2 pr-10"
+            className="w-full appearance-none rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 py-2 pr-10"
             aria-describedby="categoryHelp"
           >
             <option value="">Select a category…</option>

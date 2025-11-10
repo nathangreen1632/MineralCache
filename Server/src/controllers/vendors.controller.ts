@@ -2,21 +2,20 @@
 import type {Request, Response} from 'express';
 import {z, type ZodError} from 'zod';
 import {Op, UniqueConstraintError} from 'sequelize';
+import Stripe from 'stripe';
 import {Vendor} from '../models/vendor.model.js';
 import {createAccountLink, ensureVendorStripeAccount, stripeEnabled} from '../services/stripe.service.js';
 import {applyVendorSchema} from '../validation/vendor.schema.js';
 import {Order} from '../models/order.model.js';
 import {OrderItem} from '../models/orderItem.model.js';
 
-/** -------------------------------------------------------------
- * Zod helpers
- * ------------------------------------------------------------*/
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, { apiVersion: '2025-08-27.basil' });
+
 function zDetails(err: ZodError) {
   const treeify = (z as any).treeifyError;
   if (typeof treeify === 'function') {
     return treeify(err);
   }
-
   const issues = err.issues.map((i) => ({
     path: Array.isArray(i.path) ? i.path.join('.') : String(i.path ?? ''),
     message: i.message,
@@ -25,9 +24,6 @@ function zDetails(err: ZodError) {
   return { issues };
 }
 
-/** -------------------------------------------------------------
- * Helpers (auth + slug)
- * ------------------------------------------------------------*/
 function ensureAuthed(req: Request, res: Response): req is Request & {
   user: { id: number; role: 'buyer' | 'vendor' | 'admin'; dobVerified18: boolean; email?: string };
 } {
@@ -66,9 +62,6 @@ function suggestSlugs(base: string, take = 2): string[] {
   return suggestions;
 }
 
-/** -------------------------------------------------------------
- * applyVendor helpers (to reduce CC)
- * ------------------------------------------------------------*/
 function parseApplyBody(req: Request, res: Response) {
   const parsed = applyVendorSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -195,9 +188,6 @@ function handleUniqueConstraint(e: unknown, slug: string, res: Response): boolea
   return false;
 }
 
-/** -------------------------------------------------------------
- * User endpoints
- * ------------------------------------------------------------*/
 export async function applyVendor(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
 
@@ -243,11 +233,69 @@ export async function applyVendor(req: Request, res: Response): Promise<void> {
 
 export async function getMyVendor(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
+
   try {
-    const vendor = await Vendor.findOne({ where: { userId: (req as any).user.id } });
+    const vendor = await Vendor.findOne({
+      where: { userId: (req as any).user.id },
+      attributes: [
+        'id',
+        'userId',
+        'displayName',
+        'slug',
+        'bio',
+        'logoUrl',
+        'country',
+        'approvalStatus',
+        'approvedBy',
+        'approvedAt',
+        'rejectedReason',
+        'stripeAccountId',
+        'stripeChargesEnabled',
+        'stripePayoutsEnabled',
+        'stripeDetailsSubmitted',
+        'stripeRequirementsDue',
+        'stripeLastSyncAt',
+        'commissionOverridePct',
+        'minFeeOverrideCents',
+        'newVendorCompletedCount',
+        'createdAt',
+        'updatedAt',
+      ],
+    });
+
     res.json({ vendor });
   } catch (e: any) {
     res.status(500).json({ error: 'Failed to load vendor', detail: e?.message });
+  }
+}
+
+export async function syncMyStripeStatus(req: Request, res: Response): Promise<void> {
+  if (!ensureAuthed(req, res)) return;
+
+  try {
+    const me = await Vendor.findOne({ where: { userId: (req as any).user.id } });
+    if (!me?.stripeAccountId) {
+      res.status(400).json({ error: 'No Stripe account' });
+      return;
+    }
+
+    const acct = await stripe.accounts.retrieve(me.stripeAccountId);
+    const requirementsDue =
+      (acct.requirements?.currently_due?.length ?? 0) +
+      (acct.requirements?.past_due?.length ?? 0) +
+      (acct.requirements?.pending_verification?.length ?? 0);
+
+    await me.update({
+      stripeChargesEnabled: Boolean(acct.charges_enabled),
+      stripePayoutsEnabled: Boolean(acct.payouts_enabled),
+      stripeDetailsSubmitted: Boolean(acct.details_submitted),
+      stripeRequirementsDue: requirementsDue,
+      stripeLastSyncAt: new Date(),
+    });
+
+    res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ error: 'Failed to sync Stripe status', detail: e?.message });
   }
 }
 
@@ -307,7 +355,6 @@ export async function linkStripeOnboarding(req: Request, res: Response): Promise
 }
 
 export async function getVendorBySlug(_req: Request, res: Response): Promise<void> {
-  // TODO: implement lookup by slug and return vendor profile + latest products
   res.json({ vendor: null });
 }
 
@@ -406,12 +453,19 @@ export async function getVendorOrders(req: Request, res: Response): Promise<void
         shippingCents: o.shippingCents,
         totalCents: o.totalCents,
         items: its.map((i) => ({
-          productId: Number(i.productId),
-          title: String(i.title),
-          unitPriceCents: Number(i.unitPriceCents),
-          quantity: Number(i.quantity),
-          lineTotalCents: Number(i.lineTotalCents),
+          id: Number((i as any).id),
+          orderItemId: Number((i as any).id),
+          orderId: Number((i as any).orderId),
+          vendorId: Number((i as any).vendorId),
+          productId: Number((i as any).productId),
+          title: String((i as any).title ?? (i as any).productTitle ?? `Item #${(i as any).id}`),
+          unitPriceCents: Number((i as any).unitPriceCents),
+          quantity: Number((i as any).quantity),
+          lineTotalCents: Number((i as any).lineTotalCents),
+          shipCarrier: (i as any).shipCarrier ?? null,
+          shipTracking: (i as any).shipTracking ?? null,
           shippedAt: (i as any).shippedAt ?? null,
+          deliveredAt: (i as any).deliveredAt ?? null,
         })),
       };
     });

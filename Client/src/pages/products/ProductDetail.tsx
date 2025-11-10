@@ -160,12 +160,12 @@ export default function ProductDetail(): React.ReactElement {
     null;
 
   return (
-    <section className="mx-auto max-w-6xl px-4 py-8 grid gap-6 lg:grid-cols-2">
+    <section className="mx-auto max-w-8xl px-4 py-8 grid gap-6 lg:grid-cols-2">
       <div className="relative">
         <ImageCarousel images={images} label="Product images" />
         {onSaleNow && (
           <span
-            className="absolute left-3 top-3 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold shadow"
+            className="absolute left-3 top-3 inline-flex items-center rounded-full px-2 py-0.5 text-base font-semibold shadow"
             style={{ background: 'var(--theme-button-yellow)', color: 'var(--theme-text-black)' }}
             aria-label="On sale"
           >

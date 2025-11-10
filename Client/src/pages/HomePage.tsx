@@ -207,7 +207,7 @@ export default function HomePage(): React.ReactElement {
           src={logoWords}
           alt="MineralCache — Buy. Sell. Discover. The Mineral and Fossil Marketplace."
           className="mx-auto h-auto w-full max-w-[900px] rounded-2xl mt-8 sm:mt-2"
-          style={{ filter: 'drop-shadow(0 1px 4px var(--theme-shadow-categories))' }}
+          style={{ filter: 'drop-shadow(0 1px 4px var(--theme-shadow-carousel))' }}
         />
       </header>
 

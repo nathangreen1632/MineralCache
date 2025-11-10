@@ -47,8 +47,8 @@ export default function VendorPayoutsPage(): React.ReactElement {
     .join('&')}`;
 
   return (
-    <section className="mx-auto max-w-12xl px-6 py-10 space-y-4">
-      <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Payouts</h1>
+    <section className="mx-auto max-w-8xl px-6 py-10 space-y-4">
+      <h1 className="text-4xl font-semibold text-[var(--theme-text)]">Payouts</h1>
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="grid">

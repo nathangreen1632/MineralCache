@@ -1,5 +1,6 @@
 // Server/src/controllers/webhooks/stripe.controller.ts
 import type { Request, Response } from 'express';
+import Stripe from 'stripe';
 import { verifyStripeWebhook } from '../../services/stripe.service.js';
 import { db } from '../../models/sequelize.js';
 import { Order } from '../../models/order.model.js';
@@ -16,8 +17,38 @@ import { Op } from 'sequelize';
 import { AdminSettings } from '../../models/adminSettings.model.js';
 import { Vendor } from '../../models/vendor.model.js';
 
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, { apiVersion: '2025-08-27.basil' });
+
 export async function createPaymentIntent(_req: Request, res: Response): Promise<void> {
   res.status(410).json({ error: 'Use /api/checkout/intent' });
+}
+
+async function syncVendorStripeSnapshotByAccountId(accountId: string, acct?: Stripe.Account) {
+  const account =
+    acct ??
+    (await stripe.accounts.retrieve(accountId).catch(() => null));
+  if (!account) return;
+
+  const reqs = account.requirements;
+  const requirementsDue =
+    (reqs?.currently_due?.length ?? 0) +
+    (reqs?.past_due?.length ?? 0) +
+    (reqs?.pending_verification?.length ?? 0);
+
+  await Vendor.update(
+    {
+      stripeChargesEnabled: Boolean(account.charges_enabled),
+      stripePayoutsEnabled: Boolean(account.payouts_enabled),
+      stripeDetailsSubmitted: Boolean(account.details_submitted),
+      stripeRequirementsDue: requirementsDue,
+      stripeLastSyncAt: new Date(),
+    },
+    { where: { stripeAccountId: account.id } }
+  );
+}
+
+function extractAccountId(ev: any): string | null {
+  return (ev?.account as string) ?? (ev?.data?.object?.account as string) ?? null;
 }
 
 export async function stripeWebhook(req: Request, res: Response): Promise<void> {
@@ -63,7 +94,24 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
     }
 
     switch (event.type) {
-      case 'payment_intent.succeeded': {
+      case 'account.updated': {
+        const acct = event.data.object;
+        await syncVendorStripeSnapshotByAccountId(acct.id, acct);
+        break;
+      }
+
+      case 'capability.updated':
+      case 'account.external_account.created':
+      case 'financial_connections.account.created':
+      case 'account.application.authorized': {
+        const accountId = extractAccountId(event);
+        if (accountId) {
+          await syncVendorStripeSnapshotByAccountId(accountId);
+        }
+        break;
+      }
+
+  case 'payment_intent.succeeded': {
         const pi = event.data.object as any;
         const intentId = String(pi?.id || '');
         if (!intentId) break;

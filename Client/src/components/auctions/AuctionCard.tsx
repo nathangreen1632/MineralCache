@@ -36,7 +36,7 @@ export default function AuctionCard(props: Props): React.ReactElement {
 
   return (
     <article
-      className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-4 shadow-[0_10px_30px_var(--theme-shadow)] grid gap-2"
+      className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-4 shadow-[0_5px_15px_var(--theme-shadow)] grid gap-2"
       aria-labelledby={`auction-${props.id}-title`}
     >
       {props.imageUrl && (
@@ -49,7 +49,7 @@ export default function AuctionCard(props: Props): React.ReactElement {
           <img
             src={props.imageUrl}
             alt={props.productTitle ?? displayTitle}
-            className="h-[25rem] w-full object-cover"
+            className="h-[25rem] w-full object-cover object-center"
             loading="lazy"
           />
         </Link>
