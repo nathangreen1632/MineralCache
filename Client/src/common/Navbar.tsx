@@ -30,7 +30,7 @@ function BrandName({ className }: Readonly<{ className?: string }>) {
     <span className={['inline-flex items-center gap-2 text-2xl', className || ''].join(' ')}>
       <img
         src={mcLogo}
-        alt=""
+        alt="MineralCache logo"
         aria-hidden="true"
         className="h-9 w-9 rounded-lg"
         style={{ filter: 'drop-shadow(0 1px 2px var(--theme-shadow-carousel))' }}
