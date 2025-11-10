@@ -160,7 +160,7 @@ function NavContent(): React.ReactElement {
     <nav className="mt-6 grid gap-1" aria-label="Main">
       <SideNavLink to="/" end label="Home" Icon={Home} />
       {(isVendor || isAdmin) ? (
-        <SideNavLink to="/products" label="Catalog" Icon={Store} />
+        <SideNavLink to="/products" label="Shop" Icon={Store} />
       ) : (
         <SideNavLink to="/products" end label="Shop" Icon={Store} />
       )}
