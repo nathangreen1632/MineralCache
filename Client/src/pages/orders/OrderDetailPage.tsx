@@ -102,9 +102,9 @@ export default function OrderDetailPage(): React.ReactElement {
   // --------------------------------------------------------
 
   return (
-    <section className="mx-auto max-w-4xl px-6 py-14 space-y-6">
+    <section className="mx-auto max-w-8xl px-6 py-14 space-y-6">
       <div className="flex items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Order #{o.id}</h1>
+        <h1 className="text-4xl font-semibold text-[var(--theme-text)]">Order #{o.id}</h1>
         <div className="flex items-center gap-3">
           {/* View Receipt (opens server-rendered HTML in new tab) */}
           <a
@@ -139,13 +139,13 @@ export default function OrderDetailPage(): React.ReactElement {
 
       {!allDelivered && firstShipped ? <ShippedBanner shippedAt={firstShipped} orderId={o.id} /> : null}
 
-      <div className="rounded-2xl border p-6 grid gap-3" style={card}>
+      <div className="text-xl rounded-2xl border p-6 grid gap-3" style={card}>
         <p>
           <strong>Status:</strong> <span className="capitalize">{o.status.replace('_', ' ')}</span>
         </p>
 
         {/* Totals breakdown */}
-        <div className="grid gap-1 text-[15px]">
+        <div className="grid gap-1 text-lg">
           <div><strong>Subtotal:</strong> {centsToUsd(o.subtotalCents)}</div>
 
           {/* Per-vendor shipping lines (if provided) */}
@@ -198,7 +198,7 @@ export default function OrderDetailPage(): React.ReactElement {
       <div className="rounded-2xl border" style={card}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="text-left">
+            <thead className="text-left text-xl font-medium text-[var(--theme-text)]">
             <tr className="border-b" style={{ borderColor: 'var(--theme-border)' }}>
               <th className="px-4 py-3">Item</th>
               <th className="px-4 py-3">Qty</th>
@@ -223,7 +223,7 @@ export default function OrderDetailPage(): React.ReactElement {
                   className="border-b last:border-b-0"
                   style={{ borderColor: 'var(--theme-border)' }}
                 >
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 text-lg">
                     <div className="flex items-center gap-3">
                       {it.primaryPhotoUrl ? (
                         <img
@@ -237,15 +237,15 @@ export default function OrderDetailPage(): React.ReactElement {
                       <div className="min-w-0">
                         <div className="font-medium truncate">{it.title}</div>
                         {vendorSlug ? (
-                          <div className="text-xs opacity-80">Sold by: <span className="font-semibold text-[var(--theme-link)]">{vendorSlug}</span></div>
+                          <div className="text-base opacity-80">Sold by: <span className="text-lg font-semibold text-[var(--theme-link)]">{vendorSlug}</span></div>
                         ) : null}
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3">{it.quantity}</td>
-                  <td className="px-4 py-3">{centsToUsd(it.unitPriceCents)}</td>
-                  <td className="px-4 py-3">{centsToUsd(it.lineTotalCents)}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 text-lg">{it.quantity}</td>
+                  <td className="px-4 py-3 text-lg">{centsToUsd(it.unitPriceCents)}</td>
+                  <td className="px-4 py-3 text-lg">{centsToUsd(it.lineTotalCents)}</td>
+                  <td className="px-4 py-3 text-lg">
                     {it.shipTracking ? (
                       <div className="flex flex-col gap-0.5">
                         <div>
