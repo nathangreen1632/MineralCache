@@ -76,6 +76,7 @@
     --theme-card-alt-hover: var(--c-n);
     --theme-card-alt: var(--c-f);
     --theme-hover: var(--c-d);
+    --theme-category: var(--c-d);
 
     /* focus & elevation */
     --theme-focus: var(--c-d);
@@ -166,6 +167,7 @@
     --theme-card-alt-inverse: var(--c-f);
     --theme-hover: var(--c-b);
     --theme-card-alt-hover: var(--c-n);
+    --theme-category: var(--c-d);
 
     /* focus & elevation */
     --theme-focus: var(--c-a);
