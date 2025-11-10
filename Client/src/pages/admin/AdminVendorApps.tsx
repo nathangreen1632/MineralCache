@@ -92,8 +92,8 @@ export default function AdminVendorApps(): React.ReactElement {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 space-y-4">
-      <h1 className="text-2xl font-semibold text-[var(--theme-text)]">Vendor Applications</h1>
+    <div className="mx-auto max-w-8xl px-4 py-8 space-y-4">
+      <h1 className="text-4xl font-semibold text-[var(--theme-text)]">Vendor Applications</h1>
 
       {/* Message */}
       {msg && (
