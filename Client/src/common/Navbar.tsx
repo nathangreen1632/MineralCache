@@ -23,18 +23,15 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../stores/useAuthStore';
 import ThemeToggle from './ThemeToggle';
-import mcLogo from '../assets/mc_logo_256.webp';
+import BrandLogo from './BrandLogo';
+
 
 function BrandName({ className }: Readonly<{ className?: string }>) {
   return (
-    <span className={['inline-flex items-center gap-2 text-2xl', className || ''].join(' ')}>
-      <img
-        src={mcLogo}
-        alt="MineralCache logo"
-        aria-hidden="true"
-        className="h-9 w-9 rounded-lg"
-        style={{ filter: 'drop-shadow(0 1px 2px var(--theme-shadow-carousel))' }}
-      />
+    <span className={['inline-flex items-center gap-2 text-2xl text-[var(--theme-psycho)]', className || ''].join(' ')}>
+
+      <BrandLogo className="h-9 w-9 rounded-lg" alt="Mineral Cache logo" />
+
       <span>
         MINERAL<span className="text-2xl italic text-[var(--theme-button-yellow)]">CACHE</span>
       </span>

@@ -27,7 +27,7 @@ function Badge({ children }: Readonly<{ children: React.ReactNode }>) {
         background: 'var(--theme-surface)',
         borderColor: 'var(--theme-border)',
         color: 'var(--theme-text)',
-        boxShadow: '0 10px 30px var(--theme-shadow)',
+        boxShadow: '0 3px 4px var(--theme-shadow)',
       }}
     >
       {children}

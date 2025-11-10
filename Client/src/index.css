@@ -1,9 +1,11 @@
 @import url('https://fonts.googleapis.com/css?family=Inter:wght@400;600;800&display=swap');
 @import "tailwindcss";
 
-/* ------------------------------------ LIGHT (default) ------------------------------------ */
+/* =================================== BASE: LIGHT (default) =================================== */
 @layer base {
   :root {
+    color-scheme: light;
+
     /* Base palette (A light ⇢ E dark text) */
     --c-a: #FAFAFA;
     --c-b: #F2EEED;
@@ -23,6 +25,7 @@
     --c-n: #F2F2F2;
     --c-o: #F5AF02;
     --c-p: #000000;
+    --c-q: #000000;
 
     /* LIGHT theme mapping */
     --theme-bg: var(--c-b);
@@ -67,6 +70,7 @@
     --theme-success: var(--c-g);
     --theme-warning: var(--c-i);
     --theme-info: var(--c-j);
+    --theme-psycho: var(--c-q);
 
     /* cards & interactive */
     --theme-card: var(--c-b);
@@ -92,9 +96,11 @@
   }
 }
 
-/* -------------------------- DARK (auto via system preference) -------------------------- */
+/* ====================== SYSTEM DARK (when OS is dark and no explicit override) ====================== */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme]), :root[data-theme="system"] {
+    color-scheme: dark;
+
     /* Base palette (A light text ⇢ E darkest surface) */
     --c-a: #FCFCFC;
     --c-b: #57737A;
@@ -114,6 +120,7 @@
     --c-n: #191919;
     --c-o: #F5AF02;
     --c-p: #000000;
+    --c-q: #FFFFFF;
 
     /* DARK theme mapping */
     --theme-bg: var(--c-e);
@@ -158,6 +165,7 @@
     --theme-success: var(--c-g);
     --theme-warning: var(--c-i);
     --theme-info: var(--c-j);
+    --theme-psycho: var(--c-q);
 
     /* cards & interactive */
     --theme-card: var(--c-d);
@@ -183,11 +191,11 @@
   }
 }
 
-/* ----------------------------- DARK (forced via attribute) ----------------------------- */
+/* ================================ FORCED DARK (explicit override) ================================ */
 html[data-theme="dark"] {
   color-scheme: dark;
 
-  /* Base palette (A light text ⇢ E darkest surface) */
+  /* Base palette */
   --c-a: #FCFCFC;
   --c-b: #57737A;
   --c-c: #85BDBF;
@@ -206,10 +214,12 @@ html[data-theme="dark"] {
   --c-n: #191919;
   --c-o: #F5AF02;
   --c-p: #000000;
+  --c-q: #FFFFFF;
 
-  /* DARK theme mapping (same as above) */
+  /* DARK theme mapping (parity with system dark) */
   --theme-bg: var(--c-e);
   --theme-surface: var(--c-e);
+  --theme-surface-alt: var(--c-e);
   --theme-text: var(--c-a);
   --theme-text-white: var(--c-e);
   --theme-accent: var(--c-a);
@@ -249,6 +259,7 @@ html[data-theme="dark"] {
   --theme-success: var(--c-g);
   --theme-warning: var(--c-i);
   --theme-info: var(--c-j);
+  --theme-psycho: var(--c-q);
 
   /* cards & interactive */
   --theme-card: var(--c-d);
@@ -258,6 +269,7 @@ html[data-theme="dark"] {
   --theme-card-alt-inverse: var(--c-f);
   --theme-hover: var(--c-b);
   --theme-card-alt-hover: var(--c-n);
+  --theme-category: var(--c-d);
 
   /* focus & elevation */
   --theme-focus: var(--c-a);
@@ -272,10 +284,10 @@ html[data-theme="dark"] {
   --theme-scrollbar-thumb: var(--theme-accent);
 }
 
-/* ------------------------------- LIGHT (forced via attr) ------------------------------- */
+/* ================================ FORCED LIGHT (explicit override) ================================ */
 html[data-theme="light"] { color-scheme: light; }
 
-/* -------------------------------------- GLOBALS -------------------------------------- */
+/* ========================================= GLOBALS ========================================= */
 
 /* PLACEHOLDER COLOR */
 @layer base {
@@ -350,5 +362,36 @@ html { -webkit-text-size-adjust: 100%; }
   .animate-bounce-3s {
     animation: mc-bounce-3s 3s ease-in-out infinite;
     will-change: transform;
+  }
+}
+
+/* ================================== THEME-DRIVEN LOGO SWAP ================================== */
+@layer components {
+  /* Default = light */
+  .mc-only-light { display: inline-block; }
+  .mc-only-dark  { display: none; }
+
+  /* Explicit overrides via your toggle */
+  :root[data-theme="light"] .mc-only-light { display: inline-block; }
+  :root[data-theme="light"] .mc-only-dark  { display: none; }
+
+  :root[data-theme="dark"]  .mc-only-light { display: none; }
+  :root[data-theme="dark"]  .mc-only-dark  { display: inline-block; }
+
+  /* System mode (no data-theme OR data-theme="system") */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) .mc-only-light,
+    :root[data-theme="system"] .mc-only-light { display: none; }
+
+    :root:not([data-theme]) .mc-only-dark,
+    :root[data-theme="system"] .mc-only-dark  { display: inline-block; }
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme]) .mc-only-light,
+    :root[data-theme="system"] .mc-only-light { display: inline-block; }
+
+    :root:not([data-theme]) .mc-only-dark,
+    :root[data-theme="system"] .mc-only-dark  { display: none; }
   }
 }

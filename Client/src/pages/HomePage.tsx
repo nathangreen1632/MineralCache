@@ -4,7 +4,8 @@ import AutoCarousel from '../components/media/AutoCarousel';
 import ProductCard from '../components/products/ProductCard';
 import { getFeaturedPhotos, getOnSaleProducts } from '../api/public';
 import CategoriesRow from '../components/categories/CategoriesRow';
-import logoWords from '../assets/mc_logo_words.webp';
+import BrandWordmark from '../common/BrandWordmark';
+
 
 const PAGE_SIZE = 8;
 
@@ -203,12 +204,8 @@ export default function HomePage(): React.ReactElement {
   return (
     <div className="space-y-12">
       <header className="mt-1 flex justify-center">
-        <img
-          src={logoWords}
-          alt="MineralCache — Buy. Sell. Discover. The Mineral and Fossil Marketplace."
-          className="mx-auto h-auto w-full max-w-[900px] rounded-2xl mt-8 sm:mt-2"
-          style={{ filter: 'drop-shadow(0 1px 4px var(--theme-shadow-carousel))' }}
-        />
+        <BrandWordmark className="mx-auto h-auto w-full max-w-[900px] rounded-2xl mt-8 sm:mt-2 drop-shadow(0 1px 4px var(--theme-shadow-carousel))" />
+
       </header>
 
       <section>{heroContent}</section>
