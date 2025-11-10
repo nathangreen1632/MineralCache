@@ -385,7 +385,7 @@ export default function ProductCatalogList(): React.ReactElement {
 
   return (
     <section className="mx-auto max-w-12xl px-4 py-8 space-y-6">
-      <h1 className="text-4xl font-semibold text-[var(--theme-text)]">Catalog</h1>
+      <h1 className="text-4xl font-semibold text-[var(--theme-text)]">Shop</h1>
 
       {/* Search + Filters (collapsible 0–1023px; always open at 1024px+) */}
       <div className="w-full rounded-xl border" style={card}>
