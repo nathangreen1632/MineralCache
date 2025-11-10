@@ -24,6 +24,13 @@ export class Vendor extends Model<
   declare approvedAt: Date | null;
   declare rejectedReason: string | null;
   declare stripeAccountId: string | null;
+
+  declare stripeChargesEnabled: boolean;
+  declare stripePayoutsEnabled: boolean;
+  declare stripeDetailsSubmitted: boolean;
+  declare stripeRequirementsDue: number | null;
+  declare stripeLastSyncAt: Date | null;
+
   declare commissionOverridePct: string | null;
   declare commissionPct: string | null;
   declare minFeeOverrideCents: number | null;
@@ -56,7 +63,39 @@ if (!sequelize) {
       approvedBy: { type: DataTypes.BIGINT, allowNull: true },
       approvedAt: { type: DataTypes.DATE, allowNull: true },
       rejectedReason: { type: DataTypes.TEXT, allowNull: true },
+
       stripeAccountId: { type: DataTypes.STRING(120), allowNull: true },
+
+      // Map camelCase properties to existing snake_case columns
+      stripeChargesEnabled: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: 'stripe_charges_enabled',
+      },
+      stripePayoutsEnabled: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: 'stripe_payouts_enabled',
+      },
+      stripeDetailsSubmitted: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: 'stripe_details_submitted',
+      },
+      stripeRequirementsDue: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'stripe_requirements_due',
+      },
+      stripeLastSyncAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'stripe_last_sync_at',
+      },
+
       commissionOverridePct: { type: DataTypes.DECIMAL(5, 4), allowNull: true },
       commissionPct: {
         type: DataTypes.VIRTUAL,
@@ -78,6 +117,7 @@ if (!sequelize) {
         { unique: true, fields: ['slug'] },
         { unique: true, fields: ['displayName'] },
         { name: 'vendors_approval_status_idx', fields: ['approvalStatus'] },
+        { name: 'vendors_stripe_account_id_idx', fields: ['stripeAccountId'] },
       ],
     }
   );
