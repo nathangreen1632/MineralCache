@@ -2,6 +2,13 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
+const usdFmt = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 export type ProductCardProps = {
   id: number;
   slug?: string | null;
@@ -10,7 +17,6 @@ export type ProductCardProps = {
   price: number;
   salePrice?: number | null;
 
-  /** NEW: show a link to the vendor store */
   vendorSlug?: string | null;
   vendorName?: string | null;
 };
@@ -28,14 +34,12 @@ export default function ProductCard({
   const productHref = slug ? `/products/${encodeURIComponent(slug)}` : `/products/${id}`;
   const vendorHref = vendorSlug ? `/vendors/${encodeURIComponent(vendorSlug)}` : undefined;
 
-  // Simple sale flag
   const onSale =
     typeof salePrice === 'number' &&
     Number.isFinite(salePrice) &&
     salePrice > 0 &&
     salePrice < price;
 
-  // Prefer slug (as requested). Fallback to vendorName, then a generic label.
   const vendorText = vendorSlug ?? vendorName ?? 'Unknown vendor';
 
   return (
@@ -105,14 +109,16 @@ export default function ProductCard({
           {salePrice != null ? (
             <div className="flex items-baseline gap-2">
               <span className="font-bold text-[var(--theme-success)]">
-                ${salePrice.toFixed(2)}
+                {usdFmt.format(salePrice)}
               </span>
               <span className="text-xs line-through text-[var(--theme-muted)]">
-                ${price.toFixed(2)}
+                {usdFmt.format(price)}
               </span>
             </div>
           ) : (
-            <span className="font-bold text-[var(--theme-success)]">${price.toFixed(2)}</span>
+            <span className="font-bold text-[var(--theme-success)]">
+              {usdFmt.format(price)}
+            </span>
           )}
         </div>
       </div>
