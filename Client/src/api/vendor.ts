@@ -314,10 +314,10 @@ export function restoreProductPhoto(productId: number, photoId: number) {
 export type VendorPayoutRow = {
   orderId: number;
   vendorId: number;
-  paidAt: string;
-  grossCents: number;
-  feeCents: number;
-  netCents: number;
+  paidAt: string | null;
+  vendorGrossCents: number | null;
+  vendorFeeCents: number | null;
+  vendorNetCents: number | null;
 };
 
 export async function getMyPayouts(params?: { start?: string; end?: string }) {
