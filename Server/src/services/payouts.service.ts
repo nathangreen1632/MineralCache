@@ -71,8 +71,9 @@ export async function materializeOrderVendorMoney(orderId: number) {
       const fee = Math.round(gross * pct) + flat;
       const net = gross - fee;
 
-      await OrderVendor.upsert(
-        {
+      await OrderVendor.findOrCreate({
+        where: { orderId, vendorId },
+        defaults: {
           orderId,
           vendorId,
           vendorGrossCents: gross,
@@ -80,9 +81,10 @@ export async function materializeOrderVendorMoney(orderId: number) {
           vendorNetCents: net,
           commissionPct: pct,
           commissionMinCents: flat,
+          payoutStatus: 'pending',
         },
-        { transaction: t }
-      );
+        transaction: t,
+      });
 
       await OrderVendor.update(
         {
