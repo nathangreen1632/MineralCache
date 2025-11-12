@@ -22,6 +22,7 @@ import {
   refundOrder,
   exportAdminOrdersCsv,
 } from '../../controllers/admin/orders.controller.js';
+import { runPayoutsNow } from '../../controllers/admin/payouts.controller.js';
 
 const router: Router = Router();
 
@@ -40,5 +41,7 @@ router.get('/orders/:id', requireAdmin, burstLimiter, getAdminOrder);
 router.post('/orders/:id/refund', requireAdmin, burstLimiter, refundOrder);
 
 router.post('/users/promote', requireAdmin, validateBody(adminPromoteSchema), promoteUserByEmail);
+
+router.post('/payouts/run', requireAdmin, burstLimiter, runPayoutsNow);
 
 export default router;
