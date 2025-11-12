@@ -1,3 +1,4 @@
+// Server/src/models/orderVendor.model.ts
 import {
   DataTypes,
   Model,
@@ -6,6 +7,8 @@ import {
   type CreationOptional,
 } from 'sequelize';
 import { db } from './sequelize.js';
+
+export type PayoutStatus = 'pending' | 'holding' | 'transferred' | 'reversed';
 
 export class OrderVendor extends Model<
   InferAttributes<OrderVendor>,
@@ -19,6 +22,9 @@ export class OrderVendor extends Model<
   declare vendorNetCents: number;
   declare commissionPct: number;
   declare commissionMinCents: number;
+  declare payoutStatus: CreationOptional<PayoutStatus>;
+  declare holdUntil: CreationOptional<Date | null>;
+  declare transferId: CreationOptional<string | null>;
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 }
@@ -39,6 +45,14 @@ if (!sequelize) {
       vendorNetCents: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'vendorNetCents' },
       commissionPct: { type: DataTypes.DECIMAL(5, 4), allowNull: false, defaultValue: 0, field: 'commissionPct' },
       commissionMinCents: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'commissionMinCents' },
+      payoutStatus: {
+        type: DataTypes.ENUM('pending', 'holding', 'transferred', 'reversed'),
+        allowNull: false,
+        defaultValue: 'pending',
+        field: 'payoutStatus',
+      },
+      holdUntil: { type: DataTypes.DATE, allowNull: true, field: 'holdUntil' },
+      transferId: { type: DataTypes.STRING(120), allowNull: true, field: 'transferId' },
       createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW, field: 'createdAt' },
       updatedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW, field: 'updatedAt' },
     },
@@ -51,6 +65,7 @@ if (!sequelize) {
       indexes: [
         { fields: ['orderId'] },
         { fields: ['vendorId'] },
+        { fields: ['payoutStatus', 'holdUntil'] },
         { unique: true, fields: ['orderId', 'vendorId'], name: 'order_vendor_order_vendor_uc' },
       ],
     }
