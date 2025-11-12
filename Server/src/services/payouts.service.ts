@@ -61,8 +61,8 @@ export async function materializeOrderVendorMoney(orderId: number) {
     const shippingTotal = toInt((order as any).shippingCents ?? 0);
     const shippingAlloc = allocateProRataCents(lines, shippingTotal);
 
-    const pct = Number((Commission as any)?.pct ?? 0);          // e.g. 0.08
-    const flat = toInt((Commission as any)?.flatCents ?? 0);    // e.g. 75
+    const pct = Number(Commission.globalPct ?? 0);
+    const flat = toInt(Commission.minFeeCents ?? 0);
 
     for (let i = 0; i < pairs.length; i++) {
       const [vendorId, lineCents] = pairs[i];
