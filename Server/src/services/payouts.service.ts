@@ -38,37 +38,56 @@ export async function materializeOrderVendorMoney(orderId: number) {
 
     const items = await OrderItem.findAll({
       where: { orderId },
-      attributes: ['vendorId', 'unitPriceCents', 'quantity', 'lineTotalCents'],
+      attributes: [
+        'vendorId',
+        'unitPriceCents',
+        'quantity',
+        'lineTotalCents',
+        'commissionCents',
+        'commissionPct',
+      ],
       transaction: t,
     });
 
-    const byVendor = new Map<number, number>();
+    const byVendorSubtotal = new Map<number, number>();
+    const byVendorFee = new Map<number, number>();
+    let pctFromItems: number | null = null;
+
     for (const it of items) {
       const vid = Number((it as any).vendorId);
       if (!Number.isFinite(vid) || vid <= 0) continue;
+
       const lt = toInt(
         typeof (it as any).lineTotalCents === 'number'
           ? (it as any).lineTotalCents
           : toInt((it as any).unitPriceCents) * toInt((it as any).quantity)
       );
-      byVendor.set(vid, (byVendor.get(vid) ?? 0) + lt);
+      const itemFee = toInt((it as any).commissionCents);
+      const itemPct = Number((it as any).commissionPct);
+
+      if (pctFromItems === null && Number.isFinite(itemPct)) {
+        pctFromItems = itemPct;
+      }
+
+      byVendorSubtotal.set(vid, (byVendorSubtotal.get(vid) ?? 0) + lt);
+      byVendorFee.set(vid, (byVendorFee.get(vid) ?? 0) + itemFee);
     }
 
-    const pairs = Array.from(byVendor.entries()).sort((a, b) => a[0] - b[0]);
+    const pairs = Array.from(byVendorSubtotal.entries()).sort((a, b) => a[0] - b[0]);
     if (pairs.length === 0) return;
 
     const lines = pairs.map(([, cents]) => cents);
     const shippingTotal = toInt((order as any).shippingCents ?? 0);
     const shippingAlloc = allocateProRataCents(lines, shippingTotal);
 
-    const pct = Number(Commission.globalPct ?? 0);
-    const flat = toInt(Commission.minFeeCents ?? 0);
+    const pct = pctFromItems ?? Number(Commission.globalPct ?? 0);
+    const minCents = toInt(Commission.minFeeCents ?? 0);
 
     for (let i = 0; i < pairs.length; i++) {
       const [vendorId, lineCents] = pairs[i];
       const shippingCents = shippingAlloc[i] ?? 0;
       const gross = lineCents + shippingCents;
-      const fee = Math.round(gross * pct) + flat;
+      const fee = byVendorFee.get(vendorId) ?? 0;
       const net = gross - fee;
 
       await OrderVendor.findOrCreate({
@@ -80,7 +99,7 @@ export async function materializeOrderVendorMoney(orderId: number) {
           vendorFeeCents: fee,
           vendorNetCents: net,
           commissionPct: pct,
-          commissionMinCents: flat,
+          commissionMinCents: minCents,
           payoutStatus: 'pending',
         },
         transaction: t,
@@ -92,7 +111,7 @@ export async function materializeOrderVendorMoney(orderId: number) {
           vendorFeeCents: fee,
           vendorNetCents: net,
           commissionPct: pct,
-          commissionMinCents: flat,
+          commissionMinCents: minCents,
         },
         { where: { orderId, vendorId }, transaction: t }
       );
