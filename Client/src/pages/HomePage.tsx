@@ -86,7 +86,7 @@ export default function HomePage(): React.ReactElement {
         </h2>
         <p className="text-[var(--theme-muted)] text-sm">
           No featured photos yet. Explore the{' '}
-          <a href="/products" className="underline">catalog</a>.
+          <a href="/products" className="underline">Shop</a>.
         </p>
       </div>
     );
