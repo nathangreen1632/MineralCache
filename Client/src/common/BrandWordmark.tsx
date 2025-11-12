@@ -1,6 +1,6 @@
 import React from 'react';
-import wordDark from '../assets/mc_logo_words_light.webp';
-import wordLight from '../assets/mc_logo_words_dark.webp';
+import wordDark from '../../public/mc_logo_words_light.webp';
+import wordLight from '../../public/mc_logo_words_dark.webp';
 
 export default function BrandWordmark(props: Readonly<{ className?: string; alt?: string }>): React.ReactElement {
   const cls = props.className ?? '';
