@@ -1,7 +1,7 @@
 // Client/src/pages/vendor/PayoutsPage.tsx
 import React, { useEffect, useState } from 'react';
 import { getMyPayouts, type VendorPayoutRow } from '../../api/vendor';
-import { centsToUsd } from '../../utils/money.util.ts';
+import { centsToUsd } from '../../utils/money.util';
 import { useAuthStore } from '../../stores/useAuthStore';
 
 export default function VendorPayoutsPage(): React.ReactElement {
@@ -63,9 +63,9 @@ export default function VendorPayoutsPage(): React.ReactElement {
 
   const totals = rows.reduce(
     (a, r) => {
-      a.gross += r.grossCents || 0;
-      a.fee += r.feeCents || 0;
-      a.net += r.netCents || 0;
+      a.gross += r.vendorGrossCents ?? 0;
+      a.fee += r.vendorFeeCents ?? 0;
+      a.net += r.vendorNetCents ?? 0;
       return a;
     },
     { gross: 0, fee: 0, net: 0 }
@@ -138,7 +138,10 @@ export default function VendorPayoutsPage(): React.ReactElement {
           <span style={{ color: 'var(--theme-text)' }}>{msg}</span>
         </div>
       ) : (
-        <div className="rounded-2xl border overflow-x-auto" style={{ borderColor: 'var(--theme-border)' }}>
+        <div
+          className="rounded-2xl border overflow-x-auto"
+          style={{ borderColor: 'var(--theme-border)' }}
+        >
           <table className="w-full text-sm">
             <thead className="text-left">
             <tr className="border-b" style={{ borderColor: 'var(--theme-border)' }}>
@@ -173,9 +176,15 @@ export default function VendorPayoutsPage(): React.ReactElement {
                     {r.paidAt ? new Date(r.paidAt).toLocaleString() : '—'}
                   </td>
                   <td className="px-4 py-3">#{r.orderId}</td>
-                  <td className="px-4 py-3">{centsToUsd(r.grossCents)}</td>
-                  <td className="px-4 py-3">{centsToUsd(r.feeCents)}</td>
-                  <td className="px-4 py-3 font-semibold">{centsToUsd(r.netCents)}</td>
+                  <td className="px-4 py-3">
+                    {centsToUsd(r.vendorGrossCents ?? 0)}
+                  </td>
+                  <td className="px-4 py-3">
+                    {centsToUsd(r.vendorFeeCents ?? 0)}
+                  </td>
+                  <td className="px-4 py-3 font-semibold">
+                    {centsToUsd(r.vendorNetCents ?? 0)}
+                  </td>
                 </tr>
               ))
             )}
@@ -184,9 +193,15 @@ export default function VendorPayoutsPage(): React.ReactElement {
             <tr>
               <td className="px-4 py-3 font-semibold">Totals</td>
               <td />
-              <td className="px-4 py-3 font-semibold">{centsToUsd(totals.gross)}</td>
-              <td className="px-4 py-3 font-semibold">{centsToUsd(totals.fee)}</td>
-              <td className="px-4 py-3 font-semibold">{centsToUsd(totals.net)}</td>
+              <td className="px-4 py-3 font-semibold">
+                {centsToUsd(totals.gross)}
+              </td>
+              <td className="px-4 py-3 font-semibold">
+                {centsToUsd(totals.fee)}
+              </td>
+              <td className="px-4 py-3 font-semibold">
+                {centsToUsd(totals.net)}
+              </td>
             </tr>
             </tfoot>
           </table>
