@@ -243,8 +243,8 @@ export default function OrderDetailPage(): React.ReactElement {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-lg">{it.quantity}</td>
-                  <td className="px-4 py-3 text-lg">{centsToUsd(it.unitPriceCents)}</td>
-                  <td className="px-4 py-3 text-lg">{centsToUsd(it.lineTotalCents)}</td>
+                  <td className="px-4 py-3 text-lg text-[var(--theme-success)]">{centsToUsd(it.unitPriceCents)}</td>
+                  <td className="px-4 py-3 text-lg text-[var(--theme-success)]">{centsToUsd(it.lineTotalCents)}</td>
                   <td className="px-4 py-3 text-lg">
                     {it.shipTracking ? (
                       <div className="flex flex-col gap-0.5">
