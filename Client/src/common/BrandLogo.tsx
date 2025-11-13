@@ -13,7 +13,7 @@ export default function BrandLogo(
         src="/mc_logo_light1.webp"
         alt={alt}
         className={['mc-only-dark', cls].join(' ')}
-        style={{ filter: 'drop-shadow(0 3px 2px var(--theme-shadow-carousel))' }}
+        style={{ filter: 'drop-shadow(2px 1px 1px var(--theme-shadow-carousel))' }}
       />
 
       {/* Shown in light mode (dark logo) */}
@@ -21,7 +21,7 @@ export default function BrandLogo(
         src="/mc_logo_dark1.webp"
         alt={alt}
         className={['mc-only-light', cls].join(' ')}
-        style={{ filter: 'drop-shadow(0 3px 2px var(--theme-shadow-carousel))' }}
+        style={{ filter: 'drop-shadow(2px 1px 1px var(--theme-shadow-black))' }}
       />
     </>
   );
