@@ -7,7 +7,7 @@ import CategoriesRow from '../components/categories/CategoriesRow';
 import BrandWordmark from '../common/BrandWordmark';
 
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 12;
 
 export default function HomePage(): React.ReactElement {
   const [photos, setPhotos] = useState<string[] | null>(null);
