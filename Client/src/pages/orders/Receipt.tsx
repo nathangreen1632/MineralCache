@@ -134,7 +134,7 @@ export default function Receipt(): React.ReactElement {
                   <div className="font-medium">{it.title}</div>
                   {((it).vendorSlug ?? (it).vendor?.slug) ? (
                     <div className="text-xs opacity-75 mt-0.5">
-                      Sold by:<span className="text-[var(--theme-link)]"> {(it).vendorSlug ?? (it).vendor?.slug}</span>
+                      Sold by:<span className="capitalize text-[var(--theme-link)]"> {(it).vendorSlug ?? (it).vendor?.slug}</span>
                     </div>
                   ) : null}
                 </td>
