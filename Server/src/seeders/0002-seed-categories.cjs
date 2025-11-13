@@ -28,3 +28,9 @@ module.exports = {
         await q.bulkDelete('categories', null);
     },
 };
+
+
+
+// alphabetize by name per request
+// add Flourescent Minerals category
+// add Artwork category
