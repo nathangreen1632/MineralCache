@@ -94,7 +94,7 @@ export default function ProductCard({
           {vendorHref ? (
             <Link
               to={vendorHref}
-              className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
+              className="capitalize underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
               aria-label={`View vendor storefront: ${vendorText}`}
             >
               {vendorText}
