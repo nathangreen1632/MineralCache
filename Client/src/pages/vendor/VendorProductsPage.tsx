@@ -152,7 +152,7 @@ export default function VendorProductsPage(): React.ReactElement {
                           {p.title}
                         </Link>
                         <div className="text-base opacity-80">
-                          Price: {centsToUsd(effCents)}
+                          Price: <span className="text-[var(--theme-success)]"> {centsToUsd(effCents)}</span>
                           {p.onSale && typeof p.salePriceCents === 'number' ? (
                             <span className="ml-2 line-through opacity-60">
                               {centsToUsd(p.priceCents)}
