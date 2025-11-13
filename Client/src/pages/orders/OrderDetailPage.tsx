@@ -12,6 +12,10 @@ type Load =
   | { kind: 'loaded'; order: GetOrderRes['item'] }
   | { kind: 'error'; message: string };
 
+function formatStatus(status: string): string {
+  if (!status) return '';
+  return status.replace(/_/g, ' ').toUpperCase();
+}
 
 export default function OrderDetailPage(): React.ReactElement {
   const params = useParams();
@@ -141,7 +145,10 @@ export default function OrderDetailPage(): React.ReactElement {
 
       <div className="text-xl rounded-2xl border p-6 grid gap-3" style={card}>
         <p>
-          <strong>Status:</strong> <span className="capitalize">{o.status.replace('_', ' ')}</span>
+          <strong>Status:</strong>{' '}
+          <span className="text-[var(--theme-success)] text-xl font-semibold whitespace-nowrap">
+          {formatStatus(o.status)}
+          </span>
         </p>
 
         {/* Totals breakdown */}
@@ -179,7 +186,7 @@ export default function OrderDetailPage(): React.ReactElement {
           {/* Optional tax */}
           {hasTax && <div><strong>Tax:</strong> {centsToUsd((o as any).taxCents)}</div>}
 
-          <div><strong>Total:</strong> {centsToUsd(o.totalCents)}</div>
+          <div><strong>Total:</strong> <span className="text-xl text-[var(--theme-success)]">{centsToUsd(o.totalCents)}</span></div>
         </div>
 
         {/* Any shipping breakdown rows (kept) */}
@@ -237,14 +244,14 @@ export default function OrderDetailPage(): React.ReactElement {
                       <div className="min-w-0">
                         <div className="font-medium truncate">{it.title}</div>
                         {vendorSlug ? (
-                          <div className="text-base opacity-80">Sold by: <span className="text-lg font-semibold text-[var(--theme-link)]">{vendorSlug}</span></div>
+                          <div className="text-base opacity-80">Sold by: <span className="capitalize text-lg font-semibold text-[var(--theme-link)]">{vendorSlug}</span></div>
                         ) : null}
                       </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-lg">{it.quantity}</td>
-                  <td className="px-4 py-3 text-lg">{centsToUsd(it.unitPriceCents)}</td>
-                  <td className="px-4 py-3 text-lg">{centsToUsd(it.lineTotalCents)}</td>
+                  <td className="px-4 py-3 text-lg text-[var(--theme-success)]">{centsToUsd(it.unitPriceCents)}</td>
+                  <td className="px-4 py-3 text-lg text-[var(--theme-success)]">{centsToUsd(it.lineTotalCents)}</td>
                   <td className="px-4 py-3 text-lg">
                     {it.shipTracking ? (
                       <div className="flex flex-col gap-0.5">

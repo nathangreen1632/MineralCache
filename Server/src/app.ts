@@ -1,3 +1,4 @@
+// Server/src/app.ts
 import express, { Express } from 'express';
 import path from 'node:path';
 import helmet from 'helmet';
@@ -17,6 +18,7 @@ import { assertStripeAtBoot, getStripeStatus } from './services/stripe.service.j
 import webhooksRouter from './routes/webhooks.route.js';
 import { registerUploadsStatic } from './middleware/uploadsStatic.js';
 import { publicRouter } from './routes/public.routes.js';
+import { initializePayoutsScheduler } from './jobs/payouts.job.js';
 
 assertStripeAtBoot();
 
@@ -86,6 +88,8 @@ await registerUploadsStatic(app);
 app.use('/api/public', publicRouter);
 
 app.use('/api', apiRouter);
+
+initializePayoutsScheduler();
 
 if (process.env.NODE_ENV === 'production') {
   const clientDir = path.resolve(process.cwd(), 'Client', 'dist');

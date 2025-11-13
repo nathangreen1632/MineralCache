@@ -2,20 +2,18 @@
 import type { Request, Response } from 'express';
 import Stripe from 'stripe';
 import { verifyStripeWebhook } from '../../services/stripe.service.js';
-import { db } from '../../models/sequelize.js';
 import { Order } from '../../models/order.model.js';
 import { OrderItem } from '../../models/orderItem.model.js';
 import { Product } from '../../models/product.model.js';
 import { obs } from '../../services/observability.service.js';
-import { OrderVendor } from '../../models/orderVendor.model.js';
 import { WebhookEvent } from '../../models/webhookEvent.model.js';
 import { log } from '../../services/log.service.js';
 import { sendOrderEmail } from '../../services/email.service.js';
 import { User } from '../../models/user.model.js';
 import { AuctionLock } from '../../models/auctionLock.model.js';
 import { Op } from 'sequelize';
-import { AdminSettings } from '../../models/adminSettings.model.js';
 import { Vendor } from '../../models/vendor.model.js';
+import { materializeOrderVendorMoney } from '../../services/payouts.service.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, { apiVersion: '2025-08-27.basil' });
 
@@ -24,9 +22,7 @@ export async function createPaymentIntent(_req: Request, res: Response): Promise
 }
 
 async function syncVendorStripeSnapshotByAccountId(accountId: string, acct?: Stripe.Account) {
-  const account =
-    acct ??
-    (await stripe.accounts.retrieve(accountId).catch(() => null));
+  const account = acct ?? (await stripe.accounts.retrieve(accountId).catch(() => null));
   if (!account) return;
 
   const reqs = account.requirements;
@@ -60,7 +56,6 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
     const eventId = String((event as any)?.id || '');
     const type = String(event.type);
 
-    let createdRow = true;
     try {
       await WebhookEvent.create({
         source,
@@ -86,9 +81,9 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
 
     obs.stripeWebhook(req, type, eventId);
 
-    const sequelize = db.instance();
+    const sequelize = Order.sequelize;
     if (!sequelize) {
-      if (createdRow) await WebhookEvent.update({ status: 'error' }, { where: { source, eventId } });
+      await WebhookEvent.update({ status: 'error' }, { where: { source, eventId } });
       res.status(500).json({ error: 'DB not initialized' });
       return;
     }
@@ -105,13 +100,11 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
       case 'financial_connections.account.created':
       case 'account.application.authorized': {
         const accountId = extractAccountId(event);
-        if (accountId) {
-          await syncVendorStripeSnapshotByAccountId(accountId);
-        }
+        if (accountId) await syncVendorStripeSnapshotByAccountId(accountId);
         break;
       }
 
-  case 'payment_intent.succeeded': {
+      case 'payment_intent.succeeded': {
         const pi = event.data.object as any;
         const intentId = String(pi?.id || '');
         if (!intentId) break;
@@ -127,13 +120,13 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
             lock: t.LOCK.UPDATE,
           });
           if (!order) return;
-          if (order.status === 'paid') return;
+          if ((order as any).status === 'paid') return;
 
-          order.status = 'paid';
-          order.paidAt = new Date();
+          (order as any).status = 'paid';
+          (order as any).paidAt = new Date();
           await order.save({ transaction: t });
 
-          const buyerId = Number((order as any).buyerUserId ?? order.get?.('buyerUserId'));
+          const buyerId = Number((order as any).buyerUserId ?? (order as any)?.get?.('buyerUserId'));
 
           const items = await OrderItem.findAll({ where: { orderId: order.id }, transaction: t });
           const productIds = items.map((i) => Number(i.productId)).filter(Number.isFinite);
@@ -146,75 +139,6 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
             );
           }
 
-          const vendorLineTotals = new Map<number, number>();
-          const vendorFees = new Map<number, number>();
-          for (const it of items) {
-            const vId = Number(it.vendorId);
-            vendorLineTotals.set(vId, (vendorLineTotals.get(vId) || 0) + Number(it.lineTotalCents || 0));
-            vendorFees.set(vId, (vendorFees.get(vId) || 0) + Number((it as any).commissionCents || 0));
-          }
-
-          const shippingSnap =
-            ((order as any).vendorShippingJson || {}) as Record<string, { cents?: number }>;
-          const vendorShipping = new Map<number, number>();
-          for (const [k, v] of Object.entries(shippingSnap)) {
-            const vId = Number(k);
-            vendorShipping.set(vId, Number((v as any)?.cents || 0));
-          }
-
-          const vendorIds = new Set<number>([...vendorLineTotals.keys(), ...vendorShipping.keys()]);
-          for (const vId of vendorIds) {
-            const base = Number(vendorLineTotals.get(vId) || 0);
-            const ship = Number(vendorShipping.get(vId) || 0);
-            const gross = base + ship;
-            const fee = Number(vendorFees.get(vId) || 0);
-            const net = Math.max(0, gross - fee);
-
-            const v = await Vendor.findByPk(vId, {
-              transaction: t,
-              attributes: ['commissionOverridePct', 'minFeeOverrideCents'],
-            });
-
-            const admin = await AdminSettings.findOne({ transaction: t, attributes: ['commission_bps'] });
-            const adminCommissionPct =
-              Number.isFinite(Number(admin?.commission_bps))
-                ? Math.round((Number(admin!.commission_bps) / 100) * 100) / 100
-                : 0;
-
-            let commissionPct = Number.isFinite(Number((v as any)?.commissionOverridePct))
-              ? Number((v as any).commissionOverridePct)
-              : adminCommissionPct;
-
-            if ((!Number.isFinite(commissionPct) || commissionPct === 0) && base > 0 && fee > 0) {
-              commissionPct = Math.round((fee / base) * 10000) / 100;
-            }
-
-            const commissionMinCents = Number.isFinite(Number((v as any)?.minFeeOverrideCents))
-              ? Number((v as any).minFeeOverrideCents)
-              : 0;
-
-            const [row, created] = await OrderVendor.findOrCreate({
-              where: { orderId: Number(order.id), vendorId: vId },
-              defaults: {
-                orderId: Number(order.id),
-                vendorId: vId,
-                vendorGrossCents: gross,
-                vendorFeeCents: fee,
-                vendorNetCents: net,
-                commissionPct,
-                commissionMinCents,
-              },
-              transaction: t,
-            });
-
-            if (!created) {
-              await row.update(
-                { vendorGrossCents: gross, vendorFeeCents: fee, vendorNetCents: net, commissionPct, commissionMinCents },
-                { transaction: t }
-              );
-            }
-          }
-
           paidOrderId = Number(order.id);
           const rawOrderNumber =
             (order as any)?.orderNumber ??
@@ -225,10 +149,18 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
           paidOrderNumber =
             typeof rawOrderNumber === 'string' && rawOrderNumber.length > 0 ? rawOrderNumber : null;
 
-          buyerUserId = Number((order as any).buyerUserId ?? order.get?.('buyerUserId'));
+          buyerUserId = Number((order as any).buyerUserId ?? (order as any)?.get?.('buyerUserId'));
 
           obs.orderPaid(req, Number(order.id), intentId);
         });
+
+        if (paidOrderId) {
+          try {
+            await materializeOrderVendorMoney(paidOrderId);
+          } catch (e) {
+            log.warn('webhook.payouts.materialize_failed', { orderId: paidOrderId, error: String((e as any)?.message || e) });
+          }
+        }
 
         if (paidOrderId && buyerUserId) {
           try {

@@ -6,10 +6,8 @@ import { ChevronDown } from 'lucide-react';
 
 function parseProductId(input: string): number | '' {
   if (!input) return '';
-  // Accept plain ID
   const n = Number(input);
   if (Number.isFinite(n) && n > 0) return n;
-  // Accept URLs like /products/123 or .../products/123/edit
   const m = RegExp(/\/products\/(\d+)(?:\/|$)/i).exec(input);
   if (m?.[1]) return Number(m[1]);
   return '';
@@ -20,7 +18,6 @@ export default function AuctionCreatePage(): React.ReactElement {
   const user = useAuthStore((s) => s.user);
   const [params] = useSearchParams();
 
-  // Initial product id from ?productId=...
   const initialPid = useMemo(() => {
     const v = Number(params.get('productId') || '');
     return Number.isFinite(v) && v > 0 ? v : '';
@@ -28,14 +25,17 @@ export default function AuctionCreatePage(): React.ReactElement {
 
   const [productId, setProductId] = useState<number | ''>(initialPid);
   const [title, setTitle] = useState('');
-  const [startingBidUSD, setStartingBidUSD] = useState<string>(''); // display as dollars
-  const [reserveUSD, setReserveUSD] = useState<string>('');         // optional
-  const [buyNowUSD, setBuyNowUSD] = useState<string>('');           // optional
+  const [startingBidUSD, setStartingBidUSD] = useState<string>('');
+  const [reserveUSD, setReserveUSD] = useState<string>('');
+  const [buyNowUSD, setBuyNowUSD] = useState<string>('');
   const [durationDays, setDurationDays] = useState<1 | 3 | 5 | 7>(1);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const productLocked = initialPid !== '' && productId === initialPid;
+
+  const role = String(user?.role ?? '').toLowerCase();
+  const isVendorOrAdmin = role === 'vendor' || role === 'admin';
 
   function dollarsToCents(s: string): number | null {
     if (!s.trim()) return null;
@@ -48,8 +48,8 @@ export default function AuctionCreatePage(): React.ReactElement {
     e.preventDefault();
     setErr(null);
 
-    if (!user || user.role !== 'vendor') {
-      setErr('Vendor account required.');
+    if (!user || !isVendorOrAdmin) {
+      setErr('Vendor or admin account required.');
       return;
     }
     if (productId === '') {
@@ -72,7 +72,6 @@ export default function AuctionCreatePage(): React.ReactElement {
       durationDays,
       reserveCents: reserveCents ?? null,
       buyNowCents: buyNowCents ?? null,
-      // incrementLadderJson: optional
     };
 
     setSubmitting(true);
@@ -92,13 +91,12 @@ export default function AuctionCreatePage(): React.ReactElement {
     }
   }
 
-  const disabled = submitting || !user || user.role !== 'vendor';
+  const disabled = submitting || !user || !isVendorOrAdmin;
 
   return (
     <div className="max-w-4xl mx-auto p-6">
       <h1 className="text-2xl font-extrabold tracking-tight text-[var(--theme-text)]">Create Auction</h1>
 
-      {/* Optional preview for end time */}
       <p className="text-sm text-[var(--theme-muted)] mt-2">
         Preview end time: {new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toLocaleString()}
       </p>
@@ -110,7 +108,6 @@ export default function AuctionCreatePage(): React.ReactElement {
       )}
 
       <form onSubmit={onSubmit} className="mt-6 grid gap-4">
-        {/* Product selection */}
         <div className="grid gap-2">
           <label htmlFor="Product" className="text-sm font-semibold">Product</label>
 
@@ -188,7 +185,6 @@ export default function AuctionCreatePage(): React.ReactElement {
               />
             </div>
           </label>
-
         </div>
 
         <div className="grid grid-cols-2 gap-4">

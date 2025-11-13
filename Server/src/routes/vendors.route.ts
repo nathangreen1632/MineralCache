@@ -11,6 +11,7 @@ import {
   linkStripeOnboarding,
   syncMyStripeStatus,
 } from '../controllers/vendors.controller.js';
+import { getMyPayouts } from '../controllers/vendorPayouts.controller.js';
 import { vendorProductsRouter } from './vendor/vendorProducts.route.js';
 
 const router: Router = Router();
@@ -22,6 +23,7 @@ router.post('/me/stripe/link', requireAuth, linkStripeOnboarding);
 router.post('/me/stripe/sync', requireAuth, syncMyStripeStatus);
 
 router.get('/me/orders', requireAuth, getVendorOrders);
+router.get('/me/payouts', requireAuth, getMyPayouts);
 
 router.use('/me/products', requireAuth, vendorProductsRouter);
 

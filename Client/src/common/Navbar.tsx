@@ -28,12 +28,11 @@ import BrandLogo from './BrandLogo';
 
 function BrandName({ className }: Readonly<{ className?: string }>) {
   return (
-    <span className={['inline-flex items-center gap-2 text-2xl text-[var(--theme-psycho)]', className || ''].join(' ')}>
-
+    <span className={['inline-flex items-center gap-2', className || ''].join(' ')}>
       <BrandLogo className="h-9 w-9 rounded-lg" alt="Mineral Cache logo" />
-
-      <span>
-        MINERAL<span className="text-2xl italic text-[var(--theme-button-yellow)]">CACHE</span>
+      <span className="mc-brand-wordmark text-2xl font-extrabold text-[var(--theme-psycho)]">
+        MINERAL
+        <span className="font-extrabold italic text-[var(--theme-button-yellow)]">CACHE</span>
       </span>
     </span>
   );

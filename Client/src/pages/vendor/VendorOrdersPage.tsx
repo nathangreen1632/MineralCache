@@ -22,6 +22,21 @@ function normalizeCarrier(input: string | null | undefined): ShipCarrier | null 
   return (ALLOWED_CARRIERS as readonly string[]).includes(v) ? (v as ShipCarrier) : null;
 }
 
+function getMinTrackingLength(carrier: ShipCarrier | null): number {
+  switch (carrier) {
+    case 'usps':
+      return 20;
+    case 'ups':
+      return 18;
+    case 'fedex':
+      return 12;
+    case 'dhl':
+      return 10;
+    default:
+      return 8;
+  }
+}
+
 type VendorOrderItem = {
   id: number;
   orderItemId?: number | null;
@@ -181,18 +196,45 @@ export default function VendorOrdersPage(): React.ReactElement {
   }
 
   async function doShip(orderId: number) {
-    const itemIds = Array.from(selectedByOrder[orderId] ?? []).filter((n) => Number.isFinite(n) && n > 0);
+    const itemIds = Array.from(selectedByOrder[orderId] ?? []).filter(
+      (n) => Number.isFinite(n) && n > 0
+    );
     if (itemIds.length === 0) return;
-    const carrier = normalizeCarrier(shipDialog.carrier) ?? 'other';
-    const tracking = shipDialog.tracking.trim() || null;
+
+    const carrier = normalizeCarrier(shipDialog.carrier);
+    const tracking = shipDialog.tracking.trim();
+
+    if (!carrier) {
+      setMsg('Please select a shipping carrier.');
+      return;
+    }
+
+    if (!tracking) {
+      setMsg('Please enter a tracking number.');
+      return;
+    }
+
+    const minLen = getMinTrackingLength(carrier);
+    if (tracking.length < minLen) {
+      setMsg(
+        `Tracking number looks too short for ${carrier.toUpperCase()}. Minimum ${minLen} characters.`
+      );
+      return;
+    }
+
     setBusy(true);
     const r = await markOrderShipped(orderId, carrier, tracking, itemIds);
     setBusy(false);
-    if (!r.ok) { setMsg(r.error || 'Ship failed'); return; }
+    if (!r.ok) {
+      setMsg(r.error || 'Ship failed');
+      return;
+    }
+
     setShipDialog({ open: false, orderId: null, carrier: 'usps', tracking: '' });
     clearSelection(orderId);
     await load();
   }
+
 
   async function doDeliver(orderId: number) {
     const itemIds = Array.from(selectedByOrder[orderId] ?? []).filter((n) => Number.isFinite(n) && n > 0);
@@ -438,13 +480,19 @@ export default function VendorOrdersPage(): React.ReactElement {
               </button>
               <button
                 type="button"
+                disabled={
+                  busy || false || (selectedByOrder[shipDialog.orderId]?.size ?? 0) === 0 || !normalizeCarrier(shipDialog.carrier) ||
+                  shipDialog.tracking.trim().length <
+                  getMinTrackingLength(normalizeCarrier(shipDialog.carrier))
+                }
                 onClick={() => void doShip(shipDialog.orderId!)}
-                className="rounded-lg px-3 py-2 text-sm font-semibold"
+                className="rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-60"
                 style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
               >
                 Ship selected
               </button>
             </div>
+
           </div>
         </div>
       )}

@@ -7,7 +7,7 @@ import CategoriesRow from '../components/categories/CategoriesRow';
 import BrandWordmark from '../common/BrandWordmark';
 
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 12;
 
 export default function HomePage(): React.ReactElement {
   const [photos, setPhotos] = useState<string[] | null>(null);
@@ -86,7 +86,7 @@ export default function HomePage(): React.ReactElement {
         </h2>
         <p className="text-[var(--theme-muted)] text-sm">
           No featured photos yet. Explore the{' '}
-          <a href="/products" className="underline">catalog</a>.
+          <a href="/products" className="underline">Shop</a>.
         </p>
       </div>
     );

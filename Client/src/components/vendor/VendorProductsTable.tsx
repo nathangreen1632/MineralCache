@@ -186,7 +186,7 @@ export default function VendorProductsTable(): React.ReactElement {
                   </div>
                 </div>
               </td>
-              <td className="px-4 py-3">{centsToUsd(p.priceCents)}</td>
+              <td className="px-4 py-3 text-[var(--theme-success)]">{centsToUsd(p.priceCents)}</td>
               <td className="px-4 py-3">{p.photoCount ?? 0}</td>
               <td className="px-4 py-3">
                 <label className="inline-flex items-center gap-2">

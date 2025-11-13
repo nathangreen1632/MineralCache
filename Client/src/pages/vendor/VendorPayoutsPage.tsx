@@ -1,14 +1,19 @@
 // Client/src/pages/vendor/PayoutsPage.tsx
 import React, { useEffect, useState } from 'react';
 import { getMyPayouts, type VendorPayoutRow } from '../../api/vendor';
-import { centsToUsd} from "../../utils/money.util.ts";
+import { centsToUsd } from '../../utils/money.util';
+import { useAuthStore } from '../../stores/useAuthStore';
 
 export default function VendorPayoutsPage(): React.ReactElement {
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = String(user?.role ?? '').toLowerCase() === 'admin';
+
   const [rows, setRows] = useState<VendorPayoutRow[]>([]);
   const [busy, setBusy] = useState(false);
+  const [running, setRunning] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [from, setFrom] = useState<string>(''); // YYYY-MM-DD
-  const [to, setTo] = useState<string>('');     // YYYY-MM-DD
+  const [from, setFrom] = useState<string>('');
+  const [to, setTo] = useState<string>('');
 
   async function load() {
     setBusy(true);
@@ -25,19 +30,47 @@ export default function VendorPayoutsPage(): React.ReactElement {
     setRows((data.items ?? []) as VendorPayoutRow[]);
   }
 
-  useEffect(() => { void load(); }, []);
+  async function runNow() {
+    if (!isAdmin || running) return;
+    setRunning(true);
+    setMsg(null);
+    try {
+      const token = window.localStorage.getItem('token') || '';
+      const res = await fetch('/api/admin/payouts/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: 'include',
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) throw new Error(json?.message || 'Run failed');
+      await load();
+      setMsg(
+        `Processed ${json.vendorsProcessed ?? 0} vendors, ${json.rowsUpdated ?? 0} rows.`
+      );
+    } catch (e: any) {
+      setMsg(e?.message ?? 'Run failed');
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
 
   const totals = rows.reduce(
     (a, r) => {
-      a.gross += r.grossCents || 0;
-      a.fee += r.feeCents || 0;
-      a.net += r.netCents || 0;
+      a.gross += r.vendorGrossCents ?? 0;
+      a.fee += r.vendorFeeCents ?? 0;
+      a.net += r.vendorNetCents ?? 0;
       return a;
     },
     { gross: 0, fee: 0, net: 0 }
   );
 
-  // Export CSV via server endpoint (matches Server route)
   const csvHref = `/api/vendors/me/payouts?${[
     'format=csv',
     from ? `from=${encodeURIComponent(from)}` : '',
@@ -47,46 +80,68 @@ export default function VendorPayoutsPage(): React.ReactElement {
     .join('&')}`;
 
   return (
-    <section className="mx-auto max-w-8xl px-6 py-10 space-y-4">
+    <section
+      className="mx-auto max-w-8xl px-6 py-10 space-y-4"
+      aria-busy={busy || running}
+      aria-live="polite"
+    >
       <h1 className="text-4xl font-semibold text-[var(--theme-text)]">Payouts</h1>
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="grid">
           <span className="text-sm opacity-80">From</span>
           <input
+            aria-label="From date"
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="rounded-lg px-3 py-2 ring-1 ring-inset"
+            className="rounded-lg px-3 py-2 ring-1 ring-inset ring-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text)]"
           />
         </label>
         <label className="grid">
           <span className="text-sm opacity-80">To</span>
           <input
+            aria-label="To date"
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="rounded-lg px-3 py-2 ring-1 ring-inset"
+            className="rounded-lg px-3 py-2 ring-1 ring-inset ring-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text)]"
           />
         </label>
         <button
           onClick={load}
           disabled={busy}
-          className="rounded-lg px-3 py-2 ring-1 ring-inset disabled:opacity-50"
+          className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)] disabled:opacity-50"
         >
           {busy ? 'Loading…' : 'Apply'}
         </button>
-        <a href={csvHref} className="rounded-lg px-3 py-2 ring-1 ring-inset">
+        <a
+          href={csvHref}
+          className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-card)] text-[var(--theme-link)] hover:text-[var(--theme-link-hover)] ring-1 ring-inset ring-[var(--theme-border)]"
+        >
           Export CSV
         </a>
+        {isAdmin && (
+          <button
+            onClick={runNow}
+            disabled={running}
+            title="Run payouts now"
+            className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)] disabled:opacity-50"
+          >
+            {running ? 'Running…' : 'Run payouts now'}
+          </button>
+        )}
       </div>
 
       {msg ? (
         <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--theme-border)' }}>
-          <span style={{ color: 'var(--theme-error)' }}>{msg}</span>
+          <span style={{ color: 'var(--theme-text)' }}>{msg}</span>
         </div>
       ) : (
-        <div className="rounded-2xl border overflow-x-auto" style={{ borderColor: 'var(--theme-border)' }}>
+        <div
+          className="rounded-2xl border overflow-x-auto"
+          style={{ borderColor: 'var(--theme-border)' }}
+        >
           <table className="w-full text-sm">
             <thead className="text-left">
             <tr className="border-b" style={{ borderColor: 'var(--theme-border)' }}>
@@ -100,11 +155,15 @@ export default function VendorPayoutsPage(): React.ReactElement {
             <tbody>
             {busy && rows.length === 0 ? (
               <tr>
-                <td className="px-4 py-3" colSpan={5}>Loading…</td>
+                <td className="px-4 py-3" colSpan={5}>
+                  Loading…
+                </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td className="px-4 py-3 opacity-70" colSpan={5}>No payouts.</td>
+                <td className="px-4 py-3 opacity-70" colSpan={5}>
+                  No payouts.
+                </td>
               </tr>
             ) : (
               rows.map((r) => (
@@ -113,11 +172,19 @@ export default function VendorPayoutsPage(): React.ReactElement {
                   className="border-b last:border-b-3"
                   style={{ borderColor: 'var(--theme-border)' }}
                 >
-                  <td className="px-4 py-3">{new Date(r.paidAt).toLocaleString()}</td>
+                  <td className="px-4 py-3">
+                    {r.paidAt ? new Date(r.paidAt).toLocaleString() : '—'}
+                  </td>
                   <td className="px-4 py-3">#{r.orderId}</td>
-                  <td className="px-4 py-3">{centsToUsd(r.grossCents)}</td>
-                  <td className="px-4 py-3">{centsToUsd(r.feeCents)}</td>
-                  <td className="px-4 py-3 font-semibold">{centsToUsd(r.netCents)}</td>
+                  <td className="px-4 py-3">
+                    {centsToUsd(r.vendorGrossCents ?? 0)}
+                  </td>
+                  <td className="px-4 py-3">
+                    {centsToUsd(r.vendorFeeCents ?? 0)}
+                  </td>
+                  <td className="px-4 py-3 font-semibold">
+                    {centsToUsd(r.vendorNetCents ?? 0)}
+                  </td>
                 </tr>
               ))
             )}
@@ -126,9 +193,15 @@ export default function VendorPayoutsPage(): React.ReactElement {
             <tr>
               <td className="px-4 py-3 font-semibold">Totals</td>
               <td />
-              <td className="px-4 py-3 font-semibold">{centsToUsd(totals.gross)}</td>
-              <td className="px-4 py-3 font-semibold">{centsToUsd(totals.fee)}</td>
-              <td className="px-4 py-3 font-semibold">{centsToUsd(totals.net)}</td>
+              <td className="px-4 py-3 font-semibold">
+                {centsToUsd(totals.gross)}
+              </td>
+              <td className="px-4 py-3 font-semibold">
+                {centsToUsd(totals.fee)}
+              </td>
+              <td className="px-4 py-3 font-semibold">
+                {centsToUsd(totals.net)}
+              </td>
             </tr>
             </tfoot>
           </table>

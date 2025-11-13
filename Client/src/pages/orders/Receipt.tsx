@@ -101,7 +101,7 @@ export default function Receipt(): React.ReactElement {
         </div>
         <div className="text-sm">
           <strong>Status:</strong>{' '}
-          <span className="capitalize">{o.status.replace('_', ' ')}</span>
+          <span className="capitalize text-[var(--theme-success)] text-lg">{o.status.replace('_', ' ')}</span>
         </div>
       </div>
 
@@ -134,12 +134,12 @@ export default function Receipt(): React.ReactElement {
                   <div className="font-medium">{it.title}</div>
                   {((it).vendorSlug ?? (it).vendor?.slug) ? (
                     <div className="text-xs opacity-75 mt-0.5">
-                      Sold by:<span className="text-[var(--theme-link)]"> {(it).vendorSlug ?? (it).vendor?.slug}</span>
+                      Sold by:<span className="capitalize text-[var(--theme-link)]"> {(it).vendorSlug ?? (it).vendor?.slug}</span>
                     </div>
                   ) : null}
                 </td>
                 <td className="px-4 py-3">{it.quantity}</td>
-                <td className="px-4 py-3">{centsToUsd(it.unitPriceCents)}</td>
+                <td className="px-4 py-3 text-[var(--theme-success)]">{centsToUsd(it.unitPriceCents)}</td>
                 <td className="px-4 py-3 text-right">{centsToUsd(lineTotal)}</td>
               </tr>
             );
@@ -189,8 +189,8 @@ export default function Receipt(): React.ReactElement {
           className="mt-2 border-t pt-2 flex items-center justify-between"
           style={{ borderColor: 'var(--theme-border)' }}
         >
-          <div className="text-base font-semibold">Total</div>
-          <div className="text-base font-semibold">{centsToUsd(o.totalCents)}</div>
+          <div className="text-lg font-semibold">Total</div>
+          <div className="text-lg font-semibold text-[var(--theme-success)]">{centsToUsd(o.totalCents)}</div>
         </div>
       </div>
 
