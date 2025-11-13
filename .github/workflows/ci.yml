@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [18.x, 20.x, 22.x]
+        node: [20.x, 22.x]
         app: [Server, Client]
     steps:
       - uses: actions/checkout@v4
