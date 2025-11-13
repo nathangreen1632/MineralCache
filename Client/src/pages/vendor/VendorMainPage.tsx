@@ -136,12 +136,21 @@ export default function VendorMainPage(): React.ReactElement {
     color: 'var(--theme-text)',
   };
 
-  const titleText = slug ? `Vendor: ${slug}` : 'Vendor';
+  const titleLabel = 'Vendor';
 
   return (
     <section className="mx-auto max-w-12xl px-4 py-8 space-y-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold text-[var(--theme-text)]">{titleText}</h1>
+        <h1 className="capitalize text-2xl font-semibold">
+          <span className="text-[var(--theme-text)]">{titleLabel}</span>
+          {slug && (
+            <>
+              :{' '}
+              <span className="text-[var(--theme-link)]">{slug}</span>
+            </>
+          )}
+        </h1>
+
         <div className="flex items-center gap-2">
           <label htmlFor="sort" className="text-sm opacity-80">Sort</label>
           <select
