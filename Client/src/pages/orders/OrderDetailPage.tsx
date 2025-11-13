@@ -237,7 +237,7 @@ export default function OrderDetailPage(): React.ReactElement {
                       <div className="min-w-0">
                         <div className="font-medium truncate">{it.title}</div>
                         {vendorSlug ? (
-                          <div className="text-base opacity-80">Sold by: <span className="text-lg font-semibold text-[var(--theme-link)]">{vendorSlug}</span></div>
+                          <div className="text-base opacity-80">Sold by: <span className="capitalize text-lg font-semibold text-[var(--theme-link)]">{vendorSlug}</span></div>
                         ) : null}
                       </div>
                     </div>
