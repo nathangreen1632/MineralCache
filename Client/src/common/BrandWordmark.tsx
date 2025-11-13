@@ -13,7 +13,7 @@ export default function BrandWordmark(
         src="/mc_logo_words_dark.webp"
         alt={alt}
         className={['mc-only-dark', cls].join(' ')}
-        style={{ filter: 'drop-shadow(0 8px 6px var(--theme-shadow-carousel))' }}
+        style={{ filter: 'drop-shadow(6px 2px 3px var(--theme-shadow-carousel))' }}
       />
 
       {/* Shown in light mode */}
@@ -21,7 +21,7 @@ export default function BrandWordmark(
         src="/mc_logo_words_light.webp"
         alt={alt}
         className={['mc-only-light', cls].join(' ')}
-        style={{ filter: 'drop-shadow(0 8px 6px var(--theme-shadow-carousel))' }}
+        style={{ filter: 'drop-shadow(6px 2px 3px var(--theme-shadow-black))' }}
       />
     </>
   );
