@@ -187,7 +187,7 @@ export default function ProductDetail(): React.ReactElement {
           {(p as any).vendorSlug ? (
             <Link
               to={`/vendors/${(p as any).vendorSlug}`}
-              className="underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link)]"
+              className="capitalize underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link)]"
               aria-label={`View vendor storefront: ${(p as any).vendorSlug}`}
             >
               {(p as any).vendorSlug}
