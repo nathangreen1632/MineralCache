@@ -12,6 +12,7 @@ const docs: Doc[] = [
   { title: 'Data Consumption & Usage', file: 'privacy-choices.html', key: 'data' },
   { title: 'Privacy Policy', file: 'privacy-policy.html', key: 'privacy' },
   { title: 'Returns & Refunds', file: 'refund-policy.html', key: 'refund' },
+  { title: 'Delivery Obligation Disclaimer', file: 'delivery-obligation-disclaimer.html', key: 'delivery' },
   { title: 'Security Policy', file: 'security-policy.html', key: 'security' },
   { title: 'Shipping Policy', file: 'shipping-policy.html', key: 'shipping' },
   { title: 'Terms of Service', file: 'terms-of-service.html', key: 'tos' },

@@ -11,6 +11,7 @@ import { cancelPaymentIntent } from '../services/stripe.service.js';
 import { shipOrderSchema, deliverOrderSchema } from '../validation/orders.schema.js';
 import { normalizeCarrier, trackingUrl as buildTrackingUrl, carrierLabel } from '../services/shipping.service.js';
 import { buildReceiptPdf, type ReceiptData, type ReceiptItem } from '../services/pdf/receiptPdf.service.js';
+import { centsToUsd } from '../utils/money.util.js';
 
 function parsePage(v: unknown, def = 1) {
   const n = Number(v);
@@ -355,7 +356,7 @@ export async function getReceiptHtml(req: Request, res: Response): Promise<void>
   const rows = items
     .map((i) => {
       const qty = i.quantity;
-      const unit = i.unitPriceCents;
+      const unitCents = Number((i as any).unitPriceCents ?? 0);
       const slug = vendorSlugById.get(Number(i.vendorId)) ?? '';
       const soldBy = slug ? `<div style="font-size:12px;opacity:.75">Sold by: ${slug}</div>` : '';
       return `
@@ -365,21 +366,45 @@ export async function getReceiptHtml(req: Request, res: Response): Promise<void>
         ${soldBy}
       </td>
       <td style="padding:8px;border-bottom:1px solid #eee">${qty}</td>
-      <td style="padding:8px;border-bottom:1px solid #eee;text-align:right">$${(unit / 100).toFixed(2)}</td>
+      <td style="padding:8px;border-bottom:1px solid #eee;text-align:right">${centsToUsd(unitCents)}</td>
     </tr>`;
     })
     .join('');
 
-  const totalCents = typeof (order as any).totalCents === 'number' ? (order as any).totalCents : 0;
-  const total = totalCents / 100;
-
+  const subtotalCents = Number(
+    (order as any).subtotalCents ??
+    items.reduce(
+      (sum, i) =>
+        sum +
+        Number(
+          (i as any).lineTotalCents ??
+          (i as any).totalCents ??
+          Number((i as any).quantity ?? 1) * Number((i as any).unitPriceCents ?? 0),
+        ),
+      0,
+    ),
+  );
+  const shippingCents = Number((order as any).shippingCents ?? 0);
   const taxCents = Number((order as any).taxCents ?? 0);
+  const totalCents = Number(
+    (order as any).totalCents ?? subtotalCents + shippingCents + taxCents,
+  );
+
+  const shippingHtml =
+    shippingCents > 0
+      ? `<tr>
+           <td></td>
+           <td style="padding:8px;text-align:right">Shipping</td>
+           <td style="padding:8px;text-align:right">${centsToUsd(shippingCents)}</td>
+         </tr>`
+      : '';
+
   const taxHtml =
     taxCents > 0
       ? `<tr>
            <td></td>
            <td style="padding:8px;text-align:right">Tax</td>
-           <td style="padding:8px;text-align:right">$${(taxCents / 100).toFixed(2)}</td>
+           <td style="padding:8px;text-align:right">${centsToUsd(taxCents)}</td>
          </tr>`
       : '';
 
@@ -403,11 +428,12 @@ export async function getReceiptHtml(req: Request, res: Response): Promise<void>
           </thead>
           <tbody>${rows}</tbody>
           <tfoot>
+            ${shippingHtml}
             ${taxHtml}
             <tr>
               <td></td>
-              <td style="padding:8px;text-align:right"><strong>Total</strong></td>
-              <td style="padding:8px;text-align:right"><strong>$${total.toFixed(2)}</strong></td>
+              <td style="padding:8px;font-size:20px;text-align:right"><strong>Total</strong></td>
+              <td style="padding:8px;font-size:18px;text-align:right"><strong>${centsToUsd(totalCents)}</strong></td>
             </tr>
           </tfoot>
         </table>
