@@ -1,5 +1,6 @@
 // Server/src/services/pdf/receiptPdf.service.ts
 import PDFDocument from 'pdfkit';
+import { centsToUsd } from '../../utils/money.util.js';
 
 export type ReceiptItem = {
   title: string;
@@ -27,11 +28,6 @@ export type ReceiptData = {
   brandName?: string | null;        // defaults to 'Mineral Cache'
   orderNumber?: string | null;      // if provided, header shows #orderNumber
 };
-
-function centsToUsd(cents: number): string {
-  const v = Number.isFinite(cents) ? cents : 0;
-  return `$${(v / 100).toFixed(2)}`;
-}
 
 function writeKeyValue(doc: PDFKit.PDFDocument, key: string, value?: string | null): void {
   if (!value) return;
