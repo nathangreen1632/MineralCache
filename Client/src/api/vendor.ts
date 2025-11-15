@@ -318,6 +318,7 @@ export type VendorPayoutRow = {
   vendorGrossCents: number | null;
   vendorFeeCents: number | null;
   vendorNetCents: number | null;
+  payoutStatus: 'pending' | 'holding' | 'transferred' | 'reversed';
 };
 
 export async function getMyPayouts(params?: { start?: string; end?: string }) {
