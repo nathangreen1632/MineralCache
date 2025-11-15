@@ -4,6 +4,25 @@ import { getMyPayouts, type VendorPayoutRow } from '../../api/vendor';
 import { centsToUsd } from '../../utils/money.util';
 import { useAuthStore } from '../../stores/useAuthStore';
 
+function renderPayoutStatus(
+  status: VendorPayoutRow['payoutStatus'] | undefined
+): string {
+  if (!status) return 'Unknown';
+
+  switch (status) {
+    case 'pending':
+      return 'Pending';
+    case 'holding':
+      return 'Queued';
+    case 'transferred':
+      return 'Paid';
+    case 'reversed':
+      return 'Reversed';
+    default:
+      return status;
+  }
+}
+
 export default function VendorPayoutsPage(): React.ReactElement {
   const user = useAuthStore((s) => s.user);
   const isAdmin = String(user?.role ?? '').toLowerCase() === 'admin';
@@ -61,15 +80,31 @@ export default function VendorPayoutsPage(): React.ReactElement {
     void load();
   }, []);
 
-  const totals = rows.reduce(
-    (a, r) => {
-      a.gross += r.vendorGrossCents ?? 0;
-      a.fee += r.vendorFeeCents ?? 0;
-      a.net += r.vendorNetCents ?? 0;
-      return a;
+  const aggregates = rows.reduce(
+    (acc, r) => {
+      const gross = r.vendorGrossCents ?? 0;
+      const fee = r.vendorFeeCents ?? 0;
+      const net = r.vendorNetCents ?? 0;
+
+      if (r.payoutStatus === 'transferred' || r.payoutStatus === 'reversed') {
+        acc.paid.gross += gross;
+        acc.paid.fee += fee;
+        acc.paid.net += net;
+      } else {
+        acc.unpaid.gross += gross;
+        acc.unpaid.fee += fee;
+        acc.unpaid.net += net;
+      }
+
+      return acc;
     },
-    { gross: 0, fee: 0, net: 0 }
+    {
+      unpaid: { gross: 0, fee: 0, net: 0 },
+      paid: { gross: 0, fee: 0, net: 0 },
+    }
   );
+
+  const unpaidTotals = aggregates.unpaid;
 
   const csvHref = `/api/vendors/me/payouts?${[
     'format=csv',
@@ -86,6 +121,13 @@ export default function VendorPayoutsPage(): React.ReactElement {
       aria-live="polite"
     >
       <h1 className="text-4xl font-semibold text-[var(--theme-text)]">Payouts</h1>
+
+      <p className="text-base text-[var(--theme-text)]">
+        Current balance:{' '}
+        <span className="font-semibold text-xl text-[var(--theme-success)]">
+          {centsToUsd(unpaidTotals.net)}
+        </span>
+      </p>
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="grid">
@@ -134,7 +176,10 @@ export default function VendorPayoutsPage(): React.ReactElement {
       </div>
 
       {msg ? (
-        <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--theme-border)' }}>
+        <div
+          className="rounded-2xl border p-4"
+          style={{ borderColor: 'var(--theme-border)' }}
+        >
           <span style={{ color: 'var(--theme-text)' }}>{msg}</span>
         </div>
       ) : (
@@ -144,24 +189,28 @@ export default function VendorPayoutsPage(): React.ReactElement {
         >
           <table className="w-full text-sm">
             <thead className="text-left">
-            <tr className="border-b" style={{ borderColor: 'var(--theme-border)' }}>
+            <tr
+              className="border-b"
+              style={{ borderColor: 'var(--theme-border)' }}
+            >
               <th className="px-4 py-3">Paid At</th>
               <th className="px-4 py-3">Order</th>
               <th className="px-4 py-3">Gross</th>
               <th className="px-4 py-3">Fee</th>
               <th className="px-4 py-3">Net</th>
+              <th className="px-4 py-3">Payment Status</th>
             </tr>
             </thead>
             <tbody>
             {busy && rows.length === 0 ? (
               <tr>
-                <td className="px-4 py-3" colSpan={5}>
+                <td className="px-4 py-3" colSpan={6}>
                   Loading…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td className="px-4 py-3 opacity-70" colSpan={5}>
+                <td className="px-4 py-3 opacity-70" colSpan={6}>
                   No payouts.
                 </td>
               </tr>
@@ -175,7 +224,7 @@ export default function VendorPayoutsPage(): React.ReactElement {
                   <td className="px-4 py-3">
                     {r.paidAt ? new Date(r.paidAt).toLocaleString() : '—'}
                   </td>
-                  <td className="px-4 py-3">#{r.orderId}</td>
+                  <td className="px-4 py-3 text-[var(--theme-link)]">#{r.orderId}</td>
                   <td className="px-4 py-3">
                     {centsToUsd(r.vendorGrossCents ?? 0)}
                   </td>
@@ -185,22 +234,29 @@ export default function VendorPayoutsPage(): React.ReactElement {
                   <td className="px-4 py-3 font-semibold">
                     {centsToUsd(r.vendorNetCents ?? 0)}
                   </td>
+                  <td className="px-4 py-3">
+                    {renderPayoutStatus(r.payoutStatus)}
+                  </td>
                 </tr>
               ))
             )}
             </tbody>
             <tfoot>
-            <tr>
-              <td className="px-4 py-3 font-semibold">Totals</td>
-              <td />
-              <td className="px-4 py-3 font-semibold">
-                {centsToUsd(totals.gross)}
+            <tr className="border-t border-[var(--theme-border)]">
+              <td
+                className="px-4 py-3 font-semibold text-left text-lg"
+                colSpan={2}
+              >
+                Totals
               </td>
-              <td className="px-4 py-3 font-semibold">
-                {centsToUsd(totals.fee)}
+              <td className="px-4 py-3 font-semibold text-lg text-[var(--theme-success)]">
+                {centsToUsd(unpaidTotals.gross)}
               </td>
-              <td className="px-4 py-3 font-semibold">
-                {centsToUsd(totals.net)}
+              <td className="px-4 py-3 font-semibold text-lg text-[var(--theme-error)]">
+                {centsToUsd(unpaidTotals.fee)}
+              </td>
+              <td className="px-4 py-3 font-semibold text-lg text-[var(--theme-success)]">
+                {centsToUsd(unpaidTotals.net)}
               </td>
             </tr>
             </tfoot>
