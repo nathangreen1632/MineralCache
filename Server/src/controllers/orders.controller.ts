@@ -6,6 +6,7 @@ import { Order } from '../models/order.model.js';
 import { OrderItem } from '../models/orderItem.model.js';
 import { User } from '../models/user.model.js';
 import { Vendor } from '../models/vendor.model.js';
+import { OrderVendor } from '../models/orderVendor.model.js';
 import { sendOrderEmail } from '../services/email.service.js';
 import { cancelPaymentIntent } from '../services/stripe.service.js';
 import { shipOrderSchema, deliverOrderSchema } from '../validation/orders.schema.js';
@@ -289,10 +290,15 @@ export async function markDelivered(req: Request, res: Response): Promise<void> 
 
   const parsed = deliverOrderSchema.safeParse(req.body ?? {});
   if (!parsed.success) {
-    res.status(400).json({ error: 'Invalid body', details: z.treeifyError(parsed.error) });
+    res
+      .status(400)
+      .json({ error: 'Invalid body', details: z.treeifyError(parsed.error) });
     return;
   }
-  const itemFilterIds = parsed.data.itemIds && parsed.data.itemIds.length > 0 ? parsed.data.itemIds : null;
+  const itemFilterIds =
+    parsed.data.itemIds && parsed.data.itemIds.length > 0
+      ? parsed.data.itemIds
+      : null;
 
   const order = await Order.findByPk(orderId);
   if (!order) {
@@ -306,7 +312,9 @@ export async function markDelivered(req: Request, res: Response): Promise<void> 
 
   const items = await OrderItem.findAll({ where });
   if (items.length === 0) {
-    res.status(403).json({ error: 'No matching items to deliver for your role' });
+    res
+      .status(403)
+      .json({ error: 'No matching items to deliver for your role' });
     return;
   }
 
@@ -316,17 +324,71 @@ export async function markDelivered(req: Request, res: Response): Promise<void> 
     await it.save();
   }
 
+  const paidAt = (order as any).paidAt as Date | null | undefined;
+  if (paidAt) {
+    const vendorIds = Array.from(
+      new Set(
+        items
+          .map((it: any) => Number(it.vendorId))
+          .filter((id) => Number.isFinite(id) && id > 0)
+      )
+    );
+
+    for (const vid of vendorIds) {
+      const vendorItems = await OrderItem.findAll({
+        where: { orderId, vendorId: vid },
+      });
+
+      if (vendorItems.length === 0) continue;
+
+      const allDelivered = vendorItems.every((it: any) => {
+        const d =
+          it.deliveredAt ??
+          (typeof it.get === 'function' ? it.get('deliveredAt') : null);
+        if (!d) return false;
+        const dt = d instanceof Date ? d : new Date(d);
+        return Number.isFinite(dt.getTime());
+      });
+
+      if (!allDelivered) continue;
+
+      let latestDelivered: Date | null = null;
+      for (const it of vendorItems as any[]) {
+        const d =
+          it.deliveredAt ??
+          (typeof it.get === 'function' ? it.get('deliveredAt') : null);
+        if (!d) continue;
+        const dt = d instanceof Date ? d : new Date(d);
+        if (!Number.isFinite(dt.getTime())) continue;
+        if (!latestDelivered || dt > latestDelivered) latestDelivered = dt;
+      }
+
+      // const base = latestDelivered ?? now;
+      // const holdUntil = new Date(base.getTime() + 3 * 24 * 60 * 60 * 1000);
+      const holdUntil = now;
+
+      await OrderVendor.update(
+        { payoutStatus: 'holding', holdUntil, updatedAt: new Date() },
+        { where: { orderId, vendorId: vid } }
+      );
+    }
+  }
+
   try {
-    const buyer = await User.findByPk((order as any).buyerUserId).catch(() => null);
+    const buyer = await User.findByPk((order as any).buyerUserId).catch(
+      () => null
+    );
     if (buyer?.email) {
       const orderItems = await OrderItem.findAll({ where: { orderId } });
-      const itemsBrief = orderItems.map((i) => `• ${i.title}`).join('<br/>');
+      const itemsBrief = orderItems
+        .map((i) => `• ${i.title}`)
+        .join('<br/>');
       const orderNumber = readOrderNumberSafe(order);
       await sendOrderEmail('order_delivered', {
         orderId: Number(order.id),
         orderNumber,
         buyer: { email: buyer.email, name: (buyer as any)?.fullName ?? null },
-        itemsBrief
+        itemsBrief,
       });
     }
   } catch {}
@@ -334,7 +396,7 @@ export async function markDelivered(req: Request, res: Response): Promise<void> 
   res.json({
     ok: true,
     updated: items.map((i) => Number(i.id)),
-    orderStatus: (order as any).status
+    orderStatus: (order as any).status,
   });
 }
 
