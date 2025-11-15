@@ -554,7 +554,7 @@ export default function ProductCatalogList(): React.ReactElement {
                   tabIndex={vendorSlug ? 0 : -1}
                   onClick={onCardClick}
                   onKeyDown={onCardKeyDown}
-                  className={`rounded-xl border p-3 hover:shadow ${vendorSlug ? 'cursor-pointer shadow-[0_2px_5px_var(--theme-shadow-carousel)]' : ''}`}
+                  className={`rounded-xl border p-3 hover:shadow ${vendorSlug ? 'cursor-pointer shadow-[0_3px_5px_var(--theme-shadow-carousel)] duration-900' : ''}`}
                   style={card}
                   aria-label={vendorSlug ? `View vendor storefront: ${vendorLabel}` : undefined}
                   title={vendorSlug ? `View vendor: ${vendorLabel}` : undefined}
