@@ -226,3 +226,29 @@ export async function cancelPaymentIntent(
     return { ok: false, error: String(err?.message || err) };
   }
 }
+
+export async function createVendorTransfer(args: {
+  accountId: string;
+  amountCents: number;
+  description?: string;
+  metadata?: Record<string, string>;
+}): Promise<{ ok: true; transferId: string } | { ok: false; error: string }> {
+  const status = getStripeStatus();
+  if (!status.enabled || !status.ready || !stripe) {
+    return { ok: false, error: 'Stripe not initialized' };
+  }
+
+  try {
+    const transfer = await stripe.transfers.create({
+      amount: args.amountCents,
+      currency: 'usd',
+      destination: args.accountId,
+      description: args.description,
+      metadata: args.metadata,
+    });
+
+    return { ok: true, transferId: transfer.id };
+  } catch (err: any) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
