@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getMyOrder, type GetOrderRes, cancelMyOrder } from '../../api/orders';
-import {carrierLabel, trackingUrl} from '../../utils/tracking.util';
+import { carrierLabel, trackingUrl } from '../../utils/tracking.util';
 import ShippedBanner from '../../components/orders/ShippedBanner';
 import { centsToUsd } from '../../utils/money.util';
 
@@ -12,9 +12,47 @@ type Load =
   | { kind: 'loaded'; order: GetOrderRes['item'] }
   | { kind: 'error'; message: string };
 
+type AddressKind = 'billing' | 'shipping';
+
 function formatStatus(status: string): string {
   if (!status) return '';
   return status.replace(/_/g, ' ').toUpperCase();
+}
+
+function buildAddressLines(order: any, kind: AddressKind): string[] {
+  if (!order) return [];
+  const prefix = kind === 'billing' ? 'billing' : 'shipping';
+
+  const text = (order as any)[`${prefix}AddressText`] as string | null | undefined;
+  if (text && text.trim() !== '') {
+    return text
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
+  const name = (order as any)[`${prefix}Name`] as string | null | undefined;
+  const addr1 = (order as any)[`${prefix}Address1`] as string | null | undefined;
+  const addr2 = (order as any)[`${prefix}Address2`] as string | null | undefined;
+  const city = (order as any)[`${prefix}City`] as string | null | undefined;
+  const state = (order as any)[`${prefix}State`] as string | null | undefined;
+  const postal = (order as any)[`${prefix}Postal`] as string | null | undefined;
+  const country = (order as any)[`${prefix}Country`] as string | null | undefined;
+
+  const lines: string[] = [];
+  if (name) lines.push(name);
+  if (addr1) lines.push(addr1);
+  if (addr2) lines.push(addr2);
+
+  const cityParts: string[] = [];
+  if (city) cityParts.push(city);
+  if (state) cityParts.push(state);
+  if (postal) cityParts.push(postal);
+  if (cityParts.length) lines.push(cityParts.join(', '));
+
+  if (country) lines.push(country);
+
+  return lines;
 }
 
 export default function OrderDetailPage(): React.ReactElement {
@@ -92,7 +130,6 @@ export default function OrderDetailPage(): React.ReactElement {
   const o = state.order;
   const hasTax = typeof (o as any).taxCents === 'number' && (o as any).taxCents > 0;
 
-  // --- FIX (L97): provide a compare function for sort() ---
   const firstShipped: string | null = (() => {
     const dates = o.items
       .map((it: any) => it.shippedAt as string | null | undefined)
@@ -103,14 +140,15 @@ export default function OrderDetailPage(): React.ReactElement {
   })();
 
   const allDelivered = o.items.length > 0 && o.items.every((it: any) => Boolean(it.deliveredAt));
-  // --------------------------------------------------------
+
+  const billingLines = buildAddressLines(o, 'billing');
+  const shippingLines = buildAddressLines(o, 'shipping');
 
   return (
     <section className="mx-auto max-w-8xl px-6 py-14 space-y-6">
       <div className="flex items-baseline justify-between gap-4">
         <h1 className="text-4xl font-semibold text-[var(--theme-text)]">Order #{o.id}</h1>
         <div className="flex items-center gap-3">
-          {/* View Receipt (opens server-rendered HTML in new tab) */}
           <a
             href={`/api/orders/${o.id}/receipt`}
             target="_blank"
@@ -143,63 +181,103 @@ export default function OrderDetailPage(): React.ReactElement {
 
       {!allDelivered && firstShipped ? <ShippedBanner shippedAt={firstShipped} orderId={o.id} /> : null}
 
-      <div className="text-xl rounded-2xl border p-6 grid gap-3" style={card}>
-        <p>
-          <strong>Status:</strong>{' '}
-          <span className="text-[var(--theme-success)] text-xl font-semibold whitespace-nowrap">
-          {formatStatus(o.status)}
-          </span>
-        </p>
+      <div
+        className="text-xl rounded-2xl border p-6 grid gap-6 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]"
+        style={card}
+      >
+        <div className="grid gap-3">
+          <p>
+            <strong>Status:</strong>{' '}
+            <span className="text-[var(--theme-success)] text-xl font-semibold whitespace-nowrap">
+              {formatStatus(o.status)}
+            </span>
+          </p>
 
-        {/* Totals breakdown */}
-        <div className="grid gap-1 text-lg">
-          <div><strong>Subtotal:</strong> {centsToUsd(o.subtotalCents)}</div>
-
-          {/* Per-vendor shipping lines (if provided) */}
-          {Array.isArray((o as any).shippingVendors) && (o as any).shippingVendors.length > 0 && (
-            <div className="opacity-90">
-              {(o as any).shippingVendors.map(
-                (
-                  v: { vendorId: number; vendorName?: string | null; label?: string | null; amountCents: number }
-                ) => {
-                  const name = v.vendorName ?? v.label ?? null;
-                  const caption = name ? ` · ${name}` : '';
-                  return (
-                    <div key={`ship-${v.vendorId}`} className="flex gap-2">
-                      <span>Shipping{caption}:</span>
-                      <span>{centsToUsd(v.amountCents)}</span>
-                    </div>
-                  );
-                }
-              )}
-            </div>
-          )}
-
-          {/* Legacy single-line shipping (fallback) */}
-          {(!(o as any).shippingVendors || (o as any).shippingVendors.length === 0) && (
+          <div className="grid gap-1 text-lg">
             <div>
-              <strong>Shipping:</strong> {centsToUsd(o.shippingCents)}{' '}
-              {o.shippingRuleName ? <span className="opacity-70">({o.shippingRuleName})</span> : null}
+              <strong>Subtotal:</strong> {centsToUsd(o.subtotalCents)}
             </div>
-          )}
 
-          {/* Optional tax */}
-          {hasTax && <div><strong>Tax:</strong> {centsToUsd((o as any).taxCents)}</div>}
+            {Array.isArray((o as any).shippingVendors) && (o as any).shippingVendors.length > 0 && (
+              <div className="opacity-90">
+                {(o as any).shippingVendors.map(
+                  (
+                    v: {
+                      vendorId: number;
+                      vendorName?: string | null;
+                      label?: string | null;
+                      amountCents: number;
+                    }
+                  ) => {
+                    const name = v.vendorName ?? v.label ?? null;
+                    const caption = name ? ` · ${name}` : '';
+                    return (
+                      <div key={`ship-${v.vendorId}`} className="flex gap-2">
+                        <span>Shipping{caption}:</span>
+                        <span>{centsToUsd(v.amountCents)}</span>
+                      </div>
+                    );
+                  }
+                )}
+              </div>
+            )}
 
-          <div><strong>Total:</strong> <span className="text-xl text-[var(--theme-success)]">{centsToUsd(o.totalCents)}</span></div>
+            {(!(o as any).shippingVendors || (o as any).shippingVendors.length === 0) && (
+              <div>
+                <strong>Shipping:</strong> {centsToUsd(o.shippingCents)}{' '}
+                {o.shippingRuleName ? <span className="opacity-70">({o.shippingRuleName})</span> : null}
+              </div>
+            )}
+
+            {hasTax && (
+              <div>
+                <strong>Tax:</strong> {centsToUsd((o as any).taxCents)}
+              </div>
+            )}
+
+            <div>
+              <strong>Total:</strong>{' '}
+              <span className="text-xl text-[var(--theme-success)]">{centsToUsd(o.totalCents)}</span>
+            </div>
+          </div>
+
+          {Array.isArray(o.shippingBreakdown) && o.shippingBreakdown.length > 0 ? (
+            <div className="mt-2 text-sm opacity-80">
+              {o.shippingBreakdown.map((row) => (
+                <div key={`sbr-${row.label}-${row.amountCents}`} className="flex gap-2">
+                  <span>{row.label}:</span>
+                  <span>{centsToUsd(row.amountCents)}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
 
-        {/* Any shipping breakdown rows (kept) */}
-        {Array.isArray(o.shippingBreakdown) && o.shippingBreakdown.length > 0 ? (
-          <div className="mt-2 text-sm opacity-80">
-            {o.shippingBreakdown.map((row) => (
-              <div key={`sbr-${row.label}-${row.amountCents}`} className="flex gap-2">
-                <span>{row.label}:</span>
-                <span>{centsToUsd(row.amountCents)}</span>
+        {(shippingLines.length > 0 || billingLines.length > 0) && (
+          <div className="grid gap-4 text-sm md:justify-self-start md:pl-4 lg:pl-8">
+            {shippingLines.length > 0 && (
+              <div>
+                <div className="text-xl font-semibold uppercase tracking-wide mb-1">
+                  Shipping address
+                </div>
+                <div className="opacity-80 whitespace-pre-line text-left text-base">
+                  {shippingLines.join('\n')}
+                </div>
               </div>
-            ))}
+            )}
+
+            {billingLines.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide mb-1">
+                  Billing address
+                </div>
+                <div className="opacity-80 whitespace-pre-line text-left">
+                  {billingLines.join('\n')}
+                </div>
+              </div>
+            )}
           </div>
-        ) : null}
+        )}
       </div>
 
       <div className="rounded-2xl border" style={card}>
@@ -244,19 +322,29 @@ export default function OrderDetailPage(): React.ReactElement {
                       <div className="min-w-0">
                         <div className="font-medium truncate">{it.title}</div>
                         {vendorSlug ? (
-                          <div className="text-base opacity-80">Sold by: <span className="capitalize text-lg font-semibold text-[var(--theme-link)]">{vendorSlug}</span></div>
+                          <div className="text-base opacity-80">
+                            Sold by:{' '}
+                            <span className="capitalize text-lg font-semibold text-[var(--theme-link)]">
+                                {vendorSlug}
+                              </span>
+                          </div>
                         ) : null}
                       </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-lg">{it.quantity}</td>
-                  <td className="px-4 py-3 text-lg text-[var(--theme-success)]">{centsToUsd(it.unitPriceCents)}</td>
-                  <td className="px-4 py-3 text-lg text-[var(--theme-success)]">{centsToUsd(it.lineTotalCents)}</td>
+                  <td className="px-4 py-3 text-lg text-[var(--theme-success)]">
+                    {centsToUsd(it.unitPriceCents)}
+                  </td>
+                  <td className="px-4 py-3 text-lg text-[var(--theme-success)]">
+                    {centsToUsd(it.lineTotalCents)}
+                  </td>
                   <td className="px-4 py-3 text-lg">
                     {it.shipTracking ? (
                       <div className="flex flex-col gap-0.5">
                         <div>
-                          <span className="opacity-80">Carrier:</span> {((it).shipCarrierLabel ?? carrierLabel(it.shipCarrier)) || '—'}
+                          <span className="opacity-80">Carrier:</span>{' '}
+                          {((it as any).shipCarrierLabel ?? carrierLabel(it.shipCarrier)) || '—'}
                         </div>
                         <div className="truncate">
                           <span className="opacity-80">Tracking:</span>{' '}
