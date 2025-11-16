@@ -1,4 +1,3 @@
-// Client/src/pages/vendor/VendorOrdersPage.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { buildPackingSlipUrl } from '../../api/vendorOrders';
 import { markOrderDelivered, markOrderShipped, type ShipCarrier } from '../../api/orders';
@@ -59,6 +58,13 @@ type VendorOrderRow = {
   status: OrderStatus | string;
   items: VendorOrderItem[];
   totalCents: number;
+  shippingName: string | null;
+  shippingAddress1: string | null;
+  shippingAddress2: string | null;
+  shippingCity: string | null;
+  shippingState: string | null;
+  shippingPostal: string | null;
+  shippingCountry: string | null;
 };
 
 function isDelivered(o: VendorOrderRow) {
@@ -98,7 +104,7 @@ export default function VendorOrdersPage(): React.ReactElement {
     if (tab === 'paid') p.set('status', 'paid');
     if (tab === 'shipped') p.set('status', 'shipped');
     if (tab === 'delivered') p.set('status', 'delivered');
-    p.set('expanded', '1'); // ensure server includes per-item ids
+    p.set('expanded', '1');
     return p.toString();
   }, [tab, page]);
 
@@ -158,6 +164,13 @@ export default function VendorOrdersPage(): React.ReactElement {
             status: String(o.status) as OrderStatus,
             totalCents: Number(o.totalCents ?? o.total_cents ?? 0),
             items: filtered,
+            shippingName: (o.shippingName ?? o.shipping_name ?? null) as string | null,
+            shippingAddress1: (o.shippingAddress1 ?? o.shipping_address1 ?? null) as string | null,
+            shippingAddress2: (o.shippingAddress2 ?? o.shipping_address2 ?? null) as string | null,
+            shippingCity: (o.shippingCity ?? o.shipping_city ?? null) as string | null,
+            shippingState: (o.shippingState ?? o.shipping_state ?? null) as string | null,
+            shippingPostal: (o.shippingPostal ?? o.shipping_postal ?? null) as string | null,
+            shippingCountry: (o.shippingCountry ?? o.shipping_country ?? null) as string | null,
           };
         })
         : [];
@@ -235,14 +248,16 @@ export default function VendorOrdersPage(): React.ReactElement {
     await load();
   }
 
-
   async function doDeliver(orderId: number) {
     const itemIds = Array.from(selectedByOrder[orderId] ?? []).filter((n) => Number.isFinite(n) && n > 0);
     if (itemIds.length === 0) return;
     setBusy(true);
     const r = await markOrderDelivered(orderId, itemIds);
     setBusy(false);
-    if (!r.ok) { setMsg(r.error || 'Deliver failed'); return; }
+    if (!r.ok) {
+      setMsg(r.error || 'Deliver failed');
+      return;
+    }
     clearSelection(orderId);
     await load();
   }
@@ -308,6 +323,19 @@ export default function VendorOrdersPage(): React.ReactElement {
           const showShip = tab === 'paid';
           const showDeliver = tab === 'shipped';
 
+          const hasShipTo =
+            o.shippingName ||
+            o.shippingAddress1 ||
+            o.shippingAddress2 ||
+            o.shippingCity ||
+            o.shippingState ||
+            o.shippingPostal ||
+            o.shippingCountry;
+
+          const shipLine = [o.shippingCity, o.shippingState, o.shippingPostal, o.shippingCountry]
+            .filter(Boolean)
+            .join(', ');
+
           return (
             <div key={o.orderId} className="rounded-2xl border p-4 grid gap-3" style={card}>
               <div className="flex items-center justify-between">
@@ -354,6 +382,16 @@ export default function VendorOrdersPage(): React.ReactElement {
                 </div>
               </div>
 
+              {hasShipTo && (
+                <div className="text-xs text-[var(--theme-text)] opacity-80">
+                  <div className="font-semibold">Ship to</div>
+                  {o.shippingName && <div>{o.shippingName}</div>}
+                  {o.shippingAddress1 && <div>{o.shippingAddress1}</div>}
+                  {o.shippingAddress2 && <div>{o.shippingAddress2}</div>}
+                  {shipLine && <div>{shipLine}</div>}
+                </div>
+              )}
+
               <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--theme-border)' }}>
                 <table className="w-full text-sm">
                   <thead className="text-left">
@@ -387,7 +425,11 @@ export default function VendorOrdersPage(): React.ReactElement {
                     const isChecked = selectId != null ? selectedSet.has(selectId) : false;
 
                     return (
-                      <tr key={`${o.orderId}-${selectId ?? idx}`} className="border-b last:border-b-0" style={{ borderColor: 'var(--theme-border)' }}>
+                      <tr
+                        key={`${o.orderId}-${selectId ?? idx}`}
+                        className="border-b last:border-b-0"
+                        style={{ borderColor: 'var(--theme-border)' }}
+                      >
                         <td className="px-3 py-2">
                           {selectId != null ? (
                             <input
@@ -403,7 +445,7 @@ export default function VendorOrdersPage(): React.ReactElement {
                         <td className="px-3 py-2">{it.quantity}</td>
                         <td className="px-3 py-2">{centsToUsd(it.unitPriceCents)}</td>
                         <td className="px-3 py-2">{centsToUsd(it.lineTotalCents)}</td>
-                        <td className="px-3 py-2">{selectable}</td>
+                        <td className="px-3 py-2">{selectable ? 'Ready' : ''}</td>
                       </tr>
                     );
                   })}
@@ -444,7 +486,9 @@ export default function VendorOrdersPage(): React.ReactElement {
           <div className="relative z-10 w-[min(92vw,440px)] rounded-2xl border p-5 grid gap-3" style={card}>
             <div className="text-lg font-semibold">Mark Shipped</div>
             <div className="grid gap-2">
-              <label className="text-xs opacity-70" htmlFor="carrier">Carrier</label>
+              <label className="text-xs opacity-70" htmlFor="carrier">
+                Carrier
+              </label>
               <select
                 id="carrier"
                 value={shipDialog.carrier}
@@ -459,7 +503,9 @@ export default function VendorOrdersPage(): React.ReactElement {
                 <option value="other">Other</option>
               </select>
 
-              <label className="text-xs opacity-70 mt-2" htmlFor="tracking">Tracking #</label>
+              <label className="text-xs opacity-70 mt-2" htmlFor="tracking">
+                Tracking #
+              </label>
               <input
                 id="tracking"
                 value={shipDialog.tracking}
@@ -481,18 +527,19 @@ export default function VendorOrdersPage(): React.ReactElement {
               <button
                 type="button"
                 disabled={
-                  busy || false || (selectedByOrder[shipDialog.orderId]?.size ?? 0) === 0 || !normalizeCarrier(shipDialog.carrier) ||
+                  busy ||
+                  (selectedByOrder[shipDialog.orderId ?? -1]?.size ?? 0) === 0 ||
+                  !normalizeCarrier(shipDialog.carrier) ||
                   shipDialog.tracking.trim().length <
                   getMinTrackingLength(normalizeCarrier(shipDialog.carrier))
                 }
-                onClick={() => void doShip(shipDialog.orderId!)}
+                onClick={() => shipDialog.orderId != null && void doShip(shipDialog.orderId)}
                 className="rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-60"
                 style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
               >
                 Ship selected
               </button>
             </div>
-
           </div>
         </div>
       )}
