@@ -294,6 +294,12 @@ function CardForm({ totalCents }: Readonly<{ totalCents: number }>) {
       return;
     }
 
+    if (status === 401 || error === 'Unauthorized') {
+      setBusy(false);
+      setMsg('Please sign in or create a MineralCache account before checking out.');
+      return;
+    }
+
     if (error || !data?.clientSecret) {
       setBusy(false);
       setMsg(error || 'Failed to start checkout.');
@@ -323,7 +329,11 @@ function CardForm({ totalCents }: Readonly<{ totalCents: number }>) {
     setMsg(`Payment status: ${result.paymentIntent?.status || 'unknown'}`);
   }
 
-  const cardBox = { background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', text: 'var(--theme-text)' } as const;
+  const cardBox = {
+    background: 'var(--theme-surface)',
+    borderColor: 'var(--theme-border)',
+    text: 'var(--theme-text)',
+  } as const;
 
   return (
     <form onSubmit={onSubmit} className="grid gap-4">
