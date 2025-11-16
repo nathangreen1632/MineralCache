@@ -225,7 +225,9 @@ async function computeCartTotals(userId: number) {
 export async function createCheckoutIntent(req: Request, res: Response): Promise<void> {
   const u = (req as any).user ?? (req.session as any)?.user ?? null;
   if (!u?.id) {
-    res.status(401).json({ error: 'Unauthorized' });
+    res
+      .status(401)
+      .json({ error: 'Please sign in or create a MineralCache account to complete checkout.' });
     return;
   }
   if (!u.dobVerified18) {
@@ -235,7 +237,7 @@ export async function createCheckoutIntent(req: Request, res: Response): Promise
     return;
   }
 
-  const body = (req.body ?? {});
+  const body = req.body ?? {};
   const shipping = body.shipping ?? {};
 
   const shippingName = typeof shipping.name === 'string' ? shipping.name.trim() : '';
@@ -407,3 +409,4 @@ export async function createCheckoutIntent(req: Request, res: Response): Promise
     vendorShippingSnapshot: totals.vendorShippingSnapshot,
   });
 }
+
