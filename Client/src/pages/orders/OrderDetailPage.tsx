@@ -23,7 +23,7 @@ function buildAddressLines(order: any, kind: AddressKind): string[] {
   if (!order) return [];
   const prefix = kind === 'billing' ? 'billing' : 'shipping';
 
-  const text = (order as any)[`${prefix}AddressText`] as string | null | undefined;
+  const text = (order)[`${prefix}AddressText`] as string | null | undefined;
   if (text && text.trim() !== '') {
     return text
       .split(/\r?\n/)
@@ -31,13 +31,13 @@ function buildAddressLines(order: any, kind: AddressKind): string[] {
       .filter(Boolean);
   }
 
-  const name = (order as any)[`${prefix}Name`] as string | null | undefined;
-  const addr1 = (order as any)[`${prefix}Address1`] as string | null | undefined;
-  const addr2 = (order as any)[`${prefix}Address2`] as string | null | undefined;
-  const city = (order as any)[`${prefix}City`] as string | null | undefined;
-  const state = (order as any)[`${prefix}State`] as string | null | undefined;
-  const postal = (order as any)[`${prefix}Postal`] as string | null | undefined;
-  const country = (order as any)[`${prefix}Country`] as string | null | undefined;
+  const name = (order)[`${prefix}Name`] as string | null | undefined;
+  const addr1 = (order)[`${prefix}Address1`] as string | null | undefined;
+  const addr2 = (order)[`${prefix}Address2`] as string | null | undefined;
+  const city = (order)[`${prefix}City`] as string | null | undefined;
+  const state = (order)[`${prefix}State`] as string | null | undefined;
+  const postal = (order)[`${prefix}Postal`] as string | null | undefined;
+  const country = (order)[`${prefix}Country`] as string | null | undefined;
 
   const lines: string[] = [];
   if (name) lines.push(name);
@@ -344,7 +344,7 @@ export default function OrderDetailPage(): React.ReactElement {
                       <div className="flex flex-col gap-0.5">
                         <div>
                           <span className="opacity-80">Carrier:</span>{' '}
-                          {((it as any).shipCarrierLabel ?? carrierLabel(it.shipCarrier)) || '—'}
+                          {((it).shipCarrierLabel ?? carrierLabel(it.shipCarrier)) || '—'}
                         </div>
                         <div className="truncate">
                           <span className="opacity-80">Tracking:</span>{' '}
