@@ -1,59 +1,67 @@
 // Client/src/pages/HomePage.tsx
 import React, { useEffect, useMemo, useState } from 'react';
-import AutoCarousel from '../components/media/AutoCarousel';
 import ProductCard from '../components/products/ProductCard';
-import { getFeaturedPhotos, getOnSaleProducts } from '../api/public';
+import { getOnSaleProducts, getShopNowProducts } from '../api/public';
 import CategoriesRow from '../components/categories/CategoriesRow';
 import BrandWordmark from '../common/BrandWordmark';
 
-
 const PAGE_SIZE = 12;
+const HOME_FETCH_LIMIT = PAGE_SIZE * 8;
 
 export default function HomePage(): React.ReactElement {
-  const [photos, setPhotos] = useState<string[] | null>(null);
+  const [shopNow, setShopNow] =
+    useState<Awaited<ReturnType<typeof getShopNowProducts>> | null>(null);
   const [onSale, setOnSale] =
     useState<Awaited<ReturnType<typeof getOnSaleProducts>> | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const [page, setPage] = useState(1);
-  const effectiveLimit = page * PAGE_SIZE;
+  const [shopPage, setShopPage] = useState(1);
+  const [salePage, setSalePage] = useState(1);
 
   const skeletonKeys = useMemo(() => {
+    const count = PAGE_SIZE;
+
     if (globalThis.crypto && 'randomUUID' in globalThis.crypto) {
-      return Array.from({ length: 6 }, () => globalThis.crypto.randomUUID());
+      return Array.from({ length: count }, () => globalThis.crypto.randomUUID());
     }
     if (globalThis.crypto && 'getRandomValues' in globalThis.crypto) {
-      return Array.from({ length: 6 }, () => {
+      return Array.from({ length: count }, () => {
         const buf = new Uint32Array(4);
         globalThis.crypto.getRandomValues(buf);
-        return Array.from(buf).map(n => n.toString(16).padStart(8, '0')).join('');
+        return Array.from(buf)
+          .map((n) => n.toString(16).padStart(8, '0'))
+          .join('');
       });
     }
     const base = Date.now().toString(36);
-    return Array.from({ length: 6 }, (_, i) => `sk-${base}-${i}`);
+    return Array.from({ length: count }, (_, i) => `sk-${base}-${i}`);
   }, []);
 
+  // Load Shop Now (non-sale) products once
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const fp = await getFeaturedPhotos();
+        const regular = await getShopNowProducts({ limit: HOME_FETCH_LIMIT });
         if (!alive) return;
-        setPhotos(fp);
+        setShopNow(regular);
       } catch (e: any) {
         if (!alive) return;
-        setPhotos([]);
+        setShopNow([]);
         setErr(e?.message || 'Failed to load content.');
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
+  // Load On Sale products once
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const sale = await getOnSaleProducts({ limit: effectiveLimit });
+        const sale = await getOnSaleProducts({ limit: HOME_FETCH_LIMIT });
         if (!alive) return;
         setOnSale(sale);
       } catch (e: any) {
@@ -62,56 +70,123 @@ export default function HomePage(): React.ReactElement {
         setErr(e?.message || 'Failed to load content.');
       }
     })();
-    return () => { alive = false; };
-  }, [effectiveLimit]);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
-  let heroContent: React.ReactNode;
-  if (photos === null) {
-    heroContent = (
-      <div
-        className="rounded-2xl border p-6 h-80 animate-pulse
-                   border-[var(--theme-border)] bg-[var(--theme-card)]"
-      >
-        <div className="h-full w-full bg-[var(--theme-surface)] rounded-xl" />
+  const visibleShopNow = useMemo(() => {
+    if (!shopNow) return [];
+    const start = (shopPage - 1) * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
+    return shopNow.slice(start, end);
+  }, [shopNow, shopPage]);
+
+  const visibleOnSale = useMemo(() => {
+    if (!onSale) return [];
+    const start = (salePage - 1) * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
+    return onSale.slice(start, end);
+  }, [onSale, salePage]);
+
+  const shopTotal = shopNow?.length ?? 0;
+  const shopTotalPages = Math.max(1, Math.ceil(shopTotal / PAGE_SIZE));
+
+  const saleTotal = onSale?.length ?? 0;
+  const saleTotalPages = Math.max(1, Math.ceil(saleTotal / PAGE_SIZE));
+
+  const canPrevShopNow = shopPage > 1;
+  const canPrevOnSale = salePage > 1;
+
+  const canNextShopNow = shopPage < shopTotalPages;
+  const canNextOnSale = salePage < saleTotalPages;
+
+  let shopNowContent: React.ReactNode;
+  if (shopNow === null) {
+    shopNowContent = (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {skeletonKeys.map((key) => (
+          <div
+            key={key}
+            className="rounded-2xl border p-4 animate-pulse
+                       border-[var(--theme-border)] bg-[var(--theme-card)]"
+          >
+            <div className="aspect-[4/3] w-full rounded-xl bg-[var(--theme-surface)]" />
+            <div className="mt-3 h-4 w-2/3 rounded bg-[var(--theme-surface)]" />
+            <div className="mt-2 h-4 w-1/3 rounded bg-[var(--theme-surface)]" />
+          </div>
+        ))}
       </div>
     );
-  } else if (photos.length === 0) {
-    heroContent = (
+  } else if (visibleShopNow.length === 0) {
+    shopNowContent = (
       <div
-        className="rounded-2xl border p-6 mt-12
+        className="rounded-2xl border p-6
                    border-[var(--theme-border)] bg-[var(--theme-card)]"
       >
-        <h2 className="text-lg font-semibold text-[var(--theme-text)]">
-          Welcome to Mineral Cache
-        </h2>
-        <p className="text-[var(--theme-muted)] text-sm">
-          No featured photos yet. Explore the{' '}
-          <a href="/products" className="underline">Shop</a>.
+        <p className="text-sm text-[var(--theme-muted)]">
+          No items on this page. Try the previous page.
         </p>
       </div>
     );
   } else {
-    heroContent = (
-      <AutoCarousel
-        images={photos.slice(0, 10)}
-        intervalMs={5000}
-        heightClass="h-[24rem] md:h-[32rem] lg:h-[40rem]"
-        ctaHref="/products"
-        ctaLabel="SHOP NOW"
-        ctaClassName="animate-bounce-3s"
-      />
+    shopNowContent = (
+      <>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {visibleShopNow.map((p) => (
+            <ProductCard
+              key={p.id}
+              id={p.id}
+              slug={p.slug}
+              name={p.name}
+              imageUrl={p.imageUrl || undefined}
+              price={p.price}
+              salePrice={p.salePrice ?? undefined}
+              vendorSlug={p.vendorSlug ?? undefined}
+              vendorName={p.vendorName ?? undefined}
+            />
+          ))}
+        </div>
+
+        {/* Shop Now Pagination */}
+        <div className="mt-4 flex items-center justify-between">
+          <div className="text-sm opacity-80">
+            Page {shopPage} / {shopTotalPages} · {shopTotal} results
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={!canPrevShopNow}
+              onClick={() => setShopPage((p) => Math.max(1, p - 1))}
+              className="rounded px-3 py-1 text-sm disabled:opacity-50"
+              style={{
+                background: 'var(--theme-surface)',
+                color: 'var(--theme-text)',
+                border: '1px solid var(--theme-border)',
+              }}
+              aria-label="Previous Shop Now page"
+            >
+              Prev
+            </button>
+            <button
+              type="button"
+              disabled={!canNextShopNow}
+              onClick={() => setShopPage((p) => p + 1)}
+              className="rounded px-3 py-1 text-sm disabled:opacity-50"
+              style={{
+                background: 'var(--theme-surface)',
+                color: 'var(--theme-text)',
+                border: '1px solid var(--theme-border)',
+              }}
+              aria-label="Next Shop Now page"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      </>
     );
   }
-
-  const visibleOnSale = useMemo(() => {
-    if (!onSale) return [];
-    const start = (page - 1) * PAGE_SIZE;
-    const end = start + PAGE_SIZE;
-    return onSale.slice(start, end);
-  }, [onSale, page]);
-
-  const canPrev = page > 1;
-  const canNext = (onSale?.length ?? 0) === effectiveLimit;
 
   let onSaleContent: React.ReactNode;
   if (onSale === null) {
@@ -160,42 +235,41 @@ export default function HomePage(): React.ReactElement {
           ))}
         </div>
 
+        {/* On Sale Pagination */}
         <div className="mt-4 flex items-center justify-between">
-          <button
-            type="button"
-            className="inline-flex rounded-xl px-4 py-2 font-semibold
-                       bg-[var(--theme-button)] text-[var(--theme-text-white)]
-                       hover:bg-[var(--theme-button-hover)]
-                       focus-visible:ring-2 focus-visible:ring-offset-2
-                       focus-visible:ring-[var(--theme-focus)]
-                       focus-visible:ring-offset-[var(--theme-surface)]
-                       disabled:opacity-80 shadow-[0_2px_5px_var(--theme-shadow-categories)]"
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={!canPrev}
-            aria-label="Previous page"
-          >
-            Prev
-          </button>
-
-          <span className="text-sm text-[var(--theme-muted)]" aria-live="polite" role="text">
-            Page {page}
-          </span>
-
-          <button
-            type="button"
-            className="inline-flex rounded-xl px-4 py-2 font-semibold
-                       bg-[var(--theme-button)] text-[var(--theme-text-white)]
-                       hover:bg-[var(--theme-button-hover)]
-                       focus-visible:ring-2 focus-visible:ring-offset-2
-                       focus-visible:ring-[var(--theme-focus)]
-                       focus-visible:ring-offset-[var(--theme-surface)]
-                       disabled:opacity-80 shadow-[0_2px_5px_var(--theme-shadow-categories)]"
-            onClick={() => setPage(p => p + 1)}
-            disabled={!canNext}
-            aria-label="Next page"
-          >
-            Next
-          </button>
+          <div className="text-sm opacity-80">
+            Page {salePage} / {saleTotalPages} · {saleTotal} results
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={!canPrevOnSale}
+              onClick={() => setSalePage((p) => Math.max(1, p - 1))}
+              className="rounded px-3 py-1 text-sm disabled:opacity-50"
+              style={{
+                background: 'var(--theme-surface)',
+                color: 'var(--theme-text)',
+                border: '1px solid var(--theme-border)',
+              }}
+              aria-label="Previous On Sale page"
+            >
+              Prev
+            </button>
+            <button
+              type="button"
+              disabled={!canNextOnSale}
+              onClick={() => setSalePage((p) => p + 1)}
+              className="rounded px-3 py-1 text-sm disabled:opacity-50"
+              style={{
+                background: 'var(--theme-surface)',
+                color: 'var(--theme-text)',
+                border: '1px solid var(--theme-border)',
+              }}
+              aria-label="Next On Sale page"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </>
     );
@@ -204,19 +278,52 @@ export default function HomePage(): React.ReactElement {
   return (
     <div className="space-y-12">
       <header className="mt-1 flex justify-center">
-        <BrandWordmark className="mx-auto h-auto w-full max-w-[900px] rounded-2xl mt-8 sm:mt-2 drop-shadow(0 1px 4px var(--theme-shadow-carousel))" />
-
+        <BrandWordmark className="mx-auto h-auto w-full max-w-[1200px] rounded-2xl mt-8 sm:mt-2 drop-shadow(0 1px 4px var(--theme-shadow-carousel))" />
       </header>
-
-      <section>{heroContent}</section>
 
       <section>
         <CategoriesRow />
       </section>
 
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2
+            className="
+              text-4xl font-extrabold
+              bg-gradient-to-r
+              from-[var(--theme-button-yellow)]
+              to-[var(--theme-card-number)]
+              bg-clip-text
+              text-transparent
+            "
+          >
+            Shop Now
+          </h2>
+          <a
+            href="/products"
+            className="text-sm underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
+          >
+            Browse all
+          </a>
+        </div>
+
+        {shopNowContent}
+      </section>
+
       <section className="space-y-3 mb-12">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-extrabold text-[var(--theme-text)]">On Sale</h2>
+          <h2
+            className="
+              text-4xl font-extrabold
+              bg-gradient-to-r
+              from-[var(--theme-button-yellow)]
+              to-[var(--theme-card-number)]
+              bg-clip-text
+              text-transparent
+            "
+          >
+            On Sale
+          </h2>
           <a
             href="/products"
             className="text-sm underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
