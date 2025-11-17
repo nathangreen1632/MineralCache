@@ -115,6 +115,16 @@ export async function getOnSaleProducts(opts?: { limit?: number }): Promise<OnSa
   return data.items;
 }
 
+export async function getShopNowProducts(opts?: { limit?: number }): Promise<OnSaleProduct[]> {
+  let qs = '';
+  if (opts && typeof opts.limit === 'number') {
+    qs = `?limit=${encodeURIComponent(opts.limit)}`;
+  }
+  const { data, error } = await get<ListResponse<OnSaleProduct[]>>(`/public/shop-now${qs}`);
+  if (error || !data || !Array.isArray(data.items)) return [];
+  return data.items;
+}
+
 export type PublicConfig = {
   commissionBps: number;
   minFeeCents: number;
