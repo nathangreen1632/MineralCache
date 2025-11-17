@@ -11,11 +11,6 @@ import {
 } from '../../validation/vendorOrders.schema.js';
 import { getEffectiveSettings } from '../../services/settings.service.js';
 
-/**
- * GET /api/vendor/orders
- * Returns orders that contain items belonging to the current vendor.
- * Response: { items: Array<{ id, status, totalCents, createdAt, updatedAt, items: [{id,title,qty,priceCents}] }> }
- */
 export async function listVendorOrders(req: Request, res: Response): Promise<void> {
   const vendorUser = (req as any).user ?? (req.session as any)?.user ?? null;
   const vendor = (req as any).vendor ?? null;
@@ -25,7 +20,6 @@ export async function listVendorOrders(req: Request, res: Response): Promise<voi
     return;
   }
 
-  // 1) Get this vendor's items (no explicit attributes -> avoid missing-column errors)
   const vendorItems = await OrderItem.findAll({
     where: { vendorId: Number(vendor.id) },
     order: [['orderId', 'DESC'], ['id', 'ASC']],
@@ -37,17 +31,29 @@ export async function listVendorOrders(req: Request, res: Response): Promise<voi
     return;
   }
 
-  // 2) Load parent orders
   const orderIds = Array.from(
     new Set(vendorItems.map((i: any) => Number(i.orderId)).filter(Boolean))
   );
+
   const orders = await Order.findAll({
     where: { id: { [Op.in]: orderIds } },
-    attributes: ['id', 'status', 'totalCents', 'createdAt', 'updatedAt'],
+    attributes: [
+      'id',
+      'status',
+      'totalCents',
+      'createdAt',
+      'updatedAt',
+      'shippingName',
+      'shippingAddress1',
+      'shippingAddress2',
+      'shippingCity',
+      'shippingState',
+      'shippingPostal',
+      'shippingCountry',
+    ],
     raw: true,
   });
 
-  // 3) Build result
   const orderMap = new Map<number, any>();
   for (const o of orders) {
     const id = Number((o as any).id);
@@ -57,7 +63,19 @@ export async function listVendorOrders(req: Request, res: Response): Promise<voi
       totalCents: (o as any).totalCents ?? 0,
       createdAt: (o as any).createdAt,
       updatedAt: (o as any).updatedAt,
-      items: [] as Array<{ id: number; title?: string | null; qty?: number | null; priceCents?: number | null }>,
+      shippingName: (o as any).shippingName ?? null,
+      shippingAddress1: (o as any).shippingAddress1 ?? null,
+      shippingAddress2: (o as any).shippingAddress2 ?? null,
+      shippingCity: (o as any).shippingCity ?? null,
+      shippingState: (o as any).shippingState ?? null,
+      shippingPostal: (o as any).shippingPostal ?? null,
+      shippingCountry: (o as any).shippingCountry ?? null,
+      items: [] as Array<{
+        id: number;
+        title?: string | null;
+        qty?: number | null;
+        priceCents?: number | null;
+      }>,
     });
   }
 
@@ -98,9 +116,6 @@ export async function listVendorOrders(req: Request, res: Response): Promise<voi
   res.json({ items: Array.from(orderMap.values()) });
 }
 
-/* ----------------------------- Packing Slip ----------------------------- */
-
-// Helper: safe parse comma separated ids
 function parseItemIds(raw?: string): number[] | null {
   if (!raw) return null;
   const parts = raw
@@ -121,7 +136,6 @@ function escapeHtml(s: string | null | undefined): string {
     .replaceAll("'", '&#039;');
 }
 
-// Build a simple printable HTML (no external CSS)
 function renderPackingSlipHTML(opts: {
   brandName: string;
   order: Order;
@@ -154,18 +168,17 @@ function renderPackingSlipHTML(opts: {
     )
     .join('');
 
-  // Prefer a preformatted shippingAddressText if present; fallback to individual fields
   let shipToHtml: string;
   if (shipToBlock && shipToBlock.trim() !== '') {
     shipToHtml = `<pre style="margin:0;white-space:pre-wrap">${escapeHtml(shipToBlock)}</pre>`;
   } else {
-    const shipToName = escapeHtml((order as any).shipName ?? buyer?.email ?? 'Unknown');
-    const addr1 = escapeHtml((order as any).shipAddress1 ?? '');
-    const addr2 = escapeHtml((order as any).shipAddress2 ?? '');
-    const city = escapeHtml((order as any).shipCity ?? '');
-    const state = escapeHtml((order as any).shipState ?? '');
-    const postal = escapeHtml((order as any).shipPostal ?? '');
-    const country = escapeHtml((order as any).shipCountry ?? 'USA');
+    const shipToName = escapeHtml((order as any).shippingName ?? buyer?.email ?? 'Unknown');
+    const addr1 = escapeHtml((order as any).shippingAddress1 ?? '');
+    const addr2 = escapeHtml((order as any).shippingAddress2 ?? '');
+    const city = escapeHtml((order as any).shippingCity ?? '');
+    const state = escapeHtml((order as any).shippingState ?? '');
+    const postal = escapeHtml((order as any).shippingPostal ?? '');
+    const country = escapeHtml((order as any).shippingCountry ?? 'USA');
     shipToHtml = [
       shipToName && `<div>${shipToName}</div>`,
       addr1 && `<div>${addr1}</div>`,
@@ -219,7 +232,9 @@ function renderPackingSlipHTML(opts: {
     </div>
     <div>
       <div style="font-weight:600;margin-bottom:6px;">Notes</div>
-      <div style="color:#374151;">Pack items carefully. Do not include prices.</div>
+      <div style="color:#374151;">Thank you for your order from <strong>${vendorName}</strong>, fulfilled on behalf of the <strong>${brandName}</strong> platform!</div>
+      <div style="color:#374151;">Your item(s) have been carefully packed and are on their way to join your collection!</div>
+      <div style="color:#374151;">Thank you for choosing us for your mineral and fossile needs - we look forward to serving you again on <strong>${brandName}</strong>!</div>
     </div>
   </section>
 
@@ -238,7 +253,7 @@ function renderPackingSlipHTML(opts: {
   </table>
 
   <footer style="margin-top:24px;color:#6b7280;font-size:12px;">
-    Generated by MineralCache • Do not include pricing in the box.
+    Generated by ${brandName} • Delivered by: <strong>${escapeHtml(vendorName)}</strong>.
   </footer>
 </body>
 </html>`;
@@ -246,12 +261,8 @@ function renderPackingSlipHTML(opts: {
 
 /**
  * GET /api/vendor/orders/:id/packing-slip
- * Produces a per-vendor packing slip for a given order.
- * Requires: requireVendor middleware; shows only this vendor's line items.
- * Optional: ?itemIds=1,2,3 to print a partial slip.
  */
 export async function getPackingSlipHtml(req: Request, res: Response): Promise<void> {
-  // Auth: requireVendor middleware attaches req.vendor
   const vendor = (req as any).vendor ?? null;
   const vendorId = Number(vendor?.id ?? 0);
   if (!vendorId) {
@@ -259,7 +270,6 @@ export async function getPackingSlipHtml(req: Request, res: Response): Promise<v
     return;
   }
 
-  // Params
   const p = vendorOrderIdParamSchema.safeParse(req.params);
   if (!p.success) {
     res.status(400).json({ error: 'Invalid order id' });
@@ -267,7 +277,6 @@ export async function getPackingSlipHtml(req: Request, res: Response): Promise<v
   }
   const orderId = p.data.id;
 
-  // Query
   const q = vendorPackingSlipQuerySchema.safeParse(req.query);
   if (!q.success) {
     res.status(400).json({ error: 'Invalid query' });
@@ -275,21 +284,18 @@ export async function getPackingSlipHtml(req: Request, res: Response): Promise<v
   }
   const selectedItemIds = parseItemIds(q.data.itemIds);
 
-  // DB sanity (for environments where db may be optional)
-  const sequelize = db.instance?.();
+  const sequelize = typeof db.instance === 'function' ? db.instance() : null;
   if (!sequelize) {
     res.status(500).json({ error: 'Database not configured' });
     return;
   }
 
-  // Fetch order and buyer
   const order = await Order.findByPk(orderId);
   if (!order) {
     res.status(404).json({ error: 'Order not found' });
     return;
   }
 
-  // Only items belonging to this vendor (optionally restricted to selected ids)
   const where: any = { orderId, vendorId };
   if (selectedItemIds) where.id = { [Op.in]: selectedItemIds };
 
@@ -311,7 +317,7 @@ export async function getPackingSlipHtml(req: Request, res: Response): Promise<v
     null;
 
   const html = renderPackingSlipHTML({
-    brandName: settings.brandName ?? 'Mineral Cache',
+    brandName: settings.brandName ?? 'MineralCache',
     order,
     buyer,
     vendorName:

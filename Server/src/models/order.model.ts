@@ -22,6 +22,15 @@ export type OrderAttributes = {
   commissionPct: number;
   commissionCents: number;
   vendorShippingJson: object | null;
+  shippingName: string | null;
+  shippingEmail: string | null;
+  shippingPhone: string | null;
+  shippingAddress1: string | null;
+  shippingAddress2: string | null;
+  shippingCity: string | null;
+  shippingState: string | null;
+  shippingPostal: string | null;
+  shippingCountry: string | null;
   paidAt: Date | null;
   failedAt: Date | null;
   refundedAt: Date | null;
@@ -47,6 +56,15 @@ export class Order
   declare commissionPct: number;
   declare commissionCents: number;
   declare vendorShippingJson: object | null;
+  declare shippingName: string | null;
+  declare shippingEmail: string | null;
+  declare shippingPhone: string | null;
+  declare shippingAddress1: string | null;
+  declare shippingAddress2: string | null;
+  declare shippingCity: string | null;
+  declare shippingState: string | null;
+  declare shippingPostal: string | null;
+  declare shippingCountry: string | null;
   declare paidAt: Date | null;
   declare failedAt: Date | null;
   declare refundedAt: Date | null;
@@ -65,7 +83,6 @@ if (!sequelize) {
     {
       id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true },
 
-      // 👇 maps buyerUserId (JS) -> userId (DB)
       buyerUserId: { type: DataTypes.BIGINT, allowNull: false, field: 'userId' },
 
       status: {
@@ -84,12 +101,33 @@ if (!sequelize) {
 
       paymentIntentId: { type: DataTypes.STRING(200), allowNull: true },
       subtotalCents: { type: DataTypes.INTEGER, allowNull: false, validate: { min: 0 } },
-      shippingCents: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, validate: { min: 0 } },
-      taxCents: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'tax_cents' },
+      shippingCents: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+        validate: { min: 0 },
+      },
+      taxCents: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+        field: 'tax_cents',
+      },
       totalCents: { type: DataTypes.INTEGER, allowNull: false, validate: { min: 0 } },
       commissionPct: { type: DataTypes.DECIMAL(6, 4), allowNull: false, defaultValue: 0.08 },
       commissionCents: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       vendorShippingJson: { type: DataTypes.JSONB, allowNull: true },
+
+      shippingName: { type: DataTypes.STRING(200), allowNull: true },
+      shippingEmail: { type: DataTypes.STRING(320), allowNull: true },
+      shippingPhone: { type: DataTypes.STRING(50), allowNull: true },
+      shippingAddress1: { type: DataTypes.STRING(200), allowNull: true },
+      shippingAddress2: { type: DataTypes.STRING(200), allowNull: true },
+      shippingCity: { type: DataTypes.STRING(120), allowNull: true },
+      shippingState: { type: DataTypes.STRING(120), allowNull: true },
+      shippingPostal: { type: DataTypes.STRING(40), allowNull: true },
+      shippingCountry: { type: DataTypes.STRING(2), allowNull: true },
+
       paidAt: { type: DataTypes.DATE, allowNull: true },
       failedAt: { type: DataTypes.DATE, allowNull: true },
       refundedAt: { type: DataTypes.DATE, allowNull: true },

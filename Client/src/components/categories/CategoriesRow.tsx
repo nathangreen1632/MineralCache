@@ -83,7 +83,19 @@ export default function CategoriesRow(): React.ReactElement {
       className="mx-auto max-w-8xl px-6 mt-8"
     >
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-2xl font-extrabold text-[var(--theme-text)]">Categories</h2>
+        <h2
+          className="
+            text-4xl font-extrabold
+            bg-gradient-to-r
+            from-[var(--theme-button-yellow)]
+            to-[var(--theme-card-number)]
+            bg-clip-text
+            text-transparent
+          "
+        >
+          Categories
+        </h2>
+
         <button
           type="button"
           aria-pressed={paused}

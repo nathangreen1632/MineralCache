@@ -3,13 +3,17 @@ import {
   listPublicCategories,
   getFeaturedPhotosCtrl,
   getOnSaleProductsCtrl,
-  listPublicProductsCtrl, getPublicConfigCtrl, getPublicProductCtrl,    // ← NEW
+  getShopNowProductsCtrl,
+  listPublicProductsCtrl,
+  getPublicConfigCtrl,
+  getPublicProductCtrl,
 } from '../controllers/public.controller.js';
 
 export const publicRouter: Router = Router();
 
 publicRouter.get('/featured-photos', getFeaturedPhotosCtrl);
 publicRouter.get('/on-sale', getOnSaleProductsCtrl);
+publicRouter.get('/shop-now', getShopNowProductsCtrl);
 publicRouter.get('/categories', listPublicCategories);
 
 // NEW: the endpoint your Category page calls

@@ -61,6 +61,117 @@ const numOrNull = (v: unknown) => {
   return null;
 };
 
+export async function getShopNowProductsCtrl(req: Request, res: Response) {
+  try {
+    const rawLimit = Number(req.query.limit);
+    let limit = 24;
+    if (Number.isFinite(rawLimit) && rawLimit > 0) {
+      limit = Math.min(rawLimit, 100);
+    }
+
+    const now = new Date();
+
+    const onSaleTrue = [
+      { salePriceCents: { [Op.ne]: null } },
+      { [Op.or]: [{ saleStartAt: null }, { saleStartAt: { [Op.lte]: now } }] },
+      { [Op.or]: [{ saleEndAt: null }, { saleEndAt: { [Op.gte]: now } }] },
+    ];
+
+    const imageInclude: any = {
+      model: ProductImage,
+      as: 'images',
+      attributes: ['v320Path', 'v800Path', 'v1600Path', 'origPath', 'isPrimary', 'sortOrder'],
+      separate: true,
+      limit: 1,
+      order: [['isPrimary', 'DESC'], ['sortOrder', 'ASC'], ['id', 'ASC']],
+    };
+
+    const rows = await Product.findAll({
+      where: {
+        archivedAt: { [Op.is]: null } as any,
+        [Op.not]: { [Op.and]: onSaleTrue },
+      },
+      include: [
+        imageInclude,
+        {
+          model: Vendor,
+          as: 'vendor',
+          attributes: ['id', 'slug', 'displayName'],
+          required: false,
+        },
+      ],
+      order: [['createdAt', 'DESC'], ['id', 'DESC']],
+      limit,
+    });
+
+    type Cover = {
+      v320Path?: string | null;
+      v800Path?: string | null;
+      v1600Path?: string | null;
+      origPath?: string | null;
+    };
+
+    const items = rows.map((p) => {
+      const j: any = p.toJSON();
+
+      let cover: Cover | undefined;
+      if (Array.isArray(j.images) && j.images.length > 0) {
+        const first = j.images[0];
+        if (first && typeof first === 'object') {
+          cover = first as Cover;
+        }
+      }
+
+      let rel: string | null = null;
+      for (const s of [cover?.v800Path, cover?.v320Path, cover?.v1600Path, cover?.origPath]) {
+        if (typeof s === 'string' && s.length > 0) {
+          rel = s;
+          break;
+        }
+      }
+
+      let imageUrl: string | null = null;
+      if (rel) {
+        imageUrl = toPublicUrl(rel);
+      }
+
+      let slugValue: string | null = null;
+      if (typeof j.slug === 'string' && j.slug.length > 0) {
+        slugValue = j.slug;
+      }
+
+      let nameValue: string | null = null;
+      if (typeof j.title === 'string' && j.title.length > 0) {
+        nameValue = j.title;
+      } else if (typeof j.name === 'string' && j.name.length > 0) {
+        nameValue = j.name;
+      }
+
+      // Convert from cents → dollars to match getOnSaleProductsSvc
+      let priceValue = 0;
+      if (j.priceCents != null) {
+        priceValue = Number(j.priceCents) / 100;
+      }
+
+      return {
+        id: Number(j.id),
+        slug: slugValue,
+        name: nameValue,
+        price: priceValue,
+        salePrice: null,
+        imageUrl,
+        vendorSlug: j.vendor?.slug ?? null,
+        vendorName: j.vendor?.displayName ?? null,
+      };
+    });
+
+    res.json({ items });
+  } catch (err: any) {
+    console.error('getShopNowProductsCtrl error:', err?.message || err);
+    res.status(500).json({ error: err?.message || 'Failed to load shop-now products' });
+  }
+}
+
 export async function listPublicProductsCtrl(req: Request, res: Response) {
   try {
     const idsParam = String(req.query.ids || '').trim();

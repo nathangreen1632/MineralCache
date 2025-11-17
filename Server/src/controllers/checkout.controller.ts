@@ -225,13 +225,60 @@ async function computeCartTotals(userId: number) {
 export async function createCheckoutIntent(req: Request, res: Response): Promise<void> {
   const u = (req as any).user ?? (req.session as any)?.user ?? null;
   if (!u?.id) {
-    res.status(401).json({ error: 'Unauthorized' });
+    res
+      .status(401)
+      .json({ error: 'Please sign in or create a MineralCache account to complete checkout.' });
     return;
   }
   if (!u.dobVerified18) {
-    res.status(403).json({ error: 'Age verification required', code: 'AGE_VERIFICATION_REQUIRED' });
+    res
+      .status(403)
+      .json({ error: 'Age verification required', code: 'AGE_VERIFICATION_REQUIRED' });
     return;
   }
+
+  const body = req.body ?? {};
+  const shipping = body.shipping ?? {};
+
+  const shippingName = typeof shipping.name === 'string' ? shipping.name.trim() : '';
+  const shippingEmail = typeof shipping.email === 'string' ? shipping.email.trim() : '';
+  const shippingPhone = typeof shipping.phone === 'string' ? shipping.phone.trim() : '';
+  const shippingAddress1 =
+    typeof shipping.address1 === 'string' ? shipping.address1.trim() : '';
+  const shippingAddress2 =
+    typeof shipping.address2 === 'string' ? shipping.address2.trim() : '';
+  const shippingCity = typeof shipping.city === 'string' ? shipping.city.trim() : '';
+  const shippingState = typeof shipping.state === 'string' ? shipping.state.trim() : '';
+  const shippingPostal =
+    typeof shipping.postal === 'string' ? shipping.postal.trim() : '';
+  const shippingCountry =
+    typeof shipping.country === 'string' ? shipping.country.trim().toUpperCase() : '';
+
+  if (
+    !shippingName ||
+    !shippingAddress1 ||
+    !shippingCity ||
+    !shippingState ||
+    !shippingPostal ||
+    !shippingCountry
+  ) {
+    res.status(400).json({ error: 'Missing required shipping fields' });
+    return;
+  }
+
+  const shippingForStripe = {
+    name: shippingName,
+    address: {
+      line1: shippingAddress1,
+      line2: shippingAddress2 || undefined,
+      city: shippingCity,
+      state: shippingState,
+      postal_code: shippingPostal,
+      country: shippingCountry,
+    },
+    phone: shippingPhone || undefined,
+  };
+
   const cartForGuard = await Cart.findOne({ where: { userId: Number(u.id) } });
   const cartItemsForGuard: Array<{ productId: number; quantity: number }> = Array.isArray(
     (cartForGuard as any)?.itemsJson
@@ -274,6 +321,7 @@ export async function createCheckoutIntent(req: Request, res: Response): Promise
     currency,
     metadata: meta,
     idempotencyKey,
+    shipping: shippingForStripe,
   });
   if (!result.ok) {
     res.status(503).json({ error: result.error || 'Failed to create PaymentIntent' });
@@ -318,6 +366,15 @@ export async function createCheckoutIntent(req: Request, res: Response): Promise
         commissionPct: pct,
         commissionCents: platformFeeCents,
         vendorShippingJson: totals.vendorShippingSnapshot,
+        shippingName,
+        shippingEmail,
+        shippingPhone,
+        shippingAddress1,
+        shippingAddress2,
+        shippingCity,
+        shippingState,
+        shippingPostal,
+        shippingCountry,
       },
       { transaction: t }
     );
@@ -352,3 +409,4 @@ export async function createCheckoutIntent(req: Request, res: Response): Promise
     vendorShippingSnapshot: totals.vendorShippingSnapshot,
   });
 }
+

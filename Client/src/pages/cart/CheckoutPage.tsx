@@ -1,15 +1,15 @@
 // Client/src/pages/cart/CheckoutPage.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { loadStripe } from '@stripe/stripe-js';
+import { loadStripe, type StripeCardElementOptions } from '@stripe/stripe-js';
 import { Elements, CardElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { getHealth } from '../../api/health';
 import { createCheckoutIntent } from '../../api/checkout';
 import { useCartTotals } from '../../hooks/useCartTotals';
 import { emit } from '../../lib/eventBus';
 import { EV_CART_CHANGED } from '../../lib/events';
-import CommissionPreview from "../../components/cart/CommissionPreview.tsx";
-import AcceptedCards from "../../components/payment/AcceptedCards.tsx";
+import CommissionPreview from '../../components/cart/CommissionPreview.tsx';
+import AcceptedCards from '../../components/payment/AcceptedCards.tsx';
 import { centsToUsd } from '../../utils/money.util';
 
 type LoadHealth =
@@ -18,6 +18,86 @@ type LoadHealth =
   | { kind: 'loaded'; enabled: boolean; ready: boolean }
   | { kind: 'error'; message: string };
 
+type ShippingForm = {
+  name: string;
+  email: string;
+  phone: string;
+  address1: string;
+  address2: string;
+  city: string;
+  state: string;
+  postal: string;
+  country: string;
+};
+
+function useCardElementStyle(): StripeCardElementOptions['style'] {
+  const [style, setStyle] = useState<StripeCardElementOptions['style']>({
+    base: {
+      color: '#ffffff',
+      iconColor: '#ffffff',
+      '::placeholder': { color: '#ffffff' },
+    },
+    invalid: {
+      color: '#df1b41',
+      iconColor: '#df1b41',
+    },
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const root = document.documentElement;
+    const body = document.body;
+
+    function refresh() {
+      const cs = getComputedStyle(root);
+      const psycho = (cs.getPropertyValue('--theme-psycho') || '').trim() || '#ffffff';
+      const error = (cs.getPropertyValue('--theme-error') || '').trim() || '#df1b41';
+
+      setStyle({
+        base: {
+          color: psycho,
+          iconColor: psycho,
+          '::placeholder': { color: psycho },
+        },
+        invalid: {
+          color: error,
+          iconColor: error,
+        },
+      });
+    }
+
+    refresh();
+
+    const rootObserver = new MutationObserver(() => {
+      refresh();
+    });
+
+    rootObserver.observe(root, {
+      attributes: true,
+      attributeFilter: ['class', 'data-theme'],
+    });
+
+    let bodyObserver: MutationObserver | undefined;
+    if (body) {
+      bodyObserver = new MutationObserver(() => {
+        refresh();
+      });
+      bodyObserver.observe(body, {
+        attributes: true,
+        attributeFilter: ['class', 'data-theme'],
+      });
+    }
+
+    return () => {
+      rootObserver.disconnect();
+      if (bodyObserver) bodyObserver.disconnect();
+    };
+  }, []);
+
+  return style;
+}
+
 function useStripePk(): { pk: string | null; error: string | null } {
   const pk = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY ?? null;
   if (typeof pk === 'string' && pk.trim().length > 0) return { pk, error: null };
@@ -25,10 +105,8 @@ function useStripePk(): { pk: string | null; error: string | null } {
 }
 
 export default function CheckoutPage(): React.ReactElement {
-  // Server-sourced totals with auto-refresh on cart/shipping changes
   const { state: totalsState } = useCartTotals();
 
-  // Stripe readiness from server /health
   const [health, setHealth] = useState<LoadHealth>({ kind: 'idle' });
   const [healthErr, setHealthErr] = useState<string | null>(null);
 
@@ -46,15 +124,20 @@ export default function CheckoutPage(): React.ReactElement {
       setHealth({ kind: 'loaded', enabled: data.stripe.enabled, ready: data.stripe.ready });
       setHealthErr(null);
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const { pk, error: pkErr } = useStripePk();
   const stripePromise = useMemo(() => (pk ? loadStripe(pk) : null), [pk]);
 
-  const card = { background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' } as const;
+  const card = {
+    background: 'var(--theme-surface)',
+    borderColor: 'var(--theme-border)',
+    color: 'var(--theme-text)',
+  } as const;
 
-  // Loading skeleton until BOTH totals and health are available
   const totalsLoading = totalsState.kind === 'idle' || totalsState.kind === 'loading';
   const healthLoading = health.kind === 'idle' || health.kind === 'loading';
 
@@ -89,7 +172,6 @@ export default function CheckoutPage(): React.ReactElement {
     );
   }
 
-  // Loaded:
   const total = totalsState.kind === 'loaded' ? totalsState.totalCents : 0;
 
   let disabledMsg: string | null = null;
@@ -115,7 +197,8 @@ export default function CheckoutPage(): React.ReactElement {
         {disabledMsg ? (
           <div className="rounded-xl border px-3 py-2 text-sm" style={card}>
             <p style={{ color: 'var(--theme-error)' }}>
-              {disabledMsg}{healthErr ? ` (${healthErr})` : ''}
+              {disabledMsg}
+              {healthErr ? ` (${healthErr})` : ''}
             </p>
           </div>
         ) : (
@@ -149,6 +232,27 @@ function CardForm({ totalCents }: Readonly<{ totalCents: number }>) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  const [shipping, setShipping] = useState<ShippingForm>({
+    name: '',
+    email: '',
+    phone: '',
+    address1: '',
+    address2: '',
+    city: '',
+    state: '',
+    postal: '',
+    country: 'US',
+  });
+
+  const cardElementStyle = useCardElementStyle();
+
+  function handleShippingChange(field: keyof ShippingForm) {
+    return (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      setShipping((prev) => ({ ...prev, [field]: value }));
+    };
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
@@ -158,22 +262,50 @@ function CardForm({ totalCents }: Readonly<{ totalCents: number }>) {
       return;
     }
 
+    if (
+      !shipping.name.trim() ||
+      !shipping.address1.trim() ||
+      !shipping.city.trim() ||
+      !shipping.state.trim() ||
+      !shipping.postal.trim() ||
+      !shipping.country.trim()
+    ) {
+      setMsg('Please fill in all required shipping fields.');
+      return;
+    }
+
     setBusy(true);
 
-    // 1) Ask server to compute totals & create PI + Order(pending_payment)
-    const { data, error, status } = await createCheckoutIntent();
+    const { data, error, status } = await createCheckoutIntent({
+      name: shipping.name.trim(),
+      email: shipping.email.trim(),
+      phone: shipping.phone.trim(),
+      address1: shipping.address1.trim(),
+      address2: shipping.address2.trim(),
+      city: shipping.city.trim(),
+      state: shipping.state.trim(),
+      postal: shipping.postal.trim(),
+      country: shipping.country.trim().toUpperCase(),
+    });
+
     if (status === 503) {
       setBusy(false);
       setMsg('Payments are currently unavailable. Please try again later.');
       return;
     }
+
+    if (status === 401 || error === 'Unauthorized') {
+      setBusy(false);
+      setMsg('Please sign in or create a MineralCache account before checking out.');
+      return;
+    }
+
     if (error || !data?.clientSecret) {
       setBusy(false);
       setMsg(error || 'Failed to start checkout.');
       return;
     }
 
-    // 2) Confirm card payment (handles 3DS when needed)
     const result = await stripe.confirmCardPayment(data.clientSecret, {
       payment_method: { card: elements.getElement(CardElement)! },
     });
@@ -185,32 +317,176 @@ function CardForm({ totalCents }: Readonly<{ totalCents: number }>) {
     }
 
     if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
-      // Success! Webhook will flip order -> paid and mark inventory.
       setBusy(false);
 
-      // Notify the rest of the app to refresh cart views (server likely cleared cart).
       emit(EV_CART_CHANGED);
 
       navigate('/orders/confirmation', { state: { amountCents: totalCents } });
       return;
     }
 
-    // Other statuses (processing, requires_payment_method, etc.)
     setBusy(false);
     setMsg(`Payment status: ${result.paymentIntent?.status || 'unknown'}`);
   }
 
-  const cardBox = { background: 'var(--theme-card)', borderColor: 'var(--theme-border)' } as const;
+  const cardBox = {
+    background: 'var(--theme-surface)',
+    borderColor: 'var(--theme-border)',
+    text: 'var(--theme-text)',
+  } as const;
 
   return (
     <form onSubmit={onSubmit} className="grid gap-4">
-      <div className="rounded-xl border p-3" style={cardBox}>
-        <CardElement options={{ hidePostalCode: true }} />
+      <div className="rounded-xl border p-4 grid gap-3" style={cardBox}>
+        <h2 className="text-sm font-semibold text-[var(--theme-text)]">Shipping address</h2>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-1">
+            <label className="text-xs" htmlFor="ship-name">
+              Full name
+            </label>
+            <input
+              id="ship-name"
+              type="text"
+              className="w-full rounded-xl border px-3 py-2 outline-none"
+              value={shipping.name}
+              onChange={handleShippingChange('name')}
+              required
+            />
+          </div>
+          <div className="grid gap-1">
+            <label className="text-xs" htmlFor="ship-email">
+              Email for receipts
+            </label>
+            <input
+              id="ship-email"
+              type="email"
+              className="w-full rounded-xl border px-3 py-2 outline-none"
+              value={shipping.email}
+              onChange={handleShippingChange('email')}
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-3">
+          <div className="grid gap-1">
+            <label className="text-xs" htmlFor="ship-phone">
+              Phone
+            </label>
+            <input
+              id="ship-phone"
+              type="tel"
+              className="w-full rounded-xl border px-3 py-2 outline-none"
+              value={shipping.phone}
+              onChange={handleShippingChange('phone')}
+              required
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-3">
+          <div className="grid gap-1">
+            <label className="text-xs" htmlFor="ship-address1">
+              Address line 1
+            </label>
+            <input
+              id="ship-address1"
+              type="text"
+              className="w-full rounded-xl border px-3 py-2 outline-none"
+              value={shipping.address1}
+              onChange={handleShippingChange('address1')}
+              required
+            />
+          </div>
+          <div className="grid gap-1">
+            <label className="text-xs" htmlFor="ship-address2">
+              Address line 2
+            </label>
+            <input
+              id="ship-address2"
+              type="text"
+              className="w-full rounded-xl border px-3 py-2 outline-none"
+              value={shipping.address2}
+              onChange={handleShippingChange('address2')}
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-1">
+            <label className="text-xs" htmlFor="ship-city">
+              City
+            </label>
+            <input
+              id="ship-city"
+              type="text"
+              className="w-full rounded-xl border px-3 py-2 outline-none"
+              value={shipping.city}
+              onChange={handleShippingChange('city')}
+              required
+            />
+          </div>
+          <div className="grid gap-1">
+            <label className="text-xs" htmlFor="ship-state">
+              State / Province
+            </label>
+            <input
+              id="ship-state"
+              type="text"
+              className="w-full rounded-xl border px-3 py-2 outline-none"
+              value={shipping.state}
+              onChange={handleShippingChange('state')}
+              required
+            />
+          </div>
+          <div className="grid gap-1">
+            <label className="text-xs" htmlFor="ship-postal">
+              Postal code
+            </label>
+            <input
+              id="ship-postal"
+              type="text"
+              className="w-full rounded-xl border px-3 py-2 outline-none"
+              value={shipping.postal}
+              onChange={handleShippingChange('postal')}
+              required
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-1">
+          <label className="text-xs" htmlFor="ship-country">
+            Country
+          </label>
+          <input
+            id="ship-country"
+            type="text"
+            className="w-full rounded-xl border px-3 py-2 outline-none"
+            value={shipping.country}
+            onChange={handleShippingChange('country')}
+            required
+          />
+        </div>
+      </div>
+
+      <div className="rounded-xl border p-3">
+        <span className="border-[var(--theme-border)]" style={cardBox}>
+          <label className="text-sm font-semibold text-[var(--theme-text)] mb-2 block" htmlFor="card-element">
+            Card number
+          </label>
+        </span>
+        <CardElement
+          id="card-element"
+          options={{
+            hidePostalCode: true,
+            style: cardElementStyle,
+          }}
+        />
       </div>
 
       <div className="mt-3">
-        <span className="text-xs"> Accepted Payment Methods:</span>{''}
-        <AcceptedCards size="sm" brands={['visa','mastercard','amex','discover']} />
+        <span className="text-xs"> Accepted Payment Methods:</span>{' '}
+        <AcceptedCards size="sm" brands={['visa', 'mastercard', 'amex', 'discover']} />
       </div>
 
       {msg ? (

@@ -10,6 +10,44 @@ type Load =
   | { kind: 'loaded'; order: GetOrderRes['item'] }
   | { kind: 'error'; message: string };
 
+type AddressKind = 'billing' | 'shipping';
+
+function buildAddressLines(order: any, kind: AddressKind): string[] {
+  if (!order) return [];
+  const prefix = kind === 'billing' ? 'billing' : 'shipping';
+
+  const text = (order)[`${prefix}AddressText`] as string | null | undefined;
+  if (text && text.trim() !== '') {
+    return text
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
+  const name = (order)[`${prefix}Name`] as string | null | undefined;
+  const addr1 = (order)[`${prefix}Address1`] as string | null | undefined;
+  const addr2 = (order)[`${prefix}Address2`] as string | null | undefined;
+  const city = (order)[`${prefix}City`] as string | null | undefined;
+  const state = (order)[`${prefix}State`] as string | null | undefined;
+  const postal = (order)[`${prefix}Postal`] as string | null | undefined;
+  const country = (order)[`${prefix}Country`] as string | null | undefined;
+
+  const lines: string[] = [];
+  if (name) lines.push(name);
+  if (addr1) lines.push(addr1);
+  if (addr2) lines.push(addr2);
+
+  const cityParts: string[] = [];
+  if (city) cityParts.push(city);
+  if (state) cityParts.push(state);
+  if (postal) cityParts.push(postal);
+  if (cityParts.length) lines.push(cityParts.join(', '));
+
+  if (country) lines.push(country);
+
+  return lines;
+}
+
 export default function Receipt(): React.ReactElement {
   const params = useParams();
   const id = Number(params.id);
@@ -65,6 +103,8 @@ export default function Receipt(): React.ReactElement {
 
   const o = state.order;
   const tax = (o as any).taxCents ?? 0;
+  const billingLines = buildAddressLines(o, 'billing');
+  const shippingLines = buildAddressLines(o, 'shipping');
 
   return (
     <section className="mx-auto max-w-6xl px-6 py-14 space-y-6 print:px-4 print:py-8">
@@ -104,6 +144,28 @@ export default function Receipt(): React.ReactElement {
           <span className="capitalize text-[var(--theme-success)] text-lg">{o.status.replace('_', ' ')}</span>
         </div>
       </div>
+
+      {(billingLines.length > 0 || shippingLines.length > 0) && (
+        <div className="rounded-2xl border p-6 grid gap-6 md:grid-cols-2" style={card}>
+          {billingLines.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide mb-1">Billing address</div>
+              <div className="text-sm opacity-80 whitespace-pre-line">
+                {billingLines.join('\n')}
+              </div>
+            </div>
+          )}
+
+          {shippingLines.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide mb-1">Shipping address</div>
+              <div className="text-sm opacity-80 whitespace-pre-line">
+                {shippingLines.join('\n')}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Line items */}
       <div className="rounded-2xl border overflow-x-auto" style={card}>
@@ -154,7 +216,6 @@ export default function Receipt(): React.ReactElement {
           <div>Subtotal</div>
           <div>{centsToUsd(o.subtotalCents)}</div>
         </div>
-        {/* Vendor shipping lines if present */}
         {Array.isArray((o as any).shippingVendors) && (o as any).shippingVendors.length > 0 ? (
           (o as any).shippingVendors.map(
             (v: { vendorId: number; vendorName?: string | null; label?: string | null; amountCents: number }): React.ReactElement => {

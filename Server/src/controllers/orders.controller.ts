@@ -38,6 +38,57 @@ function readOrderNumberSafe(order: any): string | null {
   return null;
 }
 
+function buildAddressLines(order: any, kind: 'billing' | 'shipping'): string[] {
+  const prefix = kind === 'billing' ? 'billing' : 'shipping';
+
+  const name = String(order?.[`${prefix}Name`] ?? '').trim();
+  const line1 = String(order?.[`${prefix}Address1`] ?? '').trim();
+  const line2 = String(order?.[`${prefix}Address2`] ?? '').trim();
+  const city = String(order?.[`${prefix}City`] ?? '').trim();
+  const state = String(order?.[`${prefix}State`] ?? '').trim();
+  const postal = String(order?.[`${prefix}Postal`] ?? '').trim();
+  const country = String(order?.[`${prefix}Country`] ?? '').trim();
+
+  const out: string[] = [];
+  if (name) out.push(name);
+  if (line1) out.push(line1);
+  if (line2) out.push(line2);
+
+  const cityParts: string[] = [];
+  if (city) cityParts.push(city);
+  if (state) cityParts.push(state);
+  if (postal) cityParts.push(postal);
+  const cityLine = cityParts.join(', ');
+  if (cityLine) out.push(cityLine);
+
+  if (country) out.push(country);
+
+  return out;
+}
+
+function buildAddressText(order: any, kind: 'billing' | 'shipping'): string | null {
+  const lines = buildAddressLines(order, kind);
+  if (!lines.length) return null;
+  return lines.join('\n');
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function buildAddressHtml(order: any, kind: 'billing' | 'shipping'): string {
+  const text = buildAddressText(order, kind);
+  if (!text) return '';
+  const lines = text.split(/\r?\n/);
+  return lines.map((line) => escapeHtml(line)).join('<br/>');
+}
+
+
 /** Read auth from either {auth} or {user}/{vendor} */
 function getAuth(req: Request): { userId: number | null; vendorId: number | null; isAdmin: boolean } {
   const auth = (req as any).auth as { userId?: number; vendorId?: number; role?: string } | undefined;
@@ -120,7 +171,6 @@ export async function listMyOrders(req: Request, res: Response): Promise<void> {
   res.json({ page, pageSize, total: count, items: out });
 }
 
-
 export async function getOrder(req: Request, res: Response): Promise<void> {
   const u = (req as any).user ?? (req.session as any)?.user ?? null;
   if (!u?.id) {
@@ -153,7 +203,6 @@ export async function getOrder(req: Request, res: Response): Promise<void> {
     : [];
   const vendorSlugById = new Map(vendors.map(v => [Number(v.id), String(v.slug)]));
 
-
   res.json({
     item: {
       id: Number(order.id),
@@ -164,11 +213,31 @@ export async function getOrder(req: Request, res: Response): Promise<void> {
       refundedAt: order.refundedAt,
       subtotalCents: order.subtotalCents,
       shippingCents: order.shippingCents,
-      taxCents: Number((order as any).taxCents ?? 0), // ✅ NEW
+      taxCents: Number((order as any).taxCents ?? 0),
       totalCents: order.totalCents,
       commissionPct: Number((order as any).commissionPct ?? 0),
       commissionCents: Number((order as any).commissionCents ?? 0),
       vendorShipping: (order as any).vendorShippingJson || {},
+
+      // NEW: billing + shipping fields (match your columns)
+      shippingName: (order as any).shippingName ?? null,
+      shippingAddress1: (order as any).shippingAddress1 ?? null,
+      shippingAddress2: (order as any).shippingAddress2 ?? null,
+      shippingCity: (order as any).shippingCity ?? null,
+      shippingState: (order as any).shippingState ?? null,
+      shippingPostal: (order as any).shippingPostal ?? null,
+      shippingCountry: (order as any).shippingCountry ?? null,
+      shippingAddressText: (order as any).shippingAddressText ?? null,
+
+      billingName: (order as any).billingName ?? null,
+      billingAddress1: (order as any).billingAddress1 ?? null,
+      billingAddress2: (order as any).billingAddress2 ?? null,
+      billingCity: (order as any).billingCity ?? null,
+      billingState: (order as any).billingState ?? null,
+      billingPostal: (order as any).billingPostal ?? null,
+      billingCountry: (order as any).billingCountry ?? null,
+      billingAddressText: (order as any).billingAddressText ?? null,
+
       items: items.map((i) => ({
         productId: Number(i.productId),
         vendorId: Number(i.vendorId),
@@ -183,7 +252,6 @@ export async function getOrder(req: Request, res: Response): Promise<void> {
         shippedAt: (i as any).shippedAt ?? null,
         deliveredAt: (i as any).deliveredAt ?? null,
       })),
-
     },
   });
 }
@@ -212,8 +280,14 @@ export async function markShipped(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const tracking = parsed.data.tracking && parsed.data.tracking.trim() !== '' ? parsed.data.tracking.trim() : null;
-  const itemFilterIds = parsed.data.itemIds && parsed.data.itemIds.length > 0 ? parsed.data.itemIds : null;
+  const tracking =
+    parsed.data.tracking && parsed.data.tracking.trim() !== ''
+      ? parsed.data.tracking.trim()
+      : null;
+  const itemFilterIds =
+    parsed.data.itemIds && parsed.data.itemIds.length > 0
+      ? parsed.data.itemIds
+      : null;
 
   const order = await Order.findByPk(orderId);
   if (!order) {
@@ -272,7 +346,7 @@ export async function markShipped(req: Request, res: Response): Promise<void> {
   res.json({
     ok: true,
     updated: items.map((i) => Number(i.id)),
-    orderStatus: (order as any).status
+    orderStatus: (order as any).status,
   });
 }
 
@@ -362,7 +436,7 @@ export async function markDelivered(req: Request, res: Response): Promise<void> 
         if (!Number.isFinite(dt.getTime())) continue;
         if (!latestDelivered || dt > latestDelivered) latestDelivered = dt;
       }
-
+      // ts-ignore: ignore commented code
       // const base = latestDelivered ?? now;
       // const holdUntil = new Date(base.getTime() + 3 * 24 * 60 * 60 * 1000);
       const holdUntil = now;
@@ -409,22 +483,22 @@ export async function getReceiptHtml(req: Request, res: Response): Promise<void>
   }
   const items = await OrderItem.findAll({ where: { orderId: order.id } });
 
-  const vendorIds = [...new Set(items.map(i => Number(i.vendorId)).filter(Number.isFinite))];
+  const vendorIds = [...new Set(items.map((i) => Number(i.vendorId)).filter(Number.isFinite))];
   const vendors = vendorIds.length
     ? await Vendor.findAll({ where: { id: { [Op.in]: vendorIds } }, attributes: ['id', 'slug'] })
     : [];
-  const vendorSlugById = new Map(vendors.map(v => [Number(v.id), String(v.slug)]));
+  const vendorSlugById = new Map(vendors.map((v) => [Number(v.id), String(v.slug)]));
 
   const rows = items
     .map((i) => {
       const qty = i.quantity;
       const unitCents = Number((i as any).unitPriceCents ?? 0);
       const slug = vendorSlugById.get(Number(i.vendorId)) ?? '';
-      const soldBy = slug ? `<div style="font-size:12px;opacity:.75">Sold by: ${slug}</div>` : '';
+      const soldBy = slug ? `<div style="font-size:12px;opacity:.75">Sold by: ${escapeHtml(slug)}</div>` : '';
       return `
     <tr>
       <td style="padding:8px;border-bottom:1px solid #eee">
-        <div>${i.title}</div>
+        <div>${escapeHtml(String(i.title))}</div>
         ${soldBy}
       </td>
       <td style="padding:8px;border-bottom:1px solid #eee">${qty}</td>
@@ -448,9 +522,7 @@ export async function getReceiptHtml(req: Request, res: Response): Promise<void>
   );
   const shippingCents = Number((order as any).shippingCents ?? 0);
   const taxCents = Number((order as any).taxCents ?? 0);
-  const totalCents = Number(
-    (order as any).totalCents ?? subtotalCents + shippingCents + taxCents,
-  );
+  const totalCents = Number((order as any).totalCents ?? subtotalCents + shippingCents + taxCents);
 
   const shippingHtml =
     shippingCents > 0
@@ -473,6 +545,28 @@ export async function getReceiptHtml(req: Request, res: Response): Promise<void>
   const orderNumber = readOrderNumberSafe(order);
   const orderNumText = orderNumber ? `#${orderNumber}` : `ID ${order.id}`;
 
+  const billingBlockHtml = buildAddressHtml(order, 'billing');
+  const shippingBlockHtml = buildAddressHtml(order, 'shipping');
+
+  const addressBlocks: string[] = [];
+  if (billingBlockHtml) {
+    addressBlocks.push(
+      `<div><div style="font-weight:600;margin-bottom:4px;">Billing address</div><div>${billingBlockHtml}</div></div>`,
+    );
+  }
+  if (shippingBlockHtml) {
+    addressBlocks.push(
+      `<div><div style="font-weight:600;margin-bottom:4px;">Shipping address</div><div>${shippingBlockHtml}</div></div>`,
+    );
+  }
+
+  const addressHtml =
+    addressBlocks.length > 0
+      ? `<section style="margin:16px 0 24px 0;display:flex;gap:40px;font-size:14px;">${addressBlocks.join(
+        '',
+      )}</section>`
+      : '';
+
   const html = `
     <!doctype html>
     <html lang="en">
@@ -480,6 +574,7 @@ export async function getReceiptHtml(req: Request, res: Response): Promise<void>
       <body style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
         <h1>Receipt ${orderNumText}</h1>
         <p>Date: ${new Date(order.createdAt).toLocaleString()}</p>
+        ${addressHtml}
         <table style="border-collapse:collapse;width:100%;max-width:720px">
           <thead>
             <tr>
@@ -495,7 +590,9 @@ export async function getReceiptHtml(req: Request, res: Response): Promise<void>
             <tr>
               <td></td>
               <td style="padding:8px;font-size:20px;text-align:right"><strong>Total</strong></td>
-              <td style="padding:8px;font-size:18px;text-align:right"><strong>${centsToUsd(totalCents)}</strong></td>
+              <td style="padding:8px;font-size:18px;text-align:right"><strong>${centsToUsd(
+    totalCents,
+  )}</strong></td>
             </tr>
           </tfoot>
         </table>
@@ -561,8 +658,11 @@ export async function getReceiptPdf(req: Request, res: Response): Promise<void> 
     (order as any).totalCents ?? subtotalCents + shippingCents + taxCents,
   );
 
-  const billingAddress = (order as any).billingAddressText ?? null;
-  const shippingAddress = (order as any).shippingAddressText ?? null;
+  const billingAddress =
+    (order as any).billingAddressText ?? buildAddressText(order, 'billing');
+  const shippingAddress =
+    (order as any).shippingAddressText ?? buildAddressText(order, 'shipping');
+  const orderNumber = readOrderNumberSafe(order);
 
   const data: ReceiptData = {
     orderId: id,
@@ -576,6 +676,8 @@ export async function getReceiptPdf(req: Request, res: Response): Promise<void> 
     shippingCents,
     taxCents,
     totalCents,
+    brandName: 'Mineral Cache',
+    orderNumber,
   };
 
   const pdf = await buildReceiptPdf(data);
