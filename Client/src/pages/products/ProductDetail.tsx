@@ -199,12 +199,6 @@ export default function ProductDetail(): React.ReactElement {
 
         {auctionId ? <AuctionPanel auctionId={auctionId} /> : null}
 
-        {/*{p.description && (*/}
-        {/*  <div className="whitespace-pre-wrap text-sm opacity-90 text-[var(--theme-text)]">*/}
-        {/*    {p.description}*/}
-        {/*  </div>*/}
-        {/*)}*/}
-
         <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
           <dt className="opacity-80">Size</dt>
           <dd>{sizeLabel(p)}</dd>
@@ -262,7 +256,7 @@ export default function ProductDetail(): React.ReactElement {
               borderColor: 'var(--theme-border)',
             }}
           >
-            Back to catalog
+            Back to Shop
           </Link>
         </div>
       </div>
