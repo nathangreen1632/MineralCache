@@ -14,6 +14,7 @@ import { ProductImage } from '../models/productImage.model.js';
 import { UPLOADS_PUBLIC_ROUTE } from './products.controller.js';
 import { AuctionLock } from '../models/auctionLock.model.js';
 import { Vendor } from '../models/vendor.model.js';
+import { Auction } from '../models/auction.model.js';
 
 function toPublicUrl(rel?: string | null): string | null {
   if (!rel) return null;
@@ -44,10 +45,21 @@ async function validateAvailability(productIds: number[], userId: number) {
   });
 
   const now = new Date();
+
+  const auctions = await Auction.findAll({
+    where: {
+      productId: { [Op.in]: productIds },
+      status: { [Op.in]: ['scheduled', 'live'] },
+    },
+    attributes: ['productId'],
+  });
+  const auctionProducts = new Set<number>(auctions.map((a: any) => Number(a.productId)));
+
   const locks = await AuctionLock.findAll({
     where: { productId: { [Op.in]: productIds }, status: 'active' },
     attributes: ['productId', 'userId', 'expiresAt'],
   });
+
 
   const lockByProduct = new Map<number, { userId: number; expiresAt: Date }>();
   for (const l of locks) {
@@ -59,6 +71,10 @@ async function validateAvailability(productIds: number[], userId: number) {
     const pid = Number(p.id);
     if ((p as any).archivedAt != null) {
       unavailable.push({ productId: pid, reason: 'archived' });
+      continue;
+    }
+    if (auctionProducts.has(pid)) {
+      unavailable.push({ productId: pid, reason: 'auction' });
       continue;
     }
     const lock = lockByProduct.get(pid);
