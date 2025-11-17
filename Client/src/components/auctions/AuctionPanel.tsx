@@ -188,7 +188,7 @@ export default function AuctionPanel({ auctionId }: Readonly<Props>): React.Reac
   return (
     <section
       className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-6 grid gap-4"
-      style={{ boxShadow: '0 10px 30px var(--theme-shadow)' }}
+      style={{ boxShadow: '0 3px 12px var(--theme-shadow-carousel)' }}
       aria-labelledby={`auction-panel-${auction.id}`}
     >
       <div className="flex items-baseline justify-between">
