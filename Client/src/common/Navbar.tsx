@@ -314,7 +314,7 @@ export default function Navbar(): React.ReactElement {
       )}
 
       <aside
-        className="hidden min-[1025px]:block w-64 shrink-0
+        className="hidden min-[1025px]:block w-72 shrink-0
                    border-r border-[var(--theme-border)]
                    bg-[var(--theme-surface)]
                    sticky top-0 h-screen overflow-y-auto
