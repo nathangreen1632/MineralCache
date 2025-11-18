@@ -31,6 +31,7 @@ export async function listVendorAppsSvc(
     where[Op.or] = [
       { displayName: { [Op.iLike]: like } },
       { slug: { [Op.iLike]: like } },
+      { '$owner.email$': { [Op.iLike]: like } },
     ];
   }
 
@@ -39,9 +40,23 @@ export async function listVendorAppsSvc(
     order: [['createdAt', 'DESC']],
     offset: (validPage - 1) * validSize,
     limit: validSize,
+    include: [
+      {
+        model: User,
+        as: 'owner',
+        attributes: ['id', 'email'],
+        required: false,
+      },
+    ],
   });
 
-  return { items: rows, total: count, page: validPage, pageSize: validSize };
+  const items = rows.map((vendor) => {
+    const json = vendor.toJSON() as any;
+    const owner = (vendor as any).owner as { email?: string | null } | undefined;
+    return { ...json, email: owner?.email ?? null };
+  });
+
+  return { items, total: count, page: validPage, pageSize: validSize };
 }
 
 export async function approveVendorSvc(id: number, adminUserId: number) {
