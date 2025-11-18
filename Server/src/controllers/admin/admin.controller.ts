@@ -80,7 +80,7 @@ export async function listVendorApps(req: Request, res: Response): Promise<void>
     const q = query.q;
     const status = query.status;
 
-    const out = await listVendorAppsSvc(page, pageSize, q, status);
+    const out = await listVendorAppsSvc(page, pageSize, q ?? null, status ?? null);
     res.json(out);
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error';
