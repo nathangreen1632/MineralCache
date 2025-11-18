@@ -14,6 +14,7 @@ import { Vendor } from '../models/vendor.model.js';
 
 import { placeBidTx, minimumAcceptableBid, endAuctionTx } from '../services/auction.service.js';
 import { bidBodySchema, bidParamsSchema } from '../validation/auctions.schema.js';
+import { centsToUsd } from '../utils/money.util.js';
 
 import { emitHighBid, emitOutbid, emitAuctionEnded } from '../sockets/emitters/auctions.emit.js';
 import { ensureAuctionTicker } from '../sockets/tickers/auctionTicker.js';
@@ -234,6 +235,33 @@ export async function getAuction(req: Request, res: Response): Promise<void> {
   res.json({ data });
 }
 
+export async function getMinimumBid(req: Request, res: Response): Promise<void> {
+  const id = parsePositiveInt((req.params as any)?.id);
+  if (id == null) {
+    res.status(400).json({ error: 'Invalid auction id' });
+    return;
+  }
+
+  const sequelize = db.instance();
+  if (!sequelize) {
+    res.status(503).json({ error: 'Database unavailable' });
+    return;
+  }
+
+  try {
+    const a = await Auction.findByPk(id);
+    if (!a) {
+      res.status(404).json({ error: 'Auction not found' });
+      return;
+    }
+
+    const minNextBidCents = minimumAcceptableBid(a);
+    res.json({ minNextBidCents });
+  } catch {
+    res.status(500).json({ error: 'Failed to compute minimum bid' });
+  }
+}
+
 export async function placeBid(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
   if (!ensureAdult(req, res)) return;
@@ -279,7 +307,7 @@ export async function placeBid(req: Request, res: Response): Promise<void> {
 
       const minAcceptable = minimumAcceptableBid(a);
       if (amountCents < minAcceptable) {
-        return { ok: false as const, error: `Bid must be at least ${minAcceptable}` };
+        return { ok: false as const, error: `Bid must be at least ${centsToUsd(minAcceptable)}` };
       }
 
       const userId = Number((req as any).user.id);
