@@ -2,18 +2,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getAuction, getMinimumBid, placeBid, type AuctionDto } from '../../api/auctions';
 import { useAuthStore } from '../../stores/useAuthStore';
-import { joinRoom, leaveRoom, on, off } from '../../lib/socket';
+import { getSocket, on, off } from '../../lib/socket';
 import { centsToUsd } from '../../utils/money.util';
 
 type Props = { auctionId: number };
 
-// Server event payloads we listen for
-type TickPayload = { now: string; endsAt: string; remainingSec: number };
-type LeadPayload = { highBidCents: number; highBidder?: string | null; minNextBidCents: number };
+type TickPayload = { auctionId: number; msRemaining: number };
+type HighBidPayload = {
+  auctionId: number;
+  highBidCents: number;
+  leaderUserId: number;
+  minNextBidCents: number;
+};
+type OutbidPayload = { auctionId: number; outbidUserId: number };
 
-// Extend the DTO with optional view fields we display live via socket updates
 type AuctionView = AuctionDto & {
-  highBidder?: string | null;
   minNextBidCents?: number | null;
 };
 
@@ -32,14 +35,13 @@ export default function AuctionPanel({ auctionId }: Readonly<Props>): React.Reac
   async function hydrate() {
     setMsg(null);
 
-    // Your lib/api get() returns { data, error }
     const { data, error } = await getAuction(auctionId);
     if (error || !data?.data) {
       setMsg(error || 'Auction not found');
       return;
     }
 
-    const a = data.data; // AuctionDto
+    const a = data.data as AuctionView;
     setAuction(a);
 
     const min = await getMinimumBid(auctionId);
@@ -47,7 +49,6 @@ export default function AuctionPanel({ auctionId }: Readonly<Props>): React.Reac
       setMinNext(min.data.minNextBidCents);
     }
 
-    // Local fallback timer from endAt (DTO field)
     const endsMs = a.endAt ? new Date(a.endAt).getTime() : Date.now();
     const tick = () => {
       const now = Date.now();
@@ -62,43 +63,43 @@ export default function AuctionPanel({ auctionId }: Readonly<Props>): React.Reac
   useEffect(() => {
     void hydrate();
 
-    const room = `auction:${auctionId}`;
-    joinRoom(room);
+    const socket = getSocket();
+    socket.emit('auction:join', { auctionId });
 
-    // Server tick (authoritative)
     const onTick = (p: TickPayload) => {
-      if (typeof p?.remainingSec === 'number') {
-        setRemainingSec(Math.max(0, Math.trunc(p.remainingSec)));
-      }
+      if (!p || p.auctionId !== auctionId) return;
+      setRemainingSec(Math.max(0, Math.trunc(p.msRemaining / 1000)));
     };
 
-    const onLead = (p: LeadPayload) => {
-      setAuction((prev: AuctionView | null) => {
+    const onHighBid = (p: HighBidPayload) => {
+      if (!p || p.auctionId !== auctionId) return;
+      setAuction((prev) => {
         if (!prev) return prev;
         return {
           ...prev,
           highBidCents: p.highBidCents,
-          highBidder: p.highBidder ?? prev.highBidder,
+          highBidUserId: p.leaderUserId,
           minNextBidCents: p.minNextBidCents,
         };
       });
       setMinNext(p.minNextBidCents);
     };
 
-    const onOutbid = () => {
+    const onOutbid = (p: OutbidPayload) => {
+      if (!p || p.auctionId !== auctionId) return;
       setMsg('You were outbid.');
       window.setTimeout(() => setMsg(null), 3000);
     };
 
-    on<TickPayload>(`auction:${auctionId}:tick`, onTick);
-    on<LeadPayload>(`auction:${auctionId}:lead`, onLead);
-    on(`auction:${auctionId}:outbid`, onOutbid);
+    on<TickPayload>('auction:tick', onTick);
+    on<HighBidPayload>('auction:high-bid', onHighBid);
+    on<OutbidPayload>('auction:outbid', onOutbid);
 
     return () => {
-      leaveRoom(room);
-      off(`auction:${auctionId}:tick`, onTick as any);
-      off(`auction:${auctionId}:lead`, onLead as any);
-      off(`auction:${auctionId}:outbid`, onOutbid as any);
+      socket.emit('auction:leave', { auctionId });
+      off('auction:tick', onTick as any);
+      off('auction:high-bid', onHighBid as any);
+      off('auction:outbid', onOutbid as any);
       if (intervalRef.current) window.clearInterval(intervalRef.current);
     };
   }, [auctionId]);
@@ -118,17 +119,19 @@ export default function AuctionPanel({ auctionId }: Readonly<Props>): React.Reac
     return parts.join(' ');
   }
 
-  const minUsdHint = useMemo(
-    () => centsToUsd(minNext ?? auction?.minNextBidCents ?? auction?.highBidCents ?? 0),
-    [minNext, auction]
-  );
+  const minUsdHint = useMemo(() => {
+    const baseCents =
+      minNext ??
+      auction?.minNextBidCents ??
+      (auction?.highBidCents ?? (auction?.startingBidCents ?? 0));
+    return centsToUsd(baseCents);
+  }, [minNext, auction]);
 
   async function submitBid(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setMsg(null);
 
-    // Parse USD input → cents
     const raw = inputUsd.trim();
     let cents = 0;
     if (raw !== '') {
@@ -146,14 +149,17 @@ export default function AuctionPanel({ auctionId }: Readonly<Props>): React.Reac
       return;
     }
 
-    const minCents = minNext ?? auction?.minNextBidCents ?? 0;
+    const minCents =
+      minNext ??
+      auction?.minNextBidCents ??
+      (auction?.highBidCents ?? (auction?.startingBidCents ?? 0));
+
     if (cents < minCents) {
       setBusy(false);
       setMsg(`Bid must be at least ${centsToUsd(minCents)}`);
       return;
     }
 
-    // Your API wrapper returns { data, error }
     const res = await placeBid({ auctionId, amountCents: cents });
     setBusy(false);
 
@@ -162,12 +168,25 @@ export default function AuctionPanel({ auctionId }: Readonly<Props>): React.Reac
       return;
     }
 
-    // optimistic clear + success note
+    const payload = res.data.data;
+    if (payload) {
+      setAuction((prev) =>
+        prev
+          ? {
+            ...prev,
+            highBidCents: payload.highBidCents,
+            highBidUserId: payload.leaderUserId,
+            minNextBidCents: payload.minNextBidCents,
+          }
+          : prev
+      );
+      setMinNext(payload.minNextBidCents);
+    }
+
     setInputUsd('');
     setMsg('Bid placed!');
     window.setTimeout(() => setMsg(null), 2000);
 
-    // Refresh minimum
     const min = await getMinimumBid(auctionId);
     if (!min.error && min.data?.minNextBidCents != null) {
       setMinNext(min.data.minNextBidCents);
@@ -192,7 +211,9 @@ export default function AuctionPanel({ auctionId }: Readonly<Props>): React.Reac
       aria-labelledby={`auction-panel-${auction.id}`}
     >
       <div className="flex items-baseline justify-between">
-        <h2 id={`auction-panel-${auction.id}`} className="text-lg font-semibold">Live Auction</h2>
+        <h2 id={`auction-panel-${auction.id}`} className="text-lg font-semibold">
+          Live Auction
+        </h2>
         <div className="text-sm opacity-80">
           Ends in: <span aria-live="polite">{formattedRemaining()}</span>
         </div>
@@ -201,12 +222,11 @@ export default function AuctionPanel({ auctionId }: Readonly<Props>): React.Reac
       <div className="grid grid-cols-2 gap-4">
         <div className="rounded-xl border border-[var(--theme-border)] p-4">
           <div className="text-xs opacity-70">Current high bid</div>
-          <div className="text-2xl font-bold">{centsToUsd(auction.highBidCents)}</div>
-          {auction.highBidder ? <div className="text-xs opacity-70 mt-1">by {auction.highBidder}</div> : null}
+          <div className="text-2xl font-bold text-[var(--theme-success)]">{centsToUsd(auction.highBidCents)}</div>
         </div>
         <div className="rounded-xl border border-[var(--theme-border)] p-4">
           <div className="text-xs opacity-70">Minimum next bid</div>
-          <div className="text-xl font-semibold">{minUsdHint}</div>
+          <div className="text-xl font-semibold text-[var(--theme-success)]">{minUsdHint}</div>
         </div>
       </div>
 
@@ -240,7 +260,7 @@ export default function AuctionPanel({ auctionId }: Readonly<Props>): React.Reac
           >
             Place bid
           </button>
-          {msg ? <div className="text-sm">{msg}</div> : null}
+          {msg ? <div className="text-base">{msg}</div> : null}
         </div>
       </form>
     </section>
