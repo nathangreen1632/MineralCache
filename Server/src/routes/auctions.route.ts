@@ -5,13 +5,15 @@ import { require18Plus } from '../middleware/ageGate.middleware.js';
 import { validateBody, validateParams } from '../middleware/validate.middleware.js';
 import { bidBodySchema, bidParamsSchema, createAuctionBodySchema } from '../validation/auctions.schema.js';
 import { createAuction, watchAuction, unwatchAuction, closeAuction, cancelAuction } from '../controllers/auctionsReadWrite.controller.js';
-import { buyNow, placeBid, listAuctions, getAuction } from '../controllers/auctions.controller.js';
+import { buyNow, placeBid, listAuctions, getAuction, getMinimumBid } from '../controllers/auctions.controller.js';
+
 import { biddingRateLimit } from '../middleware/rateLimit.middleware.js';
 
 const router: Router = Router();
 
 // Public reads
 router.get('/', listAuctions);
+router.get('/:id/minimum', validateParams(bidParamsSchema), getMinimumBid);
 router.get('/:id', validateParams(bidParamsSchema), getAuction);
 
 // Vendor create (auth required; 18+ not required for creating)
