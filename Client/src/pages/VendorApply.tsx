@@ -18,7 +18,7 @@ const ApplySchema = z.object({
     .optional()
     .nullable()
     .transform((v) => (v === '' ? null : v ?? null))
-    .refine((v) => v == null || z.string().url().safeParse(v).success, { message: 'Invalid URL.' }),
+    .refine((v) => v == null || z.url().safeParse(v).success, { message: 'Invalid URL.' }),
   country: z
     .string()
     .optional()
@@ -273,6 +273,7 @@ export default function VendorApply(): React.ReactElement {
               className={fieldClass(Boolean(errors.displayName))}
               value={form.displayName}
               onChange={(e) => setField('displayName', e.target.value)}
+              required
               placeholder="e.g., Desert Gems"
               maxLength={120}
             />
@@ -295,6 +296,7 @@ export default function VendorApply(): React.ReactElement {
               className={fieldClass(Boolean(errors.bio))}
               value={form.bio ?? ''}
               onChange={(e) => setField('bio', e.target.value)}
+              required
               rows={4}
               placeholder="Tell buyers about your specialization, locality focus, etc."
               maxLength={5000}
@@ -341,6 +343,7 @@ export default function VendorApply(): React.ReactElement {
                 className={fieldClass(Boolean(errors.country))}
                 value={form.country ?? ''}
                 onChange={(e) => setField('country', e.target.value.toUpperCase() as any)}
+                required
                 placeholder="US, GB, FR, etc."
                 maxLength={3}
               />
