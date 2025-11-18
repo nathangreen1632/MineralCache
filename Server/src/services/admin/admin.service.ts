@@ -9,19 +9,54 @@ import {
 } from '../stripe.service.js';
 import { log } from '../log.service.js';
 
-export async function listVendorAppsSvc(page: number, pageSize: number) {
+export async function listVendorAppsSvc(
+  page: number,
+  pageSize: number,
+  q?: string | null,
+  status?: 'pending' | 'approved' | 'rejected' | null
+) {
   const validPage = Number.isFinite(page) && page > 0 ? page : 1;
   const validSize =
     Number.isFinite(pageSize) && pageSize > 0 && pageSize <= 100 ? pageSize : 20;
 
+  const where: any = {};
+
+  if (status) {
+    where.approvalStatus = status;
+  }
+
+  const trimmed = q?.trim();
+  if (trimmed) {
+    const like = `%${trimmed}%`;
+    where[Op.or] = [
+      { displayName: { [Op.iLike]: like } },
+      { slug: { [Op.iLike]: like } },
+      { '$owner.email$': { [Op.iLike]: like } },
+    ];
+  }
+
   const { rows, count } = await Vendor.findAndCountAll({
-    where: { approvalStatus: { [Op.in]: ['pending', 'rejected'] } },
+    where,
     order: [['createdAt', 'DESC']],
     offset: (validPage - 1) * validSize,
     limit: validSize,
+    include: [
+      {
+        model: User,
+        as: 'owner',
+        attributes: ['id', 'email'],
+        required: false,
+      },
+    ],
   });
 
-  return { items: rows, total: count, page: validPage, pageSize: validSize };
+  const items = rows.map((vendor) => {
+    const json = vendor.toJSON() as any;
+    const owner = (vendor as any).owner as { email?: string | null } | undefined;
+    return { ...json, email: owner?.email ?? null };
+  });
+
+  return { items, total: count, page: validPage, pageSize: validSize };
 }
 
 export async function approveVendorSvc(id: number, adminUserId: number) {

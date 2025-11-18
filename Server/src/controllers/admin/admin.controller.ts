@@ -68,13 +68,23 @@ export async function patchAdminSettings(req: Request, res: Response): Promise<v
 
 export async function listVendorApps(req: Request, res: Response): Promise<void> {
   try {
-    const page = Number(req.query.page || 1);
-    const pageSize = Number(req.query.pageSize || 20);
-    const out = await listVendorAppsSvc(page, pageSize);
+    const query = (res.locals as any).query as {
+      page: number;
+      pageSize: number;
+      q?: string;
+      status?: 'pending' | 'approved' | 'rejected';
+    };
+
+    const page = query.page;
+    const pageSize = query.pageSize;
+    const q = query.q;
+    const status = query.status;
+
+    const out = await listVendorAppsSvc(page, pageSize, q ?? null, status ?? null);
     res.json(out);
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error';
-    res.status(500).json({ error: 'Failed to load applications', detail: message });
+    res.status(500).json({ error: 'Failed to list vendor apps', detail: message });
   }
 }
 

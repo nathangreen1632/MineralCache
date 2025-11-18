@@ -1,10 +1,9 @@
 // Client/src/pages/VendorApply.tsx
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { z } from 'zod';
-import { applyVendor, getMyVendorFull } from '../api/vendor'; // ✅ added
-import { useAuthStore } from '../stores/useAuthStore'; // ✅ added
+import { applyVendor, getMyVendorFull } from '../api/vendor';
+import { useAuthStore } from '../stores/useAuthStore';
 
-// Mirror of server ApplySchema (client-side, non-deprecated Zod)
 const ApplySchema = z.object({
   displayName: z.string().min(2, 'Please enter at least 2 characters.').max(120, 'Max 120 chars.'),
   bio: z
@@ -19,7 +18,7 @@ const ApplySchema = z.object({
     .optional()
     .nullable()
     .transform((v) => (v === '' ? null : v ?? null))
-    .refine((v) => v == null || z.string().url().safeParse(v).success, { message: 'Invalid URL.' }),
+    .refine((v) => v == null || z.url().safeParse(v).success, { message: 'Invalid URL.' }),
   country: z
     .string()
     .optional()
@@ -35,6 +34,13 @@ type FormState =
   | { kind: 'submitting' }
   | { kind: 'submitted'; vendorId: number; status: 'pending' | 'approved' | 'rejected' }
   | { kind: 'error'; message: string; fieldErrors?: Record<string, string> };
+
+type ExistingVendor =
+  | {
+  status: 'pending' | 'approved' | 'rejected';
+  rejectedReason: string | null;
+}
+  | null;
 
 function fieldClass(invalid?: boolean): string {
   const base =
@@ -52,16 +58,17 @@ export default function VendorApply(): React.ReactElement {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [state, setState] = useState<FormState>({ kind: 'idle' });
+  const [existingVendor, setExistingVendor] = useState<ExistingVendor>(null);
 
   const hasErrors = useMemo(() => Object.keys(errors).length > 0, [errors]);
 
-  const me = useAuthStore((s) => s.me); // ✅ hydrate session after approval
+  const me = useAuthStore((s) => s.me);
+  const user = useAuthStore((s) => s.user);
 
   function setField<K extends keyof FormData>(key: K, value: FormData[K]) {
     const next = { ...form, [key]: value };
     setForm(next);
 
-    // live-validate to show inline messages
     const parsed = ApplySchema.safeParse(next);
     if (parsed.success) {
       setErrors({});
@@ -93,7 +100,6 @@ export default function VendorApply(): React.ReactElement {
     try {
       const result = await applyVendor(parsed.data);
 
-      // Server returns either {ok:true,...} or {ok:false, code?, message?, ...}
       if ((result as any).ok === false) {
         const fe: Record<string, string> = {};
         if ((result as any).code === 'SLUG_TAKEN') {
@@ -131,19 +137,43 @@ export default function VendorApply(): React.ReactElement {
     }
   }
 
-  // ✅ Poll for approval and unlock vendor features automatically
   const checkStatusNow = useCallback(async () => {
     try {
       const res = await getMyVendorFull();
-      const vendor = (res as any)?.vendor ?? res;
+      const payload = (res as any)?.data ?? res;
+      const vendor = (payload)?.vendor ?? null;
       if (vendor?.approvalStatus === 'approved') {
-        await me(); // refresh session: role -> 'vendor', vendorId set
+        await me();
         window.location.href = '/vendor/dashboard';
       }
     } catch {
-      // ignore transient errors
     }
   }, [me]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadExistingVendor() {
+      try {
+        const res = await getMyVendorFull();
+        const payload = (res as any)?.data ?? res;
+        const vendor = (payload)?.vendor ?? null;
+        if (!vendor || cancelled) return;
+        setExistingVendor({
+          status: vendor.approvalStatus,
+          rejectedReason: vendor.rejectedReason ?? null,
+        });
+      } catch {
+        if (!cancelled) setExistingVendor(null);
+      }
+    }
+
+    void loadExistingVendor();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (state.kind !== 'submitted') return;
@@ -153,7 +183,7 @@ export default function VendorApply(): React.ReactElement {
     async function loop() {
       await checkStatusNow();
       if (!cancelled) {
-        timer = setTimeout(loop, 5000); // poll every 5s until approved
+        timer = setTimeout(loop, 5000);
       }
     }
 
@@ -172,6 +202,35 @@ export default function VendorApply(): React.ReactElement {
         Vendor application
       </h1>
 
+      <div
+        className="mb-4 rounded-md border p-3"
+        style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-card-alt)' }}
+      >
+        <p className="text-sm" style={{ color: 'var(--theme-text)' }}>
+          Account email:{' '}
+          <span className="font-mono break-all text-[var(--theme-link)]">
+            {user?.email ?? 'Unknown'}
+          </span>
+        </p>
+      </div>
+
+      {existingVendor?.status === 'rejected' && !submitted && (
+        <div
+          className="mb-4 rounded-md border p-3"
+          style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-card-alt)' }}
+        >
+          <p className="text-sm" style={{ color: 'var(--theme-psycho)' }}>
+            Your previous vendor application was <strong>rejected</strong>.
+            {existingVendor.rejectedReason ? (
+              <>
+                {' '}Reason:{' '}
+                <em><span className="text-[var(--theme-error)] text-lg">{existingVendor.rejectedReason}</span></em>
+              </>
+            ) : null}
+          </p>
+        </div>
+      )}
+
       {submitted ? (
         <div
           className="rounded-lg border p-4"
@@ -181,7 +240,6 @@ export default function VendorApply(): React.ReactElement {
             Thanks! Your application is <strong>{state.status}</strong>.
           </p>
 
-          {/* ✅ Let the user manually check status while waiting */}
           {state.status === 'pending' && (
             <button
               type="button"
@@ -204,7 +262,10 @@ export default function VendorApply(): React.ReactElement {
       ) : (
         <form onSubmit={onSubmit} className="space-y-5">
           <div>
-            <label htmlFor="displayName" className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
+            <label
+              htmlFor="displayName"
+              className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+            >
               Display name
             </label>
             <input
@@ -212,6 +273,7 @@ export default function VendorApply(): React.ReactElement {
               className={fieldClass(Boolean(errors.displayName))}
               value={form.displayName}
               onChange={(e) => setField('displayName', e.target.value)}
+              required
               placeholder="e.g., Desert Gems"
               maxLength={120}
             />
@@ -223,12 +285,18 @@ export default function VendorApply(): React.ReactElement {
           </div>
 
           <div>
-            <label htmlFor="bio" className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Bio</label>
+            <label
+              htmlFor="bio"
+              className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+            >
+              Bio
+            </label>
             <textarea
               id="bio"
               className={fieldClass(Boolean(errors.bio))}
               value={form.bio ?? ''}
               onChange={(e) => setField('bio', e.target.value)}
+              required
               rows={4}
               placeholder="Tell buyers about your specialization, locality focus, etc."
               maxLength={5000}
@@ -242,8 +310,11 @@ export default function VendorApply(): React.ReactElement {
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <label htmlFor="logoUrl" className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
-                Logo URL
+              <label
+                htmlFor="logoUrl"
+                className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+              >
+                Logo URL (beta)
               </label>
               <input
                 id="logoUrl"
@@ -261,7 +332,10 @@ export default function VendorApply(): React.ReactElement {
             </div>
 
             <div>
-              <label htmlFor="country" className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
+              <label
+                htmlFor="country"
+                className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+              >
                 Country
               </label>
               <input
@@ -269,6 +343,7 @@ export default function VendorApply(): React.ReactElement {
                 className={fieldClass(Boolean(errors.country))}
                 value={form.country ?? ''}
                 onChange={(e) => setField('country', e.target.value.toUpperCase() as any)}
+                required
                 placeholder="US, GB, FR, etc."
                 maxLength={3}
               />
