@@ -20,19 +20,21 @@ import {
   Menu,
   X,
   FileText,
+  Eye,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/useAuthStore';
 import ThemeToggle from './ThemeToggle';
 import BrandLogo from './BrandLogo';
-
 
 function BrandName({ className }: Readonly<{ className?: string }>) {
   return (
     <span className={['inline-flex items-center gap-2', className || ''].join(' ')}>
       <BrandLogo className="h-9 w-9 rounded-lg" alt="Mineral Cache logo" />
       <span className="mc-brand-wordmark text-2xl font-extrabold text-[var(--theme-psycho)]">
-        MINERAL
-        <span className="font-extrabold italic text-[var(--theme-button-yellow)]">CACHE</span>
+        MINERAL{''}
+        <span className="font-extrabold italic text-[var(--theme-button-yellow)]">
+          CACHE
+        </span>
       </span>
     </span>
   );
@@ -75,7 +77,11 @@ function SideActionButton({
                             label,
                             Icon,
                             onClick,
-                          }: Readonly<{ label: string; Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; onClick: () => void }>) {
+                          }: Readonly<{
+  label: string;
+  Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  onClick: () => void;
+}>) {
   return (
     <button type="button" onClick={onClick} className={itemClasses(false)} aria-label={label}>
       <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
@@ -155,13 +161,21 @@ function NavContent(): React.ReactElement {
   return (
     <nav className="mt-6 grid gap-1" aria-label="Main">
       <SideNavLink to="/" end label="Home" Icon={Home} />
-      {(isVendor || isAdmin) ? (
+      {isVendor || isAdmin ? (
         <SideNavLink to="/products" label="Shop" Icon={Store} />
       ) : (
         <SideNavLink to="/products" end label="Shop" Icon={Store} />
       )}
       {AUCTIONS_ENABLED && (
         <SideNavLink to="/auctions" end label="Auctions" Icon={ClipboardList} />
+      )}
+      {AUCTIONS_ENABLED && isAuthed && (
+        <SideNavLink
+          to="/auctions/watchlist"
+          end
+          label="Auctions Watchlist"
+          Icon={Eye}
+        />
       )}
       {isVendor && (
         <NavGroup baseTo="/vendor/dashboard" label="Vendor Dashboard" Icon={LayoutDashboard}>
@@ -206,7 +220,9 @@ export default function Navbar(): React.ReactElement {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const location = useLocation();
 
-  useEffect(() => { setOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent | TouchEvent) {
@@ -232,7 +248,9 @@ export default function Navbar(): React.ReactElement {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
-  useEffect(() => { if (open) panelRef.current?.focus(); }, [open]);
+  useEffect(() => {
+    if (open) panelRef.current?.focus();
+  }, [open]);
 
   const label = open ? 'Close navigation' : 'Open navigation';
 
@@ -253,7 +271,11 @@ export default function Navbar(): React.ReactElement {
         aria-controls="mobile-nav-panel"
         onClick={() => setOpen((v) => !v)}
       >
-        {open ? <X className="h-2 w-2" aria-hidden="true" /> : <Menu className="h-3 w-3" aria-hidden="true" />}
+        {open ? (
+          <X className="h-2 w-2" aria-hidden="true" />
+        ) : (
+          <Menu className="h-3 w-3" aria-hidden="true" />
+        )}
       </button>
 
       {open && (
