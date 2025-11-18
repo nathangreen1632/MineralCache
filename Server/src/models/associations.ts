@@ -41,3 +41,6 @@ Vendor.hasMany(Product, { as: 'products', foreignKey: { name: 'vendorId', field:
 
 UserAgreement.belongsTo(User, { as: 'user', foreignKey: { name: 'userId', field: 'userId' } });
 User.hasMany(UserAgreement, { as: 'agreements', foreignKey: { name: 'userId', field: 'userId' } });
+
+Vendor.belongsTo(User, { as: 'owner', foreignKey: { name: 'userId', field: 'userId' } });
+User.hasOne(Vendor, { as: 'vendor', foreignKey: { name: 'userId', field: 'userId' } });
