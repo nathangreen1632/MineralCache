@@ -10,7 +10,7 @@ import sharp from 'sharp';
 import { Product } from '../models/product.model.js';
 import { Vendor } from '../models/vendor.model.js';
 import { ProductImage } from '../models/productImage.model.js';
-// NEW: categories
+import { Auction } from '../models/auction.model.js';
 import { Category } from '../models/category.model.js';
 import { ProductCategory } from '../models/productCategory.model.js';
 
@@ -28,9 +28,6 @@ import {
 
 type ProductListQuery = z.infer<typeof listProductsQuerySchema>;
 
-/** ---------------------------------------------
- * Zod error -> minimal stable details (no deprecated APIs)
- * --------------------------------------------*/
 function zDetails(err: ZodError) {
   const treeify = (z as any).treeifyError;
   if (typeof treeify === 'function') return treeify(err);
@@ -43,7 +40,6 @@ function zDetails(err: ZodError) {
   };
 }
 
-// in products.controller.ts
 async function assertVendorOwnsProduct(
   productId: number,
   userId: number,
@@ -60,10 +56,6 @@ async function assertVendorOwnsProduct(
   return !!p && Number(p.vendorId) === Number(vendor.id);
 }
 
-
-/** ---------------------------------------------
- * Helpers: auth + vendor scope
- * --------------------------------------------*/
 function ensureAuthed(req: Request, res: Response): req is Request & {
   user: { id: number; role: 'buyer' | 'vendor' | 'admin'; dobVerified18: boolean };
 } {
@@ -90,18 +82,13 @@ async function requireVendor(req: Request, res: Response) {
   return vendor;
 }
 
-/** ---------------------------------------------
- * Upload helpers (Render + local friendly)
- * --------------------------------------------*/
 const DEFAULT_UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
 export const UPLOADS_PUBLIC_ROUTE = process.env.UPLOADS_PUBLIC_ROUTE ?? '/uploads';
 
-// Use env when present; if it isn’t writable (e.g., local dev), fall back.
 const INITIAL_UPLOADS_DIR = process.env.UPLOADS_DIR
   ? path.resolve(process.env.UPLOADS_DIR)
   : DEFAULT_UPLOADS_DIR;
 
-// Export a const (Sonar OK) whose property we can update internally.
 export const UPLOADS_DIR = { current: INITIAL_UPLOADS_DIR };
 
 export async function ensureUploadsReady() {
@@ -112,7 +99,7 @@ export async function ensureUploadsReady() {
     await fs.unlink(test);
   } catch (e: any) {
     if (e?.code === 'EACCES' || e?.code === 'EPERM') {
-      UPLOADS_DIR.current = DEFAULT_UPLOADS_DIR;               // <— re-point here
+      UPLOADS_DIR.current = DEFAULT_UPLOADS_DIR;
       await fs.mkdir(UPLOADS_DIR.current, { recursive: true });
       const test = path.join(UPLOADS_DIR.current, '.writecheck');
       await fs.writeFile(test, 'ok');
@@ -123,13 +110,11 @@ export async function ensureUploadsReady() {
   }
 }
 
-
 async function ensureDir(p: string) { await fs.mkdir(p, { recursive: true }); }
 
 function toPublicUrl(rel?: string | null) {
   if (!rel) return null;
   const s = String(rel).replace(/^\/+/, '');
-  // Always mount uploads under UPLOADS_PUBLIC_ROUTE
   return `${UPLOADS_PUBLIC_ROUTE}/${s}`;
 }
 
@@ -140,9 +125,6 @@ function variantFilename(baseNoExt: string, sizeLabel: 'orig' | '320' | '800' | 
 
 const isSupportedImage = (m?: string) => !!m && /^image\/(jpe?g|png|webp|tiff|gif|heic|heif|avif)$/i.test(m);
 
-/** ---------------------------------------------
- * Vendor CRUD
- * --------------------------------------------*/
 export async function createProduct(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
 
@@ -169,39 +151,29 @@ export async function createProduct(req: Request, res: Response): Promise<void> 
         species: p.species,
         locality: p.locality ?? null,
         synthetic: Boolean(p.synthetic ?? false),
-
-        // dimensions + weight
         lengthCm: p.lengthCm ?? null,
         widthCm: p.widthCm ?? null,
         heightCm: p.heightCm ?? null,
         sizeNote: p.sizeNote ?? null,
         weightG: p.weightG ?? null,
         weightCt: p.weightCt ?? null,
-
-        // fluorescence (structured)
         fluorescenceMode: p.fluorescence.mode,
         fluorescenceColorNote: p.fluorescence.colorNote ?? null,
         fluorescenceWavelengthNm: p.fluorescence.wavelengthNm ?? null,
-
-        // condition + provenance
         condition: p.condition ?? null,
         conditionNote: p.conditionNote ?? null,
         provenanceNote: p.provenanceNote ?? null,
         provenanceTrail: p.provenanceTrail ?? null,
-
-        // pricing (scheduled sale model)
         priceCents: p.priceCents,
         salePriceCents: p.salePriceCents ?? null,
         saleStartAt: p.saleStartAt ?? null,
         saleEndAt: p.saleEndAt ?? null,
-
         createdAt: now,
         updatedAt: now,
         archivedAt: null,
       } as any
     );
 
-    // NEW: Assign the single required category
     await ProductCategory.destroy({ where: { productId: Number(created.id) } });
     await ProductCategory.create({
       productId: Number(created.id),
@@ -246,21 +218,15 @@ export async function updateProduct(req: Request, res: Response): Promise<void> 
 
     if (p.title !== undefined) patch.title = p.title;
     if (p.description !== undefined) patch.description = p.description ?? null;
-
     if (p.species !== undefined) patch.species = p.species;
     if (p.locality !== undefined) patch.locality = p.locality ?? null;
     if (p.synthetic !== undefined) patch.synthetic = Boolean(p.synthetic);
-
-    // dimensions + weight
     if (p.lengthCm !== undefined) patch.lengthCm = p.lengthCm ?? null;
     if (p.widthCm !== undefined) patch.widthCm = p.widthCm ?? null;
     if (p.heightCm !== undefined) patch.heightCm = p.heightCm ?? null;
     if (p.sizeNote !== undefined) patch.sizeNote = p.sizeNote ?? null;
-
     if (p.weightG !== undefined) patch.weightG = p.weightG ?? null;
     if (p.weightCt !== undefined) patch.weightCt = p.weightCt ?? null;
-
-    // fluorescence (structured) — update granularly if provided
     if (p.fluorescence !== undefined) {
       if (Object.hasOwn(p.fluorescence, 'mode')) {
         patch.fluorescenceMode = p.fluorescence.mode;
@@ -272,21 +238,15 @@ export async function updateProduct(req: Request, res: Response): Promise<void> 
         patch.fluorescenceWavelengthNm = p.fluorescence.wavelengthNm ?? null;
       }
     }
-
-    // condition + provenance
     if (p.condition !== undefined) patch.condition = p.condition ?? null;
     if (p.conditionNote !== undefined) patch.conditionNote = p.conditionNote ?? null;
-
     if (p.provenanceNote !== undefined) patch.provenanceNote = p.provenanceNote ?? null;
     if (p.provenanceTrail !== undefined) patch.provenanceTrail = p.provenanceTrail ?? null;
-
-    // pricing
     if (p.priceCents !== undefined) patch.priceCents = p.priceCents;
     if (p.salePriceCents !== undefined) patch.salePriceCents = p.salePriceCents ?? null;
     if (p.saleStartAt !== undefined) patch.saleStartAt = p.saleStartAt ?? null;
     if (p.saleEndAt !== undefined) patch.saleEndAt = p.saleEndAt ?? null;
 
-    // compute invariants for pricing (apply to next values)
     const nextPrice =
       patch.priceCents !== undefined ? Number(patch.priceCents) : Number((prod as any).priceCents);
     const nextSale =
@@ -312,7 +272,6 @@ export async function updateProduct(req: Request, res: Response): Promise<void> 
     Object.assign(prod, patch, { updatedAt: new Date() });
     await (prod as any).save();
 
-    // NEW: If categoryId provided, reset the single link
     if (Object.prototype.hasOwnProperty.call(p, 'categoryId')) {
       await ProductCategory.destroy({ where: { productId: Number(prod.id) } });
       await ProductCategory.create({
@@ -328,7 +287,6 @@ export async function updateProduct(req: Request, res: Response): Promise<void> 
 }
 
 export async function deleteProduct(req: Request, res: Response): Promise<void> {
-  // Soft-delete (archive)
   if (!ensureAuthed(req, res)) return;
 
   const idParsed = productIdParamSchema.safeParse(req.params);
@@ -357,9 +315,6 @@ export async function deleteProduct(req: Request, res: Response): Promise<void> 
   }
 }
 
-// --- ADD BELOW deleteProduct() (and export) ---
-
-// POST /products/:id/archive  → set archivedAt (soft-delete)
 export async function archiveProduct(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
 
@@ -389,7 +344,6 @@ export async function archiveProduct(req: Request, res: Response): Promise<void>
   }
 }
 
-// POST /products/:id/revive  → clear archivedAt (unarchive)
 export async function reviveProduct(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
 
@@ -403,7 +357,6 @@ export async function reviveProduct(req: Request, res: Response): Promise<void> 
   if (!vendor) return;
 
   const prod = await Product.findOne({
-    // allow finding even if currently archived
     where: { id: idParsed.data.id, vendorId: vendor.id },
   });
   if (!prod) {
@@ -412,7 +365,7 @@ export async function reviveProduct(req: Request, res: Response): Promise<void> 
   }
 
   try {
-    (prod as any).archivedAt = null; // unarchive
+    (prod as any).archivedAt = null;
     await (prod as any).save();
     res.json({ ok: true });
   } catch (e: any) {
@@ -420,10 +373,6 @@ export async function reviveProduct(req: Request, res: Response): Promise<void> 
   }
 }
 
-
-/** ---------------------------------------------
- * Public reads
- * --------------------------------------------*/
 export async function getProduct(req: Request, res: Response): Promise<void> {
   const idParsed = productIdParamSchema.safeParse(req.params);
   if (!idParsed.success) {
@@ -440,7 +389,7 @@ export async function getProduct(req: Request, res: Response): Promise<void> {
         {
           model: Vendor,
           as: 'vendor',
-          attributes: ['slug'], // only slug; 'name' column doesn't exist
+          attributes: ['slug'],
         },
       ],
     });
@@ -449,7 +398,6 @@ export async function getProduct(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Images: primary first, then sort order, then id; hide soft-deleted (paranoid: true)
     const images = await ProductImage.findAll({
       where: { productId: id },
       paranoid: true,
@@ -488,14 +436,21 @@ export async function getProduct(req: Request, res: Response): Promise<void> {
     const json = product.toJSON() as Record<string, unknown>;
     (json as any).photos = photos;
 
-    // Convenience: a single hero image for UIs that want it
+    const activeAuction = await Auction.findOne({
+      where: {
+        productId: id,
+        status: { [Op.in]: ['scheduled', 'live'] },
+      },
+      order: [['startAt', 'ASC'], ['id', 'ASC']],
+    });
+
+    (json as any).auctionId = activeAuction ? Number(activeAuction.id) : null;
+    (json as any).auctionStatus = activeAuction ? String(activeAuction.status) : null;
+
     const primary = photos.find((p) => p.isPrimary) ?? photos[0] ?? null;
     (json as any).primaryImageUrl = primary?.url ?? null;
 
-    // NEW: flatten vendor slug for client consumption
     (json as any).vendorSlug = (json as any).vendor?.slug ?? null;
-    // Optional: drop nested vendor object to keep payload lean
-    // delete (json as any).vendor;
 
     res.json({ product: json });
   } catch (e: any) {
@@ -503,15 +458,6 @@ export async function getProduct(req: Request, res: Response): Promise<void> {
   }
 }
 
-
-
-/** ---------------------------------------------
- * Catalog list — filters & sorting (effective price, size range, etc.)
- * --------------------------------------------*/
-
-// NOTE: Removed saleActiveExpr to avoid raw SQL quoting issues.
-
-// Keep effective price expression for range/sort:
 function effectivePriceExpr(nowIso: string) {
   return literal(`CASE WHEN "salePriceCents" IS NOT NULL AND
     (("saleStartAt" IS NULL OR "saleStartAt" <= TIMESTAMP '${nowIso}')
@@ -520,7 +466,6 @@ function effectivePriceExpr(nowIso: string) {
 }
 
 export async function listProducts(req: Request, res: Response): Promise<void> {
-  // ✅ Prefer the validated query stashed by validateQuery(); fallback to parsing once if absent.
   let q: ProductListQuery | null = (res.locals.query as ProductListQuery) ?? null;
   if (!q) {
     const parsed = listProductsQuerySchema.safeParse(req.query);
@@ -547,14 +492,10 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       fluorescence,
       condition,
       sort,
-
-      // NEW: category filters + dollar inputs
       category,
       categoryId,
-      priceMin, // dollars
-      priceMax, // dollars
-
-      // Back-compat (deprecated)
+      priceMin,
+      priceMax,
       minCents,
       maxCents,
     } = q as any;
@@ -563,17 +504,15 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
     const nowIso = now.toISOString();
     const andClauses: any[] = [{ archivedAt: { [Op.is]: null } }];
 
-    // vendor
     if (vendorId) {
       andClauses.push({ vendorId: Number(vendorId) });
     } else if (vendorSlug) {
-      // 🔎 NEW: accept “one guy productions” OR “one-guy-productions”
       const raw = String(vendorSlug ?? '');
       const folded = raw
         .trim()
         .toLowerCase()
         .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, ''); // strip accents
+        .replace(/[\u0300-\u036f]/g, '');
       const dashed = folded
         .replace(/[^a-z0-9\s-]/g, '')
         .replace(/[\s_]+/g, '-')
@@ -584,9 +523,8 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
         attributes: ['id'],
         where: {
           [Op.or]: [
-            { slug: raw },    // exact match (legacy behavior)
-            { slug: dashed }, // spacey input normalized to slug
-            // lower(replace(slug,'-','')) == space/dash-free lowered input
+            { slug: raw },
+            { slug: dashed },
             where(fn('REPLACE', fn('LOWER', col('slug')), '-', ''), noDashLower),
           ],
         },
@@ -599,11 +537,9 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       andClauses.push({ vendorId: v.id });
     }
 
-    // species / synthetic
     if (species) andClauses.push({ species: { [Op.iLike]: String(species) } });
     if (typeof synthetic === 'boolean') andClauses.push({ synthetic });
 
-    // structured filters
     if (fluorescence) {
       const modes = String(fluorescence).split(',').map((s) => s.trim()).filter(Boolean);
       if (modes.length) andClauses.push({ fluorescenceMode: { [Op.in]: modes } });
@@ -613,7 +549,6 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       if (conds.length) andClauses.push({ condition: { [Op.in]: conds } });
     }
 
-    // ✅ onSale (no raw SQL)
     if (typeof onSale !== 'undefined') {
       const onSaleTrueClauses = [
         { salePriceCents: { [Op.ne]: null } },
@@ -629,7 +564,6 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       }
     }
 
-    // effective price range — support dollars (priceMin/priceMax) and cents (new/legacy)
     const dMin = typeof priceMin === 'number' ? Math.round(priceMin * 100) : undefined;
     const dMax = typeof priceMax === 'number' ? Math.round(priceMax * 100) : undefined;
     const minP = (dMin ?? priceMinCents ?? minCents) ?? null;
@@ -645,7 +579,6 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       }
     }
 
-    // size range on longest edge (GREATEST of L/W/H)
     const minS = sizeMinCm ?? null;
     const maxS = sizeMaxCm ?? null;
     if (minS != null || maxS != null) {
@@ -659,7 +592,6 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       }
     }
 
-    // order
     let order: Order;
     if (sort === 'price_asc') {
       order = [[effectivePriceExpr(nowIso), 'ASC'], ['id', 'ASC']] as unknown as Order;
@@ -673,10 +605,8 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
 
     const offset = (page - 1) * pageSize;
 
-    // Build include chain
     const include: any[] = [];
 
-    // NEW: category join (by slug or id)
     if (category || categoryId) {
       const whereCat: any = {};
       if (category) whereCat.slug = String(category);
@@ -692,7 +622,6 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       });
     }
 
-    // ONE image per product, ordered by primary → sortOrder → id
     include.push({
       model: ProductImage,
       as: 'images',
@@ -706,7 +635,6 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       ],
     });
 
-    // 👇 include vendor so we can surface slug/name to the client
     include.push({
       model: Vendor,
       as: 'vendor',
@@ -719,10 +647,9 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
       offset,
       limit: pageSize,
       include,
-      distinct: true, // keep count accurate when a join is present
+      distinct: true,
     });
 
-    // Flatten a primaryImageUrl + vendorSlug/vendorName for the client
     const items = rows.map((p) => {
       const j: any = p.toJSON();
       const cover = Array.isArray(j.images) && j.images[0] ? j.images[0] : null;
@@ -734,9 +661,6 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
         ...j,
         vendorSlug: j.vendor?.slug ?? null,
         primaryImageUrl: url,
-        // Optional: trim nested objects for a lean payload
-        // vendor: undefined,
-        // images: undefined,
       };
     });
 
@@ -752,11 +676,6 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
   }
 }
 
-/** ---------------------------------------------
- * Images attach — generates 320/800/1600 and stores DB rows
- * --------------------------------------------*/
-
-// One place to control the listing quota (env overridable)
 const MAX_IMAGES_PER_LISTING = Number(process.env.UPLOAD_MAX_IMAGES_PER_LISTING ?? 6);
 
 export async function attachImages(req: Request, res: Response): Promise<void> {
@@ -785,7 +704,6 @@ export async function attachImages(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // Per-listing quota
   const existingCount = await ProductImage.count({ where: { productId: Number(idParsed.data.id) } });
   if (existingCount >= MAX_IMAGES_PER_LISTING) {
     res.status(400).json({
@@ -811,7 +729,6 @@ export async function attachImages(req: Request, res: Response): Promise<void> {
 
   await ensureUploadsReady();
 
-  // Storage layout: uploads/images/<productId>/
   const productDirRel = `images/${idParsed.data.id}`;
   const productDirAbs = path.join(UPLOADS_DIR.current, productDirRel);
   await ensureDir(productDirAbs);
@@ -823,7 +740,6 @@ export async function attachImages(req: Request, res: Response): Promise<void> {
     variants: Array<{ key: 'orig' | '320' | '800' | '1600'; width?: number; height?: number; bytes?: number; url?: string }>;
   }> = [];
 
-  // Determine if product already has a primary
   const hasPrimary = (await ProductImage.count({
     where: { productId: Number(idParsed.data.id), isPrimary: true },
   })) > 0;
@@ -836,7 +752,6 @@ export async function attachImages(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Multer may be memory or disk storage — handle both
     const inputBuffer = (f as any).buffer ?? await fs.readFile((f as any).path);
 
     const base = path.parse(f.originalname).name
@@ -845,14 +760,12 @@ export async function attachImages(req: Request, res: Response): Promise<void> {
     const stamp = Date.now().toString(36);
     const baseNoExt = `${base}_${stamp}`;
 
-    // Write original as JPG to normalize
     const origFilename = variantFilename(baseNoExt, 'orig');
     const origRel = `${productDirRel}/${origFilename}`;
     const origAbs = path.join(UPLOADS_DIR.current, origRel);
     await sharp(inputBuffer).jpeg({ quality: 90 }).toFile(origAbs);
     const origStat = await fs.stat(origAbs);
 
-    // Derivatives
     const sizes: Array<{ label: '320' | '800' | '1600'; width: number }> = [
       { label: '320', width: 320 },
       { label: '800', width: 800 },
@@ -874,18 +787,13 @@ export async function attachImages(req: Request, res: Response): Promise<void> {
       out[s.label] = { rel, abs, bytes: st.size };
     }
 
-    // Create DB row (includes required non-null fields)
     await ProductImage.create({
       productId: Number(idParsed.data.id),
       isPrimary: hasPrimary ? false : index === 0,
       sortOrder: existingCount + index,
-
-      // required columns in your model
       fileName: f.originalname,
-      mimeType: 'image/jpeg',     // normalized output
+      mimeType: 'image/jpeg',
       origBytes: origStat.size,
-
-      // stored paths for variants
       origPath: origRel,
       v320Path: out['320'].rel,
       v800Path: out['800'].rel,
@@ -913,7 +821,6 @@ export async function attachImages(req: Request, res: Response): Promise<void> {
   });
 }
 
-// POST /products/:id/images/:imageId/primary
 export async function setPrimaryImage(req: Request, res: Response) {
   try {
     const { id } = productImageProductIdParam.parse(req.params);
@@ -937,7 +844,6 @@ export async function setPrimaryImage(req: Request, res: Response) {
     }
 
     await sequelize.transaction(async (tx: Transaction) => {
-      // Ensure image belongs to product (paranoid true → excludes soft-deleted)
       const img = await ProductImage.findOne({
         where: { id: imageId, productId: id },
         transaction: tx,
@@ -945,7 +851,6 @@ export async function setPrimaryImage(req: Request, res: Response) {
       });
       if (!img) throw new Error('Image not found for product');
 
-      // Clear other primaries, set this one primary
       await ProductImage.update(
         { isPrimary: false },
         { where: { productId: id }, transaction: tx, paranoid: false }
@@ -963,7 +868,6 @@ export async function setPrimaryImage(req: Request, res: Response) {
   }
 }
 
-// POST /products/:id/images/reorder
 export async function reorderImages(req: Request, res: Response) {
   try {
     const { id } = productImageProductIdParam.parse(req.params);
@@ -980,8 +884,7 @@ export async function reorderImages(req: Request, res: Response) {
       return;
     }
 
-    // Verify all provided images belong to this product and are not soft-deleted
-    const imgs = await ProductImage.findAll({ where: { productId: id } }); // paranoid default
+    const imgs = await ProductImage.findAll({ where: { productId: id } });
     const validIds = new Set(imgs.map((i) => Number(i.id)));
     for (const imageId of body.order) {
       if (!validIds.has(Number(imageId))) {
@@ -1010,7 +913,7 @@ export async function reorderImages(req: Request, res: Response) {
   }
 }
 
-// DELETE /products/:id/images/:imageId (soft delete)
+
 export async function softDeleteImage(req: Request, res: Response) {
   try {
     const { id } = productImageProductIdParam.parse(req.params);
@@ -1041,11 +944,10 @@ export async function softDeleteImage(req: Request, res: Response) {
       });
       if (!img) throw new Error('Image not found for product');
 
-      // If primary, clear primary first to satisfy the partial unique index
       if ((img as any).isPrimary === true) {
         await ProductImage.update({ isPrimary: false }, { where: { id: imageId }, transaction: tx });
       }
-      await (img as any).destroy({ transaction: tx }); // paranoid → sets deletedAt
+      await (img as any).destroy({ transaction: tx });
     });
 
     res.status(204).send();
@@ -1055,7 +957,6 @@ export async function softDeleteImage(req: Request, res: Response) {
   }
 }
 
-// POST /products/:id/images/:imageId/restore
 export async function restoreImage(req: Request, res: Response) {
   try {
     const { id } = productImageProductIdParam.parse(req.params);
@@ -1081,7 +982,7 @@ export async function restoreImage(req: Request, res: Response) {
       return;
     }
 
-    await (img as any).restore(); // paranoid restore
+    await (img as any).restore();
     res.json({ ok: true });
   } catch (e: any) {
     const msg = e?.message || 'Failed to restore image';

@@ -1,10 +1,6 @@
 // Client/src/api/products.ts
 import { get, post, patch } from '../lib/api';
 
-/* ============================
-   Types aligned to new schema
-   ============================ */
-
 export type FluorescenceMode = 'none' | 'SW' | 'LW' | 'both';
 
 export type FluorescenceInput = {
@@ -23,118 +19,81 @@ export type ProvenanceEntry = {
 export type ProductInput = {
   title: string;
   description?: string | null;
-
   species: string;
   locality?: string | null;
   synthetic?: boolean;
-
-  // Dimensions + weight (structured)
   lengthCm?: number | null;
   widthCm?: number | null;
   heightCm?: number | null;
   sizeNote?: string | null;
   weightG?: number | null;
   weightCt?: number | null;
-
-  // Structured fluorescence
   fluorescence: FluorescenceInput;
-
-  // Condition + provenance
-  condition?: string | null; // enum/string server-side
+  condition?: string | null;
   conditionNote?: string | null;
   provenanceNote?: string | null;
   provenanceTrail?: ProvenanceEntry[] | null;
-
-  // Pricing (scheduled sale model)
   priceCents: number;
   salePriceCents?: number | null;
-  saleStartAt?: string | null; // ISO8601
+  saleStartAt?: string | null;
   saleEndAt?: string | null;
-
-  // Uploader plumbing placeholder (ignored by API for now)
   images?: string[];
 };
 
-// Server response shape (mirrors DB column names)
 export type Product = {
   id: number;
   vendorId: number;
-
   title: string;
   description: string | null;
-
   species: string;
   locality: string | null;
   synthetic: boolean;
-
-  // ✅ flattened vendor fields from server
   vendorSlug?: string | null;
   vendorName?: string | null;
-
   lengthCm: number | null;
   widthCm: number | null;
   heightCm: number | null;
   sizeNote: string | null;
-
   weightG: number | null;
   weightCt: number | null;
-
   fluorescenceMode: FluorescenceMode;
   fluorescenceColorNote: string | null;
   fluorescenceWavelengthNm: number[] | null;
-
   condition: string | null;
   conditionNote: string | null;
   provenanceNote: string | null;
   provenanceTrail: ProvenanceEntry[] | null;
-
   priceCents: number;
   salePriceCents: number | null;
   saleStartAt: string | null;
   saleEndAt: string | null;
-
-  // convenience fields often included by the API
   primaryImageUrl?: string | null;
-
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  auctionId?: number | null;
+  auctionStatus?: 'draft' | 'scheduled' | 'live' | 'ended' | 'canceled' | null;
 };
-
-/* ============================
-   List (new query params)
-   ============================ */
 
 export type ListQuery = {
   page?: number;
   pageSize?: number;
-
-  // ✅ free-text search supported by server
   q?: string;
-
   vendorId?: number;
   vendorSlug?: string;
   species?: string;
   synthetic?: boolean;
   onSale?: boolean;
-
-  // Unified filters
   priceMinCents?: number;
   priceMaxCents?: number;
   sizeMinCm?: number;
   sizeMaxCm?: number;
-  fluorescence?: string; // comma list of modes: "SW,LW"
-  condition?: string;    // comma list of statuses
-
-  // Categories (server supports either)
-  category?: string;     // slug
+  fluorescence?: string;
+  condition?: string;
+  category?: string;
   categoryId?: number;
-
-  // Dollars-based range (server also accepts)
   priceMin?: number;
   priceMax?: number;
-
-  // ✅ include 'oldest' to match server
   sort?: 'newest' | 'oldest' | 'price_asc' | 'price_desc';
 };
 
@@ -146,21 +105,15 @@ export type ListResponse = {
   totalPages: number;
 };
 
-/* ============================
-   API calls
-   ============================ */
-
 export async function createProduct(body: ProductInput) {
   return post<{ ok: true; id: number }, ProductInput>('/products', body);
 }
 
-// We send the full structured payload on edit (server accepts partials too)
 export async function updateProduct(id: number, body: ProductInput) {
   return patch<{ ok: true }, ProductInput>(`/products/${id}`, body);
 }
 
 export async function getProduct(id: number) {
-  // Server response already includes vendorSlug (flattened) and photos array
   return get<{ product: Product }>(`/products/${id}`);
 }
 
@@ -169,31 +122,22 @@ export async function listProducts(q: ListQuery = {}) {
 
   if (typeof q.page === 'number' && q.page > 0) params.set('page', String(q.page));
   if (typeof q.pageSize === 'number' && q.pageSize > 0) params.set('pageSize', String(q.pageSize));
-
-  // ✅ include free-text search
   if (typeof q.q === 'string' && q.q.trim().length > 0) params.set('q', q.q.trim());
-
   if (typeof q.vendorId === 'number') params.set('vendorId', String(q.vendorId));
   if (q.vendorSlug) params.set('vendorSlug', q.vendorSlug);
   if (q.species) params.set('species', q.species);
   if (typeof q.synthetic === 'boolean') params.set('synthetic', String(q.synthetic));
   if (typeof q.onSale === 'boolean') params.set('onSale', String(q.onSale));
-
   if (typeof q.priceMinCents === 'number') params.set('priceMinCents', String(q.priceMinCents));
   if (typeof q.priceMaxCents === 'number') params.set('priceMaxCents', String(q.priceMaxCents));
-
   if (typeof q.sizeMinCm === 'number') params.set('sizeMinCm', String(q.sizeMinCm));
   if (typeof q.sizeMaxCm === 'number') params.set('sizeMaxCm', String(q.sizeMaxCm));
-
   if (q.fluorescence) params.set('fluorescence', q.fluorescence);
   if (q.condition) params.set('condition', q.condition);
-
-  // Categories + dollars range (optional)
   if (q.category) params.set('category', q.category);
   if (typeof q.categoryId === 'number') params.set('categoryId', String(q.categoryId));
   if (typeof q.priceMin === 'number') params.set('priceMin', String(q.priceMin));
   if (typeof q.priceMax === 'number') params.set('priceMax', String(q.priceMax));
-
   if (q.sort) params.set('sort', q.sort);
 
   const qs = params.toString();

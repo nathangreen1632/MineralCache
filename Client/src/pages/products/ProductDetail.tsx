@@ -154,6 +154,11 @@ export default function ProductDetail(): React.ReactElement {
       ? ((p as any).auctionId as number)
       : undefined;
 
+  const auctionStatusRaw = (p as any).auctionStatus;
+  const auctionStatus =
+    typeof auctionStatusRaw === 'string' ? (auctionStatusRaw as string) : null;
+  const auctionActive = auctionId != null && (auctionStatus === 'live' || auctionStatus === 'scheduled');
+
   const categoryName =
     (p as any).categoryName ||
     (p as any).category?.name ||
@@ -217,47 +222,56 @@ export default function ProductDetail(): React.ReactElement {
         </dl>
 
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            aria-label="Add this item to your cart"
-            aria-busy={adding ? 'true' : 'false'}
-            disabled={adding}
-            className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
-            onClick={async () => {
-              try {
-                setAdding(true);
-                const r = await addToCart(pid, 1);
-                if (r?.error === 'AUTH_REQUIRED') {
-                  toast.error('Please log in to add items to your cart.');
-                  return;
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Add this item to your cart"
+              aria-busy={auctionActive || adding ? 'true' : 'false'}
+              disabled={auctionActive || adding}
+              className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+              onClick={async () => {
+                if (auctionActive) return;
+                try {
+                  setAdding(true);
+                  const r = await addToCart(pid, 1);
+                  if (r?.error === 'AUTH_REQUIRED') {
+                    toast.error('Please log in to add items to your cart.');
+                    return;
+                  }
+                  if (r?.error) {
+                    toast.error(r.error || 'Could not add to cart.');
+                    return;
+                  }
+                  toast.success('Added to cart');
+                } catch {
+                  toast.error('Could not add to cart.');
+                } finally {
+                  setAdding(false);
                 }
-                if (r?.error) {
-                  toast.error(r.error || 'Could not add to cart.');
-                  return;
-                }
-                toast.success('Added to cart');
-              } catch {
-                toast.error('Could not add to cart.');
-              } finally {
-                setAdding(false);
-              }
-            }}
-          >
-            {adding ? 'Adding…' : 'Add to Cart'}
-          </button>
+              }}
+            >
+              {adding ? 'Adding…' : 'Add to Cart'}
+            </button>
 
-          <Link
-            to="/products"
-            className="rounded-lg px-3 py-2 text-sm font-medium ring-1 ring-inset"
-            style={{
-              background: 'var(--theme-surface)',
-              color: 'var(--theme-text)',
-              borderColor: 'var(--theme-border)',
-            }}
-          >
-            Back to Shop
-          </Link>
+            <Link
+              to="/products"
+              className="rounded-lg px-3 py-2 text-sm font-medium ring-1 ring-inset"
+              style={{
+                background: 'var(--theme-surface)',
+                color: 'var(--theme-text)',
+                borderColor: 'var(--theme-border)',
+              }}
+            >
+              Back to Shop
+            </Link>
+          </div>
+
+          {auctionActive && (
+            <p className="text-sm text-[var(--theme-error)] opacity-80">
+              This item is currently at auction. Add to cart is disabled until the auction ends.
+            </p>
+          )}
         </div>
       </div>
 

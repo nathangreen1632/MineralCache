@@ -11,9 +11,12 @@ import { Auction } from '../models/auction.model.js';
 import { Product } from '../models/product.model.js';
 import { ProductImage } from '../models/productImage.model.js';
 import { Vendor } from '../models/vendor.model.js';
+import { AuctionWatchlist } from '../models/auctionWatchlist.model.js';
+
 
 import { placeBidTx, minimumAcceptableBid, endAuctionTx } from '../services/auction.service.js';
 import { bidBodySchema, bidParamsSchema } from '../validation/auctions.schema.js';
+import { centsToUsd } from '../utils/money.util.js';
 
 import { emitHighBid, emitOutbid, emitAuctionEnded } from '../sockets/emitters/auctions.emit.js';
 import { ensureAuctionTicker } from '../sockets/tickers/auctionTicker.js';
@@ -164,6 +167,115 @@ export async function listAuctions(req: Request, res: Response): Promise<void> {
   }
 }
 
+export async function listWatchedAuctions(req: Request, res: Response): Promise<void> {
+  if (!ensureAuthed(req, res)) return;
+
+  const sequelize = db.instance();
+  if (!sequelize) {
+    res.json({ items: [], total: 0 });
+    return;
+  }
+  const ping = await db.ping();
+  if (!ping.ok) {
+    (obs as any)?.info?.('auctions.watchlist.db_unavailable', { error: ping.error });
+    res.json({ items: [], total: 0 });
+    return;
+  }
+
+  const userId = (req as any).user.id;
+
+  try {
+    const watchRows = await AuctionWatchlist.findAll({
+      where: { userId },
+      attributes: ['auctionId'],
+    });
+
+    const ids = watchRows
+      .map((r: any) => Number(r.auctionId))
+      .filter((id: number) => Number.isFinite(id));
+
+    if (ids.length === 0) {
+      res.json({ items: [], total: 0 });
+      return;
+    }
+
+    const cutoff = subHours(new Date(), 120);
+    const endedWindow = {
+      [Op.and]: [{ status: 'ended' }, { endAt: { [Op.gte]: cutoff } }],
+    };
+    const notEnded = { status: { [Op.ne]: 'ended' } };
+
+    const where: Record<string, unknown> = { id: { [Op.in]: ids } };
+    (where as any)[Op.or] = [notEnded, endedWindow];
+
+    const UPLOADS_PUBLIC_ROUTE = process.env.UPLOADS_PUBLIC_ROUTE ?? '/uploads';
+    function toPublicUrl(rel?: string | null): string | null {
+      if (!rel) return null;
+      const s = String(rel).replace(/^\/+/, '');
+      return `${UPLOADS_PUBLIC_ROUTE}/${encodeURI(s)}`;
+    }
+
+    const rows = await Auction.findAll({
+      where,
+      order: [
+        ['endAt', 'ASC'],
+        ['id', 'ASC'],
+      ],
+      include: [
+        { model: Vendor, as: 'vendor', attributes: ['id', 'slug'] },
+        {
+          model: Product,
+          as: 'product',
+          attributes: ['id', 'title'],
+          include: [
+            {
+              model: ProductImage,
+              as: 'images',
+              attributes: ['id', 'isPrimary', 'sortOrder', 'v320Path', 'v800Path', 'v1600Path', 'origPath'],
+              required: false,
+              separate: true,
+              limit: 1,
+              order: [['isPrimary', 'DESC'], ['sortOrder', 'ASC'], ['id', 'ASC']],
+            },
+          ],
+        },
+      ],
+    });
+
+    const items = rows.map((a: any) => {
+      const p = a.product;
+      const img = p?.images?.[0] ?? null;
+      const imageUrl =
+        toPublicUrl(img?.v800Path ?? img?.v320Path ?? img?.v1600Path ?? img?.origPath ?? null);
+
+      return {
+        id: Number(a.id),
+        title: a.title ?? null,
+        status: a.status,
+        startAt: a.startAt,
+        endAt: a.endAt,
+        productId: p ? Number(p.id) : Number(a.productId),
+        vendorId: Number(a.vendorId),
+        startingBidCents: Number(a.startPriceCents ?? a.startingBidCents ?? 0),
+        highBidCents: a.highBidCents != null ? Number(a.highBidCents) : null,
+        highBidUserId: a.highBidUserId != null ? Number(a.highBidUserId) : null,
+        productTitle: p?.title ?? null,
+        imageUrl,
+        vendorSlug: a.vendor?.slug ?? null,
+      };
+    });
+
+    res.json({ items, total: items.length });
+  } catch (err: unknown) {
+    obs.error(req, 'auctions.watchlist.error', err);
+    res.status(500).json({
+      ok: false,
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Failed to load watchlist',
+    });
+  }
+}
+
 export async function getAuction(req: Request, res: Response): Promise<void> {
   const id = parsePositiveInt((req.params as any)?.id);
   if (id == null) {
@@ -234,6 +346,33 @@ export async function getAuction(req: Request, res: Response): Promise<void> {
   res.json({ data });
 }
 
+export async function getMinimumBid(req: Request, res: Response): Promise<void> {
+  const id = parsePositiveInt((req.params as any)?.id);
+  if (id == null) {
+    res.status(400).json({ error: 'Invalid auction id' });
+    return;
+  }
+
+  const sequelize = db.instance();
+  if (!sequelize) {
+    res.status(503).json({ error: 'Database unavailable' });
+    return;
+  }
+
+  try {
+    const a = await Auction.findByPk(id);
+    if (!a) {
+      res.status(404).json({ error: 'Auction not found' });
+      return;
+    }
+
+    const minNextBidCents = minimumAcceptableBid(a);
+    res.json({ minNextBidCents });
+  } catch {
+    res.status(500).json({ error: 'Failed to compute minimum bid' });
+  }
+}
+
 export async function placeBid(req: Request, res: Response): Promise<void> {
   if (!ensureAuthed(req, res)) return;
   if (!ensureAdult(req, res)) return;
@@ -279,7 +418,7 @@ export async function placeBid(req: Request, res: Response): Promise<void> {
 
       const minAcceptable = minimumAcceptableBid(a);
       if (amountCents < minAcceptable) {
-        return { ok: false as const, error: `Bid must be at least ${minAcceptable}` };
+        return { ok: false as const, error: `Bid must be at least ${centsToUsd(minAcceptable)}` };
       }
 
       const userId = Number((req as any).user.id);

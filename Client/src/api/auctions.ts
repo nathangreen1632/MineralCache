@@ -223,6 +223,30 @@ export async function listAuctions(params?: {
   return { ok: true as const, items, error: null as string | null };
 }
 
+export async function listWatchedAuctions() {
+  const res = await get<{ items?: AuctionListItem[] } | AuctionListItem[]>(`/auctions/watchlist/me`);
+
+  if ('error' in res) {
+    const anyRes = res as any;
+    if (anyRes?.error) {
+      return { ok: false as const, items: [] as AuctionListItem[], error: anyRes.error as string };
+    }
+  }
+
+  const anyRes = res as any;
+  const payload = anyRes ? anyRes.data : null;
+
+  let items: AuctionListItem[] = [];
+  if (Array.isArray(payload?.items)) {
+    items = payload.items as AuctionListItem[];
+  } else if (Array.isArray(payload)) {
+    items = payload as AuctionListItem[];
+  }
+
+  items = items.map((a) => ({ ...a, vendorSlug: pickVendorSlug(a) }));
+  return { ok: true as const, items, error: null as string | null };
+}
+
 export async function listActiveAuctions() {
   // supports both { items: AuctionDto[] } and bare AuctionDto[] responses
   const res = await get<{ items?: AuctionDto[] } | AuctionDto[]>(`/auctions?status=live`);
