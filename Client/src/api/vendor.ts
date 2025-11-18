@@ -48,7 +48,9 @@ export type VendorMeResponse = {
   } | null;
 };
 
-export type Vendor = NonNullable<VendorMeResponse['vendor']>;
+export type Vendor = NonNullable<VendorMeResponse['vendor']> & {
+  email?: string | null;
+};
 
 export type StripeOnboardingResponse =
   | { onboardingUrl: string; enabled: true }
