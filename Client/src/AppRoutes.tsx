@@ -21,6 +21,8 @@ import AuctionsListPage from './pages/auctions/AuctionsListPage';
 import AuctionDetailPage from './pages/auctions/AuctionDetailPage';
 import AuctionCreatePage from './pages/auctions/AuctionCreatePage';
 import EditAuctionPage from './pages/auctions/EditAuctionPage';
+import AuctionWatchPage from './pages/auctions/AuctionWatchPage';
+
 
 // Vendor
 import VendorApply from './pages/VendorApply';
@@ -89,6 +91,7 @@ export default function AppRoutes(): React.ReactElement {
         {AUCTIONS_ENABLED && (
           <>
             <Route path="auctions" element={<AuctionsListPage />} />
+            <Route path="auctions/watchlist" element={<AuctionWatchPage />} />
             <Route path="auctions/:id" element={<AuctionDetailPage />} />
             <Route path="auctions/:id/edit" element={<EditAuctionPage />} />
           </>
