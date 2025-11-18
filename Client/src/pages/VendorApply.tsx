@@ -63,6 +63,7 @@ export default function VendorApply(): React.ReactElement {
   const hasErrors = useMemo(() => Object.keys(errors).length > 0, [errors]);
 
   const me = useAuthStore((s) => s.me);
+  const user = useAuthStore((s) => s.user);
 
   function setField<K extends keyof FormData>(key: K, value: FormData[K]) {
     const next = { ...form, [key]: value };
@@ -201,17 +202,29 @@ export default function VendorApply(): React.ReactElement {
         Vendor application
       </h1>
 
+      <div
+        className="mb-4 rounded-md border p-3"
+        style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-card-alt)' }}
+      >
+        <p className="text-sm" style={{ color: 'var(--theme-text)' }}>
+          Account email:{' '}
+          <span className="font-mono break-all text-[var(--theme-link)]">
+            {user?.email ?? 'Unknown'}
+          </span>
+        </p>
+      </div>
+
       {existingVendor?.status === 'rejected' && !submitted && (
         <div
           className="mb-4 rounded-md border p-3"
           style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-card-alt)' }}
         >
-          <p className="text-sm" style={{ color: 'var(--theme-error)' }}>
+          <p className="text-sm" style={{ color: 'var(--theme-psycho)' }}>
             Your previous vendor application was <strong>rejected</strong>.
             {existingVendor.rejectedReason ? (
               <>
                 {' '}Reason:{' '}
-                <em>{existingVendor.rejectedReason}</em>
+                <em><span className="text-[var(--theme-error)] text-lg">{existingVendor.rejectedReason}</span></em>
               </>
             ) : null}
           </p>
@@ -299,7 +312,7 @@ export default function VendorApply(): React.ReactElement {
                 htmlFor="logoUrl"
                 className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
               >
-                Logo URL
+                Logo URL (beta)
               </label>
               <input
                 id="logoUrl"
