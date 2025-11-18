@@ -182,12 +182,12 @@ export default function ProductDetail(): React.ReactElement {
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold text-[var(--theme-text)]">{p.title}</h1>
 
-        <div className="text-sm" style={{ color: 'var(--theme-link)' }}>
+        <div className="text-lg" style={{ color: 'var(--theme-link)' }}>
           {categoryName}
           {p.locality ? ` ${p.locality}` : ''}
         </div>
 
-        <div className="mt-0.5 text-xs text-[var(--theme-text)]">
+        <div className="mt-0.5 text-lg text-[var(--theme-text)]">
           <span className="opacity-75">Sold by:</span>{' '}
           {(p as any).vendorSlug ? (
             <Link
