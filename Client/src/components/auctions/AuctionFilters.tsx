@@ -22,6 +22,13 @@ export default function AuctionFilters({
                                          className = '',
                                          inline = false,
                                        }: Props): React.ReactElement {
+  const sortedVendors = React.useMemo(
+    () =>
+      [...vendors].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+      ),
+    [vendors]
+  );
 
   const wrapper = inline
     ? 'flex items-center gap-2'
@@ -47,7 +54,7 @@ export default function AuctionFilters({
             aria-label="Filter by vendor"
           >
             <option value="">All vendors</option>
-            {vendors.map((v) => (
+            {sortedVendors.map((v) => (
               <option key={v.id} value={String(v.id)}>
                 {v.name}
               </option>
