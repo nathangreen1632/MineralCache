@@ -11,7 +11,7 @@ type Status = 'all' | 'pending' | 'approved' | 'rejected';
 
 function statusBg(status: Exclude<Status, 'all'>): string {
   if (status === 'approved') return 'var(--theme-success)';
-  if (status === 'pending') return 'var(--theme-warning)';
+  if (status === 'pending') return 'var(--theme-button-yellow)';
   return 'var(--theme-error)';
 }
 
