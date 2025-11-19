@@ -11,6 +11,7 @@ import { EV_CART_CHANGED } from '../../lib/events';
 import CommissionPreview from '../../components/cart/CommissionPreview.tsx';
 import AcceptedCards from '../../components/payment/AcceptedCards.tsx';
 import { centsToUsd } from '../../utils/money.util';
+import {pressBtn} from "../../ui/press.ts";
 
 type LoadHealth =
   | { kind: 'idle' }
@@ -133,7 +134,7 @@ export default function CheckoutPage(): React.ReactElement {
   const stripePromise = useMemo(() => (pk ? loadStripe(pk) : null), [pk]);
 
   const card = {
-    background: 'var(--theme-surface)',
+    background: 'var(--theme-strip)',
     borderColor: 'var(--theme-border)',
     color: 'var(--theme-text)',
   } as const;
@@ -330,38 +331,38 @@ function CardForm({ totalCents }: Readonly<{ totalCents: number }>) {
   }
 
   const cardBox = {
-    background: 'var(--theme-surface)',
+    background: 'var(--theme-border)',
     borderColor: 'var(--theme-border)',
-    text: 'var(--theme-text)',
   } as const;
 
   return (
     <form onSubmit={onSubmit} className="grid gap-4">
       <div className="rounded-xl border p-4 grid gap-3" style={cardBox}>
-        <h2 className="text-sm font-semibold text-[var(--theme-text)]">Shipping address</h2>
+        <h2 className="text-lg font-semibold text-[var(--theme-text)]">Shipping address</h2>
 
         <div className="grid gap-3 md:grid-cols-2">
           <div className="grid gap-1">
-            <label className="text-xs" htmlFor="ship-name">
+            <label className="text-sm" htmlFor="ship-name">
               Full name
             </label>
             <input
               id="ship-name"
               type="text"
-              className="w-full rounded-xl border px-3 py-2 outline-none"
+              className="w-full rounded-xl border px-3 py-2 outline-none bg-[var(--theme-textbox)] text-[var(--theme-pencil)]"
               value={shipping.name}
               onChange={handleShippingChange('name')}
               required
             />
           </div>
+
           <div className="grid gap-1">
-            <label className="text-xs" htmlFor="ship-email">
+            <label className="text-sm" htmlFor="ship-email">
               Email for receipts
             </label>
             <input
               id="ship-email"
               type="email"
-              className="w-full rounded-xl border px-3 py-2 outline-none"
+              className="w-full rounded-xl border px-3 py-2 outline-none bg-[var(--theme-textbox)] text-[var(--theme-pencil)]"
               value={shipping.email}
               onChange={handleShippingChange('email')}
             />
@@ -370,13 +371,13 @@ function CardForm({ totalCents }: Readonly<{ totalCents: number }>) {
 
         <div className="grid gap-3">
           <div className="grid gap-1">
-            <label className="text-xs" htmlFor="ship-phone">
+            <label className="text-sm" htmlFor="ship-phone">
               Phone
             </label>
             <input
               id="ship-phone"
               type="tel"
-              className="w-full rounded-xl border px-3 py-2 outline-none"
+              className="w-full rounded-xl border px-3 py-2 outline-none bg-[var(--theme-textbox)] text-[var(--theme-pencil)]"
               value={shipping.phone}
               onChange={handleShippingChange('phone')}
               required
@@ -386,26 +387,26 @@ function CardForm({ totalCents }: Readonly<{ totalCents: number }>) {
 
         <div className="grid gap-3">
           <div className="grid gap-1">
-            <label className="text-xs" htmlFor="ship-address1">
+            <label className="text-sm" htmlFor="ship-address1">
               Address line 1
             </label>
             <input
               id="ship-address1"
               type="text"
-              className="w-full rounded-xl border px-3 py-2 outline-none"
+              className="w-full rounded-xl border px-3 py-2 outline-none bg-[var(--theme-textbox)] text-[var(--theme-pencil)]"
               value={shipping.address1}
               onChange={handleShippingChange('address1')}
               required
             />
           </div>
           <div className="grid gap-1">
-            <label className="text-xs" htmlFor="ship-address2">
+            <label className="text-sm" htmlFor="ship-address2">
               Address line 2
             </label>
             <input
               id="ship-address2"
               type="text"
-              className="w-full rounded-xl border px-3 py-2 outline-none"
+              className="w-full rounded-xl border px-3 py-2 outline-none bg-[var(--theme-textbox)] text-[var(--theme-pencil)]"
               value={shipping.address2}
               onChange={handleShippingChange('address2')}
             />
@@ -414,39 +415,39 @@ function CardForm({ totalCents }: Readonly<{ totalCents: number }>) {
 
         <div className="grid gap-3 md:grid-cols-3">
           <div className="grid gap-1">
-            <label className="text-xs" htmlFor="ship-city">
+            <label className="text-sm" htmlFor="ship-city">
               City
             </label>
             <input
               id="ship-city"
               type="text"
-              className="w-full rounded-xl border px-3 py-2 outline-none"
+              className="w-full rounded-xl border px-3 py-2 outline-none bg-[var(--theme-textbox)] text-[var(--theme-pencil)]"
               value={shipping.city}
               onChange={handleShippingChange('city')}
               required
             />
           </div>
           <div className="grid gap-1">
-            <label className="text-xs" htmlFor="ship-state">
+            <label className="text-sm" htmlFor="ship-state">
               State / Province
             </label>
             <input
               id="ship-state"
               type="text"
-              className="w-full rounded-xl border px-3 py-2 outline-none"
+              className="w-full rounded-xl border px-3 py-2 outline-none bg-[var(--theme-textbox)] text-[var(--theme-pencil)]"
               value={shipping.state}
               onChange={handleShippingChange('state')}
               required
             />
           </div>
           <div className="grid gap-1">
-            <label className="text-xs" htmlFor="ship-postal">
+            <label className="text-sm" htmlFor="ship-postal">
               Postal code
             </label>
             <input
               id="ship-postal"
               type="text"
-              className="w-full rounded-xl border px-3 py-2 outline-none"
+              className="w-full rounded-xl border px-3 py-2 outline-none bg-[var(--theme-textbox)] text-[var(--theme-pencil)]"
               value={shipping.postal}
               onChange={handleShippingChange('postal')}
               required
@@ -455,13 +456,13 @@ function CardForm({ totalCents }: Readonly<{ totalCents: number }>) {
         </div>
 
         <div className="grid gap-1">
-          <label className="text-xs" htmlFor="ship-country">
+          <label className="text-sm" htmlFor="ship-country">
             Country
           </label>
           <input
             id="ship-country"
             type="text"
-            className="w-full rounded-xl border px-3 py-2 outline-none"
+            className="w-full rounded-xl border px-3 py-2 outline-none bg-[var(--theme-textbox)] text-[var(--theme-pencil)]"
             value={shipping.country}
             onChange={handleShippingChange('country')}
             required
@@ -471,8 +472,8 @@ function CardForm({ totalCents }: Readonly<{ totalCents: number }>) {
 
       <div className="rounded-xl border p-3">
         <span className="border-[var(--theme-border)]" style={cardBox}>
-          <label className="text-sm font-semibold text-[var(--theme-text)] mb-2 block" htmlFor="card-element">
-            Card number
+          <label className="text-lg font-semibold text-[var(--theme-text)] mb-2 block" htmlFor="card-element">
+            Credit/Debit Card
           </label>
         </span>
         <CardElement
@@ -505,7 +506,7 @@ function CardForm({ totalCents }: Readonly<{ totalCents: number }>) {
       <button
         type="submit"
         disabled={busy || !stripe || !elements || totalCents <= 0}
-        className="inline-block rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button-yellow)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)] disabled:opacity-60"
+        className={pressBtn("inline-block rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button-yellow)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)] disabled:opacity-60")}
       >
         {busy ? 'Processing…' : 'Pay now'}
       </button>

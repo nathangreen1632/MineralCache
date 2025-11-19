@@ -3,6 +3,8 @@ import { buildPackingSlipUrl } from '../../api/vendorOrders';
 import { markOrderDelivered, markOrderShipped, type ShipCarrier } from '../../api/orders';
 import { centsToUsd } from '../../utils/money.util';
 import { get } from '../../lib/api';
+import ConfirmBar from '../../common/ConfirmBar.tsx';
+import { pressBtn } from '../../ui/press.ts';
 
 type Tab = 'paid' | 'shipped' | 'delivered';
 type OrderStatus =
@@ -96,6 +98,7 @@ export default function VendorOrdersPage(): React.ReactElement {
     carrier: ShipCarrier;
     tracking: string;
   }>({ open: false, orderId: null, carrier: 'usps', tracking: '' });
+  const [showShipConfirm, setShowShipConfirm] = useState(false);
 
   const query = useMemo(() => {
     const p = new URLSearchParams();
@@ -244,6 +247,7 @@ export default function VendorOrdersPage(): React.ReactElement {
     }
 
     setShipDialog({ open: false, orderId: null, carrier: 'usps', tracking: '' });
+    setShowShipConfirm(false);
     clearSelection(orderId);
     await load();
   }
@@ -277,31 +281,31 @@ export default function VendorOrdersPage(): React.ReactElement {
       <div className="flex gap-2">
         <button
           onClick={() => setTab('paid')}
-          className={`rounded-xl px-3 py-1.5 text-sm font-semibold border ${
+          className={pressBtn(`rounded-xl px-3 py-1.5 text-sm font-semibold border ${
             tab === 'paid'
               ? 'bg-[var(--theme-card)] border-[var(--theme-border)]'
               : 'border-transparent hover:bg-[var(--theme-surface)]'
-          }`}
+          }`)}
         >
           Paid
         </button>
         <button
           onClick={() => setTab('shipped')}
-          className={`rounded-xl px-3 py-1.5 text-sm font-semibold border ${
+          className={pressBtn(`rounded-xl px-3 py-1.5 text-sm font-semibold border ${
             tab === 'shipped'
               ? 'bg-[var(--theme-card)] border-[var(--theme-border)]'
               : 'border-transparent hover:bg-[var(--theme-surface)]'
-          }`}
+          }`)}
         >
           Shipped
         </button>
         <button
           onClick={() => setTab('delivered')}
-          className={`rounded-xl px-3 py-1.5 text-sm font-semibold border ${
+          className={pressBtn(`rounded-xl px-3 py-1.5 text-sm font-semibold border ${
             tab === 'delivered'
               ? 'bg-[var(--theme-card)] border-[var(--theme-border)]'
               : 'border-transparent hover:bg-[var(--theme-surface)]'
-          }`}
+          }`)}
         >
           Delivered
         </button>
@@ -346,7 +350,7 @@ export default function VendorOrdersPage(): React.ReactElement {
                       href={buildPackingSlipUrl(o.orderId)}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex rounded-xl px-3 py-1 border bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+                      className={pressBtn("inline-flex rounded-xl px-3 py-1 border bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] hover:text-[var(--theme-psycho)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]")}
                     >
                       Packing slip
                     </a>
@@ -361,8 +365,7 @@ export default function VendorOrdersPage(): React.ReactElement {
                       onClick={() =>
                         setShipDialog({ open: true, orderId: o.orderId, carrier: 'usps', tracking: '' })
                       }
-                      className="rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-60"
-                      style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
+                      className={pressBtn("inline-flex rounded-xl px-3 py-1 border bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] hover:text-[var(--theme-psycho)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]")}
                     >
                       Mark Shipped
                     </button>
@@ -373,8 +376,7 @@ export default function VendorOrdersPage(): React.ReactElement {
                       type="button"
                       disabled={selected.size === 0}
                       onClick={() => void doDeliver(o.orderId)}
-                      className="rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-60"
-                      style={{ borderColor: 'var(--theme-border)' }}
+                      className={pressBtn("inline-flex rounded-xl px-3 py-1 border bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] hover:text-[var(--theme-psycho)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]")}
                     >
                       Mark Delivered
                     </button>
@@ -455,7 +457,7 @@ export default function VendorOrdersPage(): React.ReactElement {
 
               <div className="flex items-center justify-between">
                 <div className="text-sm opacity-80">Placed {new Date(o.createdAt).toLocaleString()}</div>
-                <div className="text-sm font-semibold">Total {centsToUsd(o.totalCents)}</div>
+                <div className="text-base font-semibold">Total <span className="text-[var(--theme-success)]">{centsToUsd(o.totalCents)}</span></div>
               </div>
             </div>
           );
@@ -466,7 +468,7 @@ export default function VendorOrdersPage(): React.ReactElement {
         <button
           onClick={() => setPage((p) => Math.max(1, p - 1))}
           disabled={page <= 1 || busy}
-          className="rounded-lg px-3 py-1 text-sm border border-[var(--theme-border)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+          className={pressBtn("rounded-lg px-3 py-1 text-sm border border-[var(--theme-border)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]")}
         >
           Prev
         </button>
@@ -474,7 +476,7 @@ export default function VendorOrdersPage(): React.ReactElement {
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={busy}
-          className="rounded-lg px-3 py-1 text-sm border border-[var(--theme-border)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+          className={pressBtn("rounded-lg px-3 py-1 text-sm border border-[var(--theme-border)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]")}
         >
           Next
         </button>
@@ -482,8 +484,8 @@ export default function VendorOrdersPage(): React.ReactElement {
 
       {shipDialog.open && shipDialog.orderId != null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" />
-          <div className="relative z-10 w-[min(92vw,440px)] rounded-2xl border p-5 grid gap-3" style={card}>
+          <div className="absolute inset-0 bg-black/70" />
+          <div className="relative z-10 w-[min(92vw,550px)] rounded-2xl border p-5 grid gap-3" style={card}>
             <div className="text-lg font-semibold">Mark Shipped</div>
             <div className="grid gap-2">
               <label className="text-xs opacity-70" htmlFor="carrier">
@@ -515,30 +517,51 @@ export default function VendorOrdersPage(): React.ReactElement {
                 style={{ borderColor: 'var(--theme-border)' }}
               />
             </div>
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShipDialog({ open: false, orderId: null, carrier: 'usps', tracking: '' })}
-                className="rounded-lg px-3 py-2 text-sm ring-1 ring-inset"
-                style={{ borderColor: 'var(--theme-border)' }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={
-                  busy ||
-                  (selectedByOrder[shipDialog.orderId ?? -1]?.size ?? 0) === 0 ||
-                  !normalizeCarrier(shipDialog.carrier) ||
-                  shipDialog.tracking.trim().length <
-                  getMinTrackingLength(normalizeCarrier(shipDialog.carrier))
-                }
-                onClick={() => shipDialog.orderId != null && void doShip(shipDialog.orderId)}
-                className="rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-60"
-                style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
-              >
-                Ship selected
-              </button>
+            <div className="flex flex-col gap-3 pt-2">
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShipDialog({ open: false, orderId: null, carrier: 'usps', tracking: '' });
+                    setShowShipConfirm(false);
+                  }}
+                  className={pressBtn("rounded-lg px-3 py-2 text-sm ring-1 ring-inset")}
+                  style={{ borderColor: 'var(--theme-border)' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    busy ||
+                    (selectedByOrder[shipDialog.orderId ?? -1]?.size ?? 0) === 0 ||
+                    !normalizeCarrier(shipDialog.carrier) ||
+                    shipDialog.tracking.trim().length <
+                    getMinTrackingLength(normalizeCarrier(shipDialog.carrier))
+                  }
+                  onClick={() => setShowShipConfirm(true)}
+                  className={pressBtn("rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-60")}
+                  style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
+                >
+                  Ship selected
+                </button>
+              </div>
+
+              {showShipConfirm && (
+                <div className="mt-3 border-t border-[var(--theme-border)] pt-3">
+                  <ConfirmBar
+                    message="Mark these selected items as shipped with this tracking number? This cannot be changed later."
+                    cancelLabel="Go back"
+                    confirmLabel="Confirm shipped"
+                    onCancel={() => setShowShipConfirm(false)}
+                    onConfirm={() => {
+                      if (shipDialog.orderId != null) {
+                        void doShip(shipDialog.orderId);
+                      }
+                    }}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>

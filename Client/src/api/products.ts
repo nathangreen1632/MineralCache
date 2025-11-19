@@ -29,6 +29,7 @@ export type ProductInput = {
   weightG?: number | null;
   weightCt?: number | null;
   fluorescence: FluorescenceInput;
+  radioactive?: boolean;
   condition?: string | null;
   conditionNote?: string | null;
   provenanceNote?: string | null;
@@ -59,6 +60,7 @@ export type Product = {
   fluorescenceMode: FluorescenceMode;
   fluorescenceColorNote: string | null;
   fluorescenceWavelengthNm: number[] | null;
+  radioactive: boolean | null;
   condition: string | null;
   conditionNote: string | null;
   provenanceNote: string | null;

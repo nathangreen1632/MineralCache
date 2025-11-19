@@ -26,6 +26,7 @@ const Schema = z
     species: z.string().max(120).optional().nullable(),
     locality: z.string().max(240).optional().nullable(),
     synthetic: z.boolean().optional().nullable(),
+    radioactive: z.boolean().optional().nullable(),
     lengthCm: z.number().nonnegative().optional().nullable(),
     widthCm: z.number().nonnegative().optional().nullable(),
     heightCm: z.number().nonnegative().optional().nullable(),
@@ -99,6 +100,7 @@ export default function ProductForm({
     weightG: useId(),
     weightCt: useId(),
     fluorMode: useId(),
+    radioactive: useId(),
     fluorColor: useId(),
     condition: useId(),
     conditionNote: useId(),
@@ -141,6 +143,7 @@ export default function ProductForm({
     species: initial?.species ?? null,
     locality: initial?.locality ?? null,
     synthetic: (initial?.synthetic as boolean | null | undefined) ?? false,
+    radioactive: ((initial as any)?.radioactive as boolean | null | undefined) ?? false,
     lengthCm: initial?.lengthCm ?? null,
     widthCm: initial?.widthCm ?? null,
     heightCm: initial?.heightCm ?? null,
@@ -167,6 +170,10 @@ export default function ProductForm({
       species: initial.species ?? prev.species,
       locality: initial.locality ?? prev.locality,
       synthetic: (initial.synthetic as boolean | null | undefined) ?? prev.synthetic ?? false,
+      radioactive:
+        ((initial as any)?.radioactive as boolean | null | undefined) ??
+        prev.radioactive ??
+        false,
       lengthCm: initial.lengthCm ?? prev.lengthCm,
       widthCm: initial.widthCm ?? prev.widthCm,
       heightCm: initial.heightCm ?? prev.heightCm,
@@ -177,7 +184,9 @@ export default function ProductForm({
         (initial.fluorescence as ProductFormValues['fluorescence']) ??
         prev.fluorescence ??
         DEFAULT_FLUOR,
-      condition: VALID_CONDITIONS.has((initial?.condition as string) ?? '') ? (initial?.condition as any) : prev.condition ?? '',
+      condition: VALID_CONDITIONS.has((initial?.condition as string) ?? '')
+        ? (initial?.condition as any)
+        : prev.condition ?? '',
       conditionNote: initial.conditionNote ?? prev.conditionNote,
       provenanceNote: initial.provenanceNote ?? prev.provenanceNote,
       priceCents:
@@ -264,6 +273,7 @@ export default function ProductForm({
       species: normalize(values.species ?? null) ?? '',
       locality: normalize(values.locality ?? null),
       synthetic: Boolean(values.synthetic ?? false),
+      radioactive: Boolean(values.radioactive ?? false),
       lengthCm: values.lengthCm ?? null,
       widthCm: values.widthCm ?? null,
       heightCm: values.heightCm ?? null,
@@ -437,148 +447,100 @@ export default function ProductForm({
         </div>
 
         <div>
-          <label htmlFor={ids.lengthCm} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Length (cm)</label>
-          <input
-            id={ids.lengthCm}
-            className={fieldCls(Boolean(errs.lengthCm))}
-            type="number"
-            step="0.01"
-            value={values.lengthCm ?? ''}
-            onChange={(e) => setField('lengthCm', e.target.value === '' ? null : Number(e.target.value))}
-          />
-        </div>
-        <div>
-          <label htmlFor={ids.widthCm} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Width (cm)</label>
-          <input
-            id={ids.widthCm}
-            className={fieldCls(Boolean(errs.widthCm))}
-            type="number"
-            step="0.01"
-            value={values.widthCm ?? ''}
-            onChange={(e) => setField('widthCm', e.target.value === '' ? null : Number(e.target.value))}
-          />
-        </div>
-        <div>
-          <label htmlFor={ids.heightCm} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Height (cm)</label>
-          <input
-            id={ids.heightCm}
-            className={fieldCls(Boolean(errs.heightCm))}
-            type="number"
-            step="0.01"
-            value={values.heightCm ?? ''}
-            onChange={(e) => setField('heightCm', e.target.value === '' ? null : Number(e.target.value))}
-          />
-        </div>
-
-        <div className="md:col-span-2">
-          <label htmlFor={ids.sizeNote} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Size note</label>
-          <input
-            id={ids.sizeNote}
-            className={fieldCls(Boolean(errs.sizeNote))}
-            value={values.sizeNote ?? ''}
-            onChange={(e) => setField('sizeNote', e.target.value)}
-            maxLength={120}
-          />
-          {errs.sizeNote && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.sizeNote}</p>}
-        </div>
-
-        <div>
-          <label htmlFor={ids.weightG} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Weight (g)</label>
-          <input
-            id={ids.weightG}
-            className={fieldCls(Boolean(errs.weightG))}
-            type="number"
-            step="0.01"
-            value={values.weightG ?? ''}
-            onChange={(e) => setField('weightG', e.target.value === '' ? null : Number(e.target.value))}
-          />
-        </div>
-        <div>
-          <label htmlFor={ids.weightCt} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Weight (ct)</label>
-          <input
-            id={ids.weightCt}
-            className={fieldCls(Boolean(errs.weightCt))}
-            type="number"
-            step="0.01"
-            value={values.weightCt ?? ''}
-            onChange={(e) => setField('weightCt', e.target.value === '' ? null : Number(e.target.value))}
-          />
-        </div>
-
-        <div>
-          <label htmlFor={ids.fluorMode} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Fluorescence mode</label>
-          <select
-            id={ids.fluorMode}
-            className={fieldCls(Boolean((errs as any)['fluorescence.mode']))}
-            value={values.fluorescence?.mode ?? 'none'}
-            onChange={(e) => setFluorField('mode', e.target.value as any)}
+          <label
+            htmlFor={ids.synthetic}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
           >
-            <option value="none">None</option>
-            <option value="SW">SW</option>
-            <option value="LW">LW</option>
-            <option value="both">Both</option>
-          </select>
-        </div>
-        <div className="md:col-span-2">
-          <label htmlFor={ids.fluorColor} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Fluorescence color note</label>
-          <input
-            id={ids.fluorColor}
-            className={fieldCls(Boolean((errs as any)['fluorescence.colorNote']))}
-            value={values.fluorescence?.colorNote ?? ''}
-            onChange={(e) => setFluorField('colorNote', e.target.value || null)}
-          />
+            Synthetic <span className="text-[var(--theme-error)]" aria-hidden="true">*</span>
+          </label>
+          <div className="relative">
+            <select
+              id={ids.synthetic}
+              required
+              className={fieldCls(false) + ' appearance-none pr-10'}
+              value={values.synthetic ? 'yes' : 'no'}
+              onChange={(e) => setField('synthetic', e.target.value === 'yes')}
+            >
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </select>
+            <ChevronDown
+              size={18}
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-80"
+              aria-hidden="true"
+            />
+          </div>
         </div>
 
         <div>
-          <label htmlFor={ids.synthetic} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Synthetic <span className="text-[var(--theme-error)]" aria-hidden="true">*</span></label>
-          <select
-            id={ids.synthetic}
-            required
-            className={fieldCls(false)}
-            value={values.synthetic ? 'yes' : 'no'}
-            onChange={(e) => setField('synthetic', e.target.value === 'yes')}
+          <label
+            htmlFor={ids.condition}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
           >
-            <option value="no">No</option>
-            <option value="yes">Yes</option>
-          </select>
-        </div>
-
-        <div>
-          <label htmlFor={ids.condition} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">
             Condition <span className="text-[var(--theme-error)]" aria-hidden="true">*</span>
           </label>
-          <select
-            id={ids.condition}
-            required
-            aria-required="true"
-            aria-invalid={touched.condition && conditionMissing}
-            className={fieldCls((touched.condition && conditionMissing) || Boolean(errs.condition))}
-            value={values.condition as string}
-            onChange={(e) => setField('condition', e.target.value as any)}
-            onBlur={() => setTouched((t) => ({ ...t, condition: true }))}
-          >
-            <option value="">Select a condition…</option>
-            {CONDITION_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-          {errs.condition && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.condition}</p>}
+          <div className="relative">
+            <select
+              id={ids.condition}
+              required
+              aria-required="true"
+              aria-invalid={touched.condition && conditionMissing}
+              className={
+                fieldCls((touched.condition && conditionMissing) || Boolean(errs.condition)) +
+                ' appearance-none pr-10'
+              }
+              value={values.condition as string}
+              onChange={(e) => setField('condition', e.target.value as any)}
+              onBlur={() => setTouched((t) => ({ ...t, condition: true }))}
+            >
+              <option value="">Select a condition…</option>
+              {CONDITION_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              size={18}
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-80"
+              aria-hidden="true"
+            />
+          </div>
+          {errs.condition && (
+            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
+              {errs.condition}
+            </p>
+          )}
           {!errs.condition && touched.condition && conditionMissing && (
-            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>Condition is required</p>
+            <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
+              Condition is required
+            </p>
           )}
         </div>
 
-        <div className="md:col-span-2">
-          <label htmlFor={ids.provenanceNote} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Provenance</label>
-          <input
-            id={ids.provenanceNote}
-            className={fieldCls(Boolean(errs.provenanceNote))}
-            value={values.provenanceNote ?? ''}
-            onChange={(e) => setField('provenanceNote', e.target.value)}
-            maxLength={240}
-            placeholder="Optional provenance details"
-          />
-          {errs.provenanceNote && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.provenanceNote}</p>}
+        <div>
+          <label
+            htmlFor={ids.radioactive}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Radioactive <span className="text-[var(--theme-error)]" aria-hidden="true">*</span>
+          </label>
+          <div className="relative">
+            <select
+              id={ids.radioactive}
+              className={fieldCls(false) + ' appearance-none pr-10'}
+              value={values.radioactive ? 'yes' : 'no'}
+              onChange={(e) => setField('radioactive', e.target.value === 'yes')}
+            >
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </select>
+            <ChevronDown
+              size={18}
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-80"
+              aria-hidden="true"
+            />
+          </div>
         </div>
 
         <div>
@@ -618,6 +580,131 @@ export default function ProductForm({
             placeholder="e.g. 59.99"
           />
           {errs.salePriceCents && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.salePriceCents}</p>}
+        </div>
+
+        <div>
+          <label htmlFor={ids.lengthCm} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Length (cm)</label>
+          <input
+            id={ids.lengthCm}
+            className={fieldCls(Boolean(errs.lengthCm))}
+            type="number"
+            step="0.01"
+            value={values.lengthCm ?? ''}
+            onChange={(e) => setField('lengthCm', e.target.value === '' ? null : Number(e.target.value))}
+          />
+        </div>
+
+        <div>
+          <label htmlFor={ids.widthCm} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Width (cm)</label>
+          <input
+            id={ids.widthCm}
+            className={fieldCls(Boolean(errs.widthCm))}
+            type="number"
+            step="0.01"
+            value={values.widthCm ?? ''}
+            onChange={(e) => setField('widthCm', e.target.value === '' ? null : Number(e.target.value))}
+          />
+        </div>
+
+        <div>
+          <label htmlFor={ids.heightCm} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Height (cm)</label>
+          <input
+            id={ids.heightCm}
+            className={fieldCls(Boolean(errs.heightCm))}
+            type="number"
+            step="0.01"
+            value={values.heightCm ?? ''}
+            onChange={(e) => setField('heightCm', e.target.value === '' ? null : Number(e.target.value))}
+          />
+        </div>
+
+        <div>
+          <label htmlFor={ids.weightG} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Weight (g)</label>
+          <input
+            id={ids.weightG}
+            className={fieldCls(Boolean(errs.weightG))}
+            type="number"
+            step="0.01"
+            value={values.weightG ?? ''}
+            onChange={(e) => setField('weightG', e.target.value === '' ? null : Number(e.target.value))}
+          />
+        </div>
+
+        <div>
+          <label htmlFor={ids.weightCt} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Weight (ct)</label>
+          <input
+            id={ids.weightCt}
+            className={fieldCls(Boolean(errs.weightCt))}
+            type="number"
+            step="0.01"
+            value={values.weightCt ?? ''}
+            onChange={(e) => setField('weightCt', e.target.value === '' ? null : Number(e.target.value))}
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor={ids.fluorMode}
+            className="mb-1 block text-sm font-semibold text-[var(--theme-text)]"
+          >
+            Fluorescence mode
+          </label>
+          <div className="relative">
+            <select
+              id={ids.fluorMode}
+              className={
+                fieldCls(Boolean((errs as any)['fluorescence.mode'])) +
+                ' appearance-none pr-10'
+              }
+              value={values.fluorescence?.mode ?? 'none'}
+              onChange={(e) => setFluorField('mode', e.target.value as any)}
+            >
+              <option value="none">None</option>
+              <option value="SW">SW</option>
+              <option value="LW">LW</option>
+              <option value="both">Both</option>
+            </select>
+            <ChevronDown
+              size={18}
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-80"
+              aria-hidden="true"
+            />
+          </div>
+        </div>
+
+        <div className="md:col-span-2">
+          <label htmlFor={ids.sizeNote} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Size note</label>
+          <input
+            id={ids.sizeNote}
+            className={fieldCls(Boolean(errs.sizeNote))}
+            value={values.sizeNote ?? ''}
+            onChange={(e) => setField('sizeNote', e.target.value)}
+            maxLength={120}
+          />
+          {errs.sizeNote && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.sizeNote}</p>}
+        </div>
+
+        <div className="md:col-span-2">
+          <label htmlFor={ids.fluorColor} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Fluorescence color note</label>
+          <input
+            id={ids.fluorColor}
+            className={fieldCls(Boolean((errs as any)['fluorescence.colorNote']))}
+            value={values.fluorescence?.colorNote ?? ''}
+            onChange={(e) => setFluorField('colorNote', e.target.value || null)}
+          />
+        </div>
+
+        <div className="md:col-span-2">
+          <label htmlFor={ids.provenanceNote} className="mb-1 block text-sm font-semibold text-[var(--theme-text)]">Provenance</label>
+          <input
+            id={ids.provenanceNote}
+            className={fieldCls(Boolean(errs.provenanceNote))}
+            value={values.provenanceNote ?? ''}
+            onChange={(e) => setField('provenanceNote', e.target.value)}
+            maxLength={240}
+            placeholder="Optional provenance details"
+          />
+          {errs.provenanceNote && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.provenanceNote}</p>}
         </div>
       </div>
 

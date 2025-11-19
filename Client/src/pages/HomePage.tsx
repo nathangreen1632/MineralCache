@@ -4,6 +4,7 @@ import ProductCard from '../components/products/ProductCard';
 import { getOnSaleProducts, getShopNowProducts } from '../api/public';
 import CategoriesRow from '../components/categories/CategoriesRow';
 import BrandWordmark from '../common/BrandWordmark';
+import {pressBtn} from "../ui/press.ts";
 
 const PAGE_SIZE = 12;
 const HOME_FETCH_LIMIT = PAGE_SIZE * 8;
@@ -158,7 +159,7 @@ export default function HomePage(): React.ReactElement {
               type="button"
               disabled={!canPrevShopNow}
               onClick={() => setShopPage((p) => Math.max(1, p - 1))}
-              className="rounded px-3 py-1 text-sm disabled:opacity-50"
+              className={pressBtn("rounded px-3 py-1 text-sm disabled:opacity-50")}
               style={{
                 background: 'var(--theme-surface)',
                 color: 'var(--theme-text)',
@@ -172,7 +173,7 @@ export default function HomePage(): React.ReactElement {
               type="button"
               disabled={!canNextShopNow}
               onClick={() => setShopPage((p) => p + 1)}
-              className="rounded px-3 py-1 text-sm disabled:opacity-50"
+              className={pressBtn("rounded px-3 py-1 text-sm disabled:opacity-50")}
               style={{
                 background: 'var(--theme-surface)',
                 color: 'var(--theme-text)',
@@ -245,7 +246,7 @@ export default function HomePage(): React.ReactElement {
               type="button"
               disabled={!canPrevOnSale}
               onClick={() => setSalePage((p) => Math.max(1, p - 1))}
-              className="rounded px-3 py-1 text-sm disabled:opacity-50"
+              className={pressBtn("rounded px-3 py-1 text-sm disabled:opacity-50")}
               style={{
                 background: 'var(--theme-surface)',
                 color: 'var(--theme-text)',
@@ -259,7 +260,7 @@ export default function HomePage(): React.ReactElement {
               type="button"
               disabled={!canNextOnSale}
               onClick={() => setSalePage((p) => p + 1)}
-              className="rounded px-3 py-1 text-sm disabled:opacity-50"
+              className={pressBtn("rounded px-3 py-1 text-sm disabled:opacity-50")}
               style={{
                 background: 'var(--theme-surface)',
                 color: 'var(--theme-text)',

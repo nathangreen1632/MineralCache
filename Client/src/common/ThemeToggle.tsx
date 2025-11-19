@@ -2,6 +2,7 @@
 import React from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
+import {pressBtn} from "../ui/press.ts";
 
 export default function ThemeToggle(): React.ReactElement {
   const { isDark, toggle, pref, setSystem } = useTheme();
@@ -43,7 +44,7 @@ export default function ThemeToggle(): React.ReactElement {
         <button
           type="button"
           onClick={setSystem}
-          className="inline-flex items-center justify-center rounded-lg px-2 py-1 text-xs font-semibold border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
+          className={pressBtn("inline-flex items-center justify-center rounded-lg px-2 py-1 text-xs font-semibold border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]")}
         >
           Use system preference
         </button>

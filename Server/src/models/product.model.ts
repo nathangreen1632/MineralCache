@@ -56,6 +56,7 @@ export class Product extends Model<
   declare provenanceTrail: ProvenanceEntry[] | null;
 
   declare synthetic: boolean;
+  declare radioactive: boolean;
 
   // Pricing
   declare priceCents: number;
@@ -154,6 +155,7 @@ if (!sequelize) {
       provenanceTrail: { type: DataTypes.JSONB, allowNull: true }, // ProvenanceEntry[]
 
       synthetic: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+      radioactive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
 
       // Pricing (scheduled sale model)
       priceCents: { type: DataTypes.INTEGER, allowNull: false },
@@ -174,6 +176,7 @@ if (!sequelize) {
         { fields: ['vendorId'] },
         { fields: ['species'] },
         { fields: ['synthetic'] },
+        { fields: ['radioactive'] },
 
         // New filter/sort helpers
         { fields: ['condition'] },

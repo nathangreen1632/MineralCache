@@ -32,7 +32,7 @@ export default function AuctionWatchPage(): React.ReactElement {
 
   const [items, setItems] = useState<AuctionListItem[] | null>(null);
   const [q, setQ] = useState('');
-  const [sort, setSort] = useState<'ending' | 'newest'>('ending');
+  const [sort, setSort] = useState<'ending' | 'newest'>('newest');
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 

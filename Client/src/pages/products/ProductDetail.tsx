@@ -7,6 +7,7 @@ import AuctionPanel from '../../components/auctions/AuctionPanel';
 import { addToCart } from '../../api/cart';
 import toast from 'react-hot-toast';
 import { centsToUsd } from '../../utils/money.util';
+import {pressBtn} from "../../ui/press.ts";
 
 function isSaleActive(p: Product, now = new Date()): boolean {
   if (p.salePriceCents == null) return false;
@@ -14,10 +15,12 @@ function isSaleActive(p: Product, now = new Date()): boolean {
   const endOk = !p.saleEndAt || now <= new Date(p.saleEndAt);
   return startOk && endOk;
 }
+
 function effectivePriceCents(p: Product): number {
   if (isSaleActive(p)) return p.salePriceCents as number;
   return p.priceCents;
 }
+
 function sizeLabel(p: Product): string {
   const parts: string[] = [];
   if (p.lengthCm != null) parts.push(String(p.lengthCm));
@@ -27,11 +30,13 @@ function sizeLabel(p: Product): string {
   if (p.sizeNote) return p.sizeNote;
   return '—';
 }
+
 function weightLabel(p: Product): string {
   if (p.weightG != null) return `${p.weightG} g`;
   if (p.weightCt != null) return `${p.weightCt} ct`;
   return '—';
 }
+
 function fluorescenceLabel(p: Product): string {
   if (!p.fluorescenceMode || p.fluorescenceMode === 'none') return '—';
   let out = p.fluorescenceMode;
@@ -156,7 +161,7 @@ export default function ProductDetail(): React.ReactElement {
 
   const auctionStatusRaw = (p as any).auctionStatus;
   const auctionStatus =
-    typeof auctionStatusRaw === 'string' ? (auctionStatusRaw as string) : null;
+    typeof auctionStatusRaw === 'string' ? (auctionStatusRaw) : null;
   const auctionActive = auctionId != null && (auctionStatus === 'live' || auctionStatus === 'scheduled');
 
   const categoryName =
@@ -182,17 +187,17 @@ export default function ProductDetail(): React.ReactElement {
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold text-[var(--theme-text)]">{p.title}</h1>
 
-        <div className="text-sm" style={{ color: 'var(--theme-link)' }}>
+        <div className="text-lg" style={{ color: 'var(--theme-link)' }}>
           {categoryName}
           {p.locality ? ` ${p.locality}` : ''}
         </div>
 
-        <div className="mt-0.5 text-xs text-[var(--theme-text)]">
+        <div className="mt-0.5 text-lg text-[var(--theme-text)]">
           <span className="opacity-75">Sold by:</span>{' '}
           {(p as any).vendorSlug ? (
             <Link
               to={`/vendors/${(p as any).vendorSlug}`}
-              className="capitalize underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link)]"
+              className="capitalize underline decoration-dotted text-[var(--theme-link)] hover:text-[var(--theme-link-hover)]"
               aria-label={`View vendor storefront: ${(p as any).vendorSlug}`}
             >
               {(p as any).vendorSlug}
@@ -207,20 +212,28 @@ export default function ProductDetail(): React.ReactElement {
         <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
           <dt className="opacity-80">Size</dt>
           <dd>{sizeLabel(p)}</dd>
+
           <dt className="opacity-80">Weight</dt>
           <dd>{weightLabel(p)}</dd>
+
           <dt className="opacity-80">Species</dt>
           <dd>{p.species || '—'}</dd>
+
           <dt className="opacity-80">Condition</dt>
           <dd>{conditionLabel((p as any).condition)}</dd>
+
           <dt className="opacity-80">Provenance</dt>
           <dd>{p.provenanceNote ?? '—'}</dd>
+
           <dt className="opacity-80">Synthetic</dt>
           <dd>{p.synthetic ? 'Yes' : 'No'}</dd>
+
           <dt className="opacity-80">Fluorescence</dt>
           <dd>{fluorescenceLabel(p)}</dd>
-        </dl>
 
+          <dt className="opacity-80">Radioactive</dt>
+          <dd>{p.radioactive ? 'Yes' : 'No'}</dd>
+        </dl>
 
         <div className="space-y-1">
           <div className="flex items-center gap-2">
@@ -229,7 +242,7 @@ export default function ProductDetail(): React.ReactElement {
               aria-label="Add this item to your cart"
               aria-busy={auctionActive || adding ? 'true' : 'false'}
               disabled={auctionActive || adding}
-              className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+              className={pressBtn("inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]")}
               onClick={async () => {
                 if (auctionActive) return;
                 try {
@@ -256,7 +269,7 @@ export default function ProductDetail(): React.ReactElement {
 
             <Link
               to="/products"
-              className="rounded-lg px-3 py-2 text-sm font-medium ring-1 ring-inset"
+              className={pressBtn("rounded-lg px-3 py-2 text-sm font-medium ring-1 ring-inset")}
               style={{
                 background: 'var(--theme-surface)',
                 color: 'var(--theme-text)',
@@ -268,19 +281,19 @@ export default function ProductDetail(): React.ReactElement {
           </div>
 
           {auctionActive && (
-            <p className="text-sm text-[var(--theme-error)] opacity-80">
+            <p className="text-base text-[var(--theme-error)] opacity-80">
               This item is currently at auction. Add to cart is disabled until the auction ends.
             </p>
           )}
+
+          {p.description && (
+            <div className="lg:col-span-2 rounded-xl border p-4 mt-6" style={card}>
+              <h2 className="mb-2 text-lg font-semibold text-[var(--theme-text)]">Description</h2>
+              <p className="whitespace-pre-wrap text-sm opacity-90">{p.description}</p>
+            </div>
+          )}
         </div>
       </div>
-
-      {p.description && (
-        <div className="lg:col-span-2 rounded-xl border p-4" style={card}>
-          <h2 className="mb-2 text-lg font-semibold text-[var(--theme-text)]">Description</h2>
-          <p className="whitespace-pre-wrap text-sm opacity-90">{p.description}</p>
-        </div>
-      )}
     </section>
   );
 }
