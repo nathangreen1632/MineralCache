@@ -7,6 +7,7 @@ import AuctionPanel from '../../components/auctions/AuctionPanel';
 import { addToCart } from '../../api/cart';
 import toast from 'react-hot-toast';
 import { centsToUsd } from '../../utils/money.util';
+import {pressBtn} from "../../ui/press.ts";
 
 function isSaleActive(p: Product, now = new Date()): boolean {
   if (p.salePriceCents == null) return false;
@@ -241,7 +242,7 @@ export default function ProductDetail(): React.ReactElement {
               aria-label="Add this item to your cart"
               aria-busy={auctionActive || adding ? 'true' : 'false'}
               disabled={auctionActive || adding}
-              className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+              className={pressBtn("inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]")}
               onClick={async () => {
                 if (auctionActive) return;
                 try {
@@ -268,7 +269,7 @@ export default function ProductDetail(): React.ReactElement {
 
             <Link
               to="/products"
-              className="rounded-lg px-3 py-2 text-sm font-medium ring-1 ring-inset"
+              className={pressBtn("rounded-lg px-3 py-2 text-sm font-medium ring-1 ring-inset")}
               style={{
                 background: 'var(--theme-surface)',
                 color: 'var(--theme-text)',
