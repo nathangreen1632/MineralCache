@@ -280,19 +280,19 @@ export default function ProductDetail(): React.ReactElement {
           </div>
 
           {auctionActive && (
-            <p className="text-sm text-[var(--theme-error)] opacity-80">
+            <p className="text-base text-[var(--theme-error)] opacity-80">
               This item is currently at auction. Add to cart is disabled until the auction ends.
             </p>
           )}
+
+          {p.description && (
+            <div className="lg:col-span-2 rounded-xl border p-4 mt-6" style={card}>
+              <h2 className="mb-2 text-lg font-semibold text-[var(--theme-text)]">Description</h2>
+              <p className="whitespace-pre-wrap text-sm opacity-90">{p.description}</p>
+            </div>
+          )}
         </div>
       </div>
-
-      {p.description && (
-        <div className="lg:col-span-2 rounded-xl border p-4" style={card}>
-          <h2 className="mb-2 text-lg font-semibold text-[var(--theme-text)]">Description</h2>
-          <p className="whitespace-pre-wrap text-sm opacity-90">{p.description}</p>
-        </div>
-      )}
     </section>
   );
 }
