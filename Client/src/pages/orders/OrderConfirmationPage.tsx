@@ -174,7 +174,7 @@ export default function OrderConfirmationPage(): React.ReactElement {
         </Link>
         {isPaid && order ? (
           <a
-            href={`/orders/${order.id}/receipt`}
+            href={`/api/orders/${order.id}/receipt`}
             target="_blank"
             rel="noopener noreferrer"
             className={pressBtn("inline-flex rounded-xl px-4 py-2 font-semibold border border-[var(--theme-border)] hover:bg-[var(--theme-card)]")}
