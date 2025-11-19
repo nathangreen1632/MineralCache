@@ -12,7 +12,7 @@ import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 
 // Public catalog
-import ProductShopList from './pages/products/ProductShopList.tsx';
+import ProductShopListView from './jsx/products/ProductShoptListView';
 import ProductDetail from './pages/products/ProductDetail';
 import CategoryPage from './pages/CategoryPage';
 
@@ -81,7 +81,7 @@ export default function AppRoutes(): React.ReactElement {
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
         <Route path="verify-age" element={<AgeVerifyPage />} />
-        <Route path="products" element={<ProductShopList />} />
+        <Route path="products" element={<ProductShopListView />} />
         <Route path="products/:id" element={<ProductDetail />} />
         <Route path="category/:slug" element={<CategoryPage />} />
         <Route path="/vendors/:slug" element={<VendorMainPage />} />
