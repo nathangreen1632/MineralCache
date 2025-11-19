@@ -65,7 +65,7 @@
 
     /* links */
     --theme-link: var(--c-j);
-    --theme-link-hover: #E9D1CB;
+    --theme-link-hover: var(--c-p);
 
     /* semantic */
     --theme-success: var(--c-g);
