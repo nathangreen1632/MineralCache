@@ -151,6 +151,7 @@ export async function createProduct(req: Request, res: Response): Promise<void> 
         species: p.species,
         locality: p.locality ?? null,
         synthetic: Boolean(p.synthetic ?? false),
+        radioactive: Boolean(p.radioactive ?? false),
         lengthCm: p.lengthCm ?? null,
         widthCm: p.widthCm ?? null,
         heightCm: p.heightCm ?? null,
@@ -221,6 +222,7 @@ export async function updateProduct(req: Request, res: Response): Promise<void> 
     if (p.species !== undefined) patch.species = p.species;
     if (p.locality !== undefined) patch.locality = p.locality ?? null;
     if (p.synthetic !== undefined) patch.synthetic = Boolean(p.synthetic);
+    if (p.radioactive !== undefined) patch.radioactive = Boolean(p.radioactive);
     if (p.lengthCm !== undefined) patch.lengthCm = p.lengthCm ?? null;
     if (p.widthCm !== undefined) patch.widthCm = p.widthCm ?? null;
     if (p.heightCm !== undefined) patch.heightCm = p.heightCm ?? null;
@@ -989,3 +991,4 @@ export async function restoreImage(req: Request, res: Response) {
     res.status(400).json({ error: msg });
   }
 }
+
