@@ -14,10 +14,12 @@ function isSaleActive(p: Product, now = new Date()): boolean {
   const endOk = !p.saleEndAt || now <= new Date(p.saleEndAt);
   return startOk && endOk;
 }
+
 function effectivePriceCents(p: Product): number {
   if (isSaleActive(p)) return p.salePriceCents as number;
   return p.priceCents;
 }
+
 function sizeLabel(p: Product): string {
   const parts: string[] = [];
   if (p.lengthCm != null) parts.push(String(p.lengthCm));
@@ -27,11 +29,13 @@ function sizeLabel(p: Product): string {
   if (p.sizeNote) return p.sizeNote;
   return '—';
 }
+
 function weightLabel(p: Product): string {
   if (p.weightG != null) return `${p.weightG} g`;
   if (p.weightCt != null) return `${p.weightCt} ct`;
   return '—';
 }
+
 function fluorescenceLabel(p: Product): string {
   if (!p.fluorescenceMode || p.fluorescenceMode === 'none') return '—';
   let out = p.fluorescenceMode;
@@ -156,7 +160,7 @@ export default function ProductDetail(): React.ReactElement {
 
   const auctionStatusRaw = (p as any).auctionStatus;
   const auctionStatus =
-    typeof auctionStatusRaw === 'string' ? (auctionStatusRaw as string) : null;
+    typeof auctionStatusRaw === 'string' ? (auctionStatusRaw) : null;
   const auctionActive = auctionId != null && (auctionStatus === 'live' || auctionStatus === 'scheduled');
 
   const categoryName =
@@ -207,20 +211,28 @@ export default function ProductDetail(): React.ReactElement {
         <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
           <dt className="opacity-80">Size</dt>
           <dd>{sizeLabel(p)}</dd>
+
           <dt className="opacity-80">Weight</dt>
           <dd>{weightLabel(p)}</dd>
+
           <dt className="opacity-80">Species</dt>
           <dd>{p.species || '—'}</dd>
+
           <dt className="opacity-80">Condition</dt>
           <dd>{conditionLabel((p as any).condition)}</dd>
+
           <dt className="opacity-80">Provenance</dt>
           <dd>{p.provenanceNote ?? '—'}</dd>
+
           <dt className="opacity-80">Synthetic</dt>
           <dd>{p.synthetic ? 'Yes' : 'No'}</dd>
+
           <dt className="opacity-80">Fluorescence</dt>
           <dd>{fluorescenceLabel(p)}</dd>
-        </dl>
 
+          <dt className="opacity-80">Radioactive</dt>
+          <dd>{p.radioactive ? 'Yes' : 'No'}</dd>
+        </dl>
 
         <div className="space-y-1">
           <div className="flex items-center gap-2">
