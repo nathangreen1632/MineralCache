@@ -206,7 +206,7 @@ export default function AuctionPanel({ auctionId }: Readonly<Props>): React.Reac
 
   return (
     <section
-      className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-6 grid gap-4"
+      className="rounded-2xl border bg-[var(--theme-strip)] border-[var(--theme-border)] p-6 grid gap-4"
       style={{ boxShadow: '0 3px 12px var(--theme-shadow-carousel)' }}
       aria-labelledby={`auction-panel-${auction.id}`}
     >
@@ -248,9 +248,10 @@ export default function AuctionPanel({ auctionId }: Readonly<Props>): React.Reac
           />
         </label>
 
+        {!isAuthed &&
         <div id={`auction-help-${auction.id}`} className="text-xs opacity-70 text-[var(--theme-button-yellow)]">
           You must be logged in and 18+ to bid.
-        </div>
+        </div>}
 
         <div className="flex items-center gap-2">
           <button
