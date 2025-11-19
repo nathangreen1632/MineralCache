@@ -5,30 +5,30 @@ import { listProducts, type ListQuery, type Product } from '../../api/products';
 import { searchProducts } from '../../api/search';
 import { ChevronDown } from 'lucide-react';
 import { centsToUsd } from '../../utils/money.util';
+import {pressBtn} from "../../ui/press.ts";
 
-// Allow an optional runtime-injected API base (e.g., set on window at boot)
 declare global {
   interface Window {
     __API_BASE__?: string;
   }
 }
 
-/** --- CONFIG: where the API is serving /uploads from (prod = same origin) --- */
 const API_BASE =
   ((import.meta?.env?.VITE_API_BASE as string | undefined)) ??
   (typeof window !== 'undefined' ? window.__API_BASE__ : undefined) ??
   '';
 
-/** Join base + path without using regex (no S5852 risk). */
 function trimTrailingSlashes(s: string) {
   while (s.endsWith('/')) s = s.slice(0, -1);
   return s;
 }
+
 function trimLeadingSlashes(s: string) {
   let i = 0;
   while (i < s.length && s[i] === '/') i++;
   return s.slice(i);
 }
+
 function joinUrl(base: string, path: string) {
   if (!base) return path || '';
   const b = trimTrailingSlashes(base);
@@ -39,13 +39,13 @@ function joinUrl(base: string, path: string) {
 function normalizeVendorToSlugish(input: string): string {
   const s = (input ?? '').trim().toLowerCase();
   if (!s) return '';
-  // strip accents
+
   const noAccents = s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
-  // keep letters, numbers, spaces, and dashes → then collapse to single dashes
+
   return noAccents
     .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/[\s_]+/g, '-')   // spaces/underscores → dashes
-    .replace(/-+/g, '-');      // collapse multiple dashes
+    .replace(/[\s_]+/g, '-')
+    .replace(/-+/g, '-');
 }
 
 function isSaleActive(p: Product, now = new Date()): boolean {
@@ -204,7 +204,7 @@ type FormState = {
   pageSize: string;
 };
 
-export default function ProductCatalogList(): React.ReactElement {
+export default function ProductShopList(): React.ReactElement {
   const [params, setParams] = useSearchParams();
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
   const navigate = useNavigate(); // used by card click → vendor
@@ -482,7 +482,7 @@ export default function ProductCatalogList(): React.ReactElement {
 
             <button
               type="submit"
-              className="ml-auto inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold"
+              className={pressBtn("ml-auto inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold")}
               style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
             >
               Apply
@@ -656,7 +656,7 @@ export default function ProductCatalogList(): React.ReactElement {
                 type="button"
                 disabled={state.data.page <= 1}
                 onClick={() => goToPage(state.data.page - 1)}
-                className="rounded px-3 py-1 text-sm disabled:opacity-50"
+                className={pressBtn("rounded px-3 py-1 text-sm disabled:opacity-50")}
                 style={{
                   background: 'var(--theme-surface)',
                   color: 'var(--theme-text)',
@@ -669,7 +669,7 @@ export default function ProductCatalogList(): React.ReactElement {
                 type="button"
                 disabled={state.data.page >= state.data.totalPages}
                 onClick={() => goToPage(state.data.page + 1)}
-                className="rounded px-3 py-1 text-sm disabled:opacity-50"
+                className={pressBtn("rounded px-3 py-1 text-sm disabled:opacity-50")}
                 style={{
                   background: 'var(--theme-surface)',
                   color: 'var(--theme-text)',
