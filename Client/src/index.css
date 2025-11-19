@@ -135,7 +135,7 @@
     --theme-strip-text: var(--c-a);
     --theme-textbox: var(--c-f);
     --theme-placeholder: var(--c-e);
-    --theme-pencil: var(--c-f);
+    --theme-pencil: var(--c-e);
     --theme-superscript: var(--c-f);
     --theme-moveto: var(--c-e);
     --theme-scripture: var(--c-e);
@@ -229,7 +229,7 @@ html[data-theme="dark"] {
   --theme-strip-text: var(--c-a);
   --theme-textbox: var(--c-f);
   --theme-placeholder: var(--c-e);
-  --theme-pencil: var(--c-f);
+  --theme-pencil: var(--c-e);
   --theme-superscript: var(--c-f);
   --theme-moveto: var(--c-e);
   --theme-scripture: var(--c-e);
