@@ -59,7 +59,7 @@
     --theme-button-gray: var(--c-c);
     --theme-button-dark: var(--c-a);
     --theme-button-yellow: var(--c-o);
-    --theme-button-hover: var(--c-k);
+    --theme-button-hover: var(--c-g);
     --theme-pill-green: var(--c-l);
     --theme-pill-orange: var(--c-m);
 
@@ -153,7 +153,7 @@
     --theme-button-blue-hover: var(--c-a);
     --theme-button-gray: var(--c-b);
     --theme-button-dark: var(--c-e);
-    --theme-button-hover: var(--c-k);
+    --theme-button-hover: var(--c-g);
     --theme-button-yellow: var(--c-o);
     --theme-pill-green: var(--c-l);
     --theme-pill-orange: var(--c-m);
@@ -247,7 +247,7 @@ html[data-theme="dark"] {
   --theme-button-blue-hover: var(--c-a);
   --theme-button-gray: var(--c-b);
   --theme-button-dark: var(--c-e);
-  --theme-button-hover: var(--c-k);
+  --theme-button-hover: var(--c-g);
   --theme-button-yellow: var(--c-o);
   --theme-pill-green: var(--c-l);
   --theme-pill-orange: var(--c-m);
