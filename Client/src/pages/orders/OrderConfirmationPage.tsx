@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { listMyOrders, type MyOrderListItem } from '../../api/orders';
 import { centsToUsd } from '../../utils/money.util';
+import {pressBtn} from "../../ui/press.ts";
 
 type Load =
   | { kind: 'idle' }
@@ -138,29 +139,7 @@ export default function OrderConfirmationPage(): React.ReactElement {
                 <span className="ml-2 opacity-70">(charged: {centsToUsd(hintedAmount)})</span>
               ) : null}
             </p>
-        {/*    {isPaid ? (*/}
-        {/*      <div className="mt-4">*/}
-        {/*        <a*/}
-        {/*          href={`/orders/${order.id}/receipt`}*/}
-        {/*          target="_blank"*/}
-        {/*          rel="noopener noreferrer"*/}
-        {/*          className="inline-flex items-center gap-2 rounded-xl border border-[var(--theme-border)] px-4 py-2 text-sm hover:bg-[var(--theme-card)]"*/}
-        {/*        >*/}
-        {/*          🖨️ Print receipt*/}
-        {/*        </a>*/}
-        {/*      </div>*/}
-        {/*    ) : null}*/}
-        {/*  </>*/}
-        {/*) : (*/}
-        {/*  <>*/}
-        {/*    <p>*/}
-        {/*      <strong>Order #</strong> pending…*/}
-        {/*    </p>*/}
-        {/*    {typeof hintedAmount === 'number' ? (*/}
-        {/*      <p>*/}
-        {/*        <strong>Total</strong> {centsToUsd(hintedAmount)}*/}
-        {/*      </p>*/}
-        {/*    ) : null}*/}
+
             <p className="text-sm opacity-80">
               Your order will appear in{' '}
               <Link
@@ -189,7 +168,7 @@ export default function OrderConfirmationPage(): React.ReactElement {
       <div className="flex items-center gap-3">
         <Link
           to="/products"
-          className="inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+          className={pressBtn("inline-flex rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]")}
         >
           Continue shopping
         </Link>
@@ -198,7 +177,7 @@ export default function OrderConfirmationPage(): React.ReactElement {
             href={`/orders/${order.id}/receipt`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex rounded-xl px-4 py-2 font-semibold border border-[var(--theme-border)] hover:bg-[var(--theme-card)]"
+            className={pressBtn("inline-flex rounded-xl px-4 py-2 font-semibold border border-[var(--theme-border)] hover:bg-[var(--theme-card)]")}
           >
             🖨️ Print receipt
           </a>
