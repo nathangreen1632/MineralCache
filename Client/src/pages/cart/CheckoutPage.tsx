@@ -11,6 +11,7 @@ import { EV_CART_CHANGED } from '../../lib/events';
 import CommissionPreview from '../../components/cart/CommissionPreview.tsx';
 import AcceptedCards from '../../components/payment/AcceptedCards.tsx';
 import { centsToUsd } from '../../utils/money.util';
+import {pressBtn} from "../../ui/press.ts";
 
 type LoadHealth =
   | { kind: 'idle' }
@@ -505,7 +506,7 @@ function CardForm({ totalCents }: Readonly<{ totalCents: number }>) {
       <button
         type="submit"
         disabled={busy || !stripe || !elements || totalCents <= 0}
-        className="inline-block rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button-yellow)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)] disabled:opacity-60"
+        className={pressBtn("inline-block rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button-yellow)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)] disabled:opacity-60")}
       >
         {busy ? 'Processing…' : 'Pay now'}
       </button>
