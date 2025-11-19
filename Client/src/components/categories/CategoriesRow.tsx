@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { listCategories, type PublicCategory } from '../../api/public';
+import { pressBtn } from '../../ui/press';
 
 const VISIBLE = 8;
 const ROTATE_MS = 5000;
@@ -100,7 +101,7 @@ export default function CategoriesRow(): React.ReactElement {
           type="button"
           aria-pressed={paused}
           onClick={() => setPaused((p) => !p)}
-          className="hidden md:inline-flex rounded-xl px-4 py-2 bg-[var(--theme-button)] text-[var(--theme-text-white)] text-xs font-bold hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
+          className={pressBtn("hidden md:inline-flex rounded-xl px-4 py-2 bg-[var(--theme-button)] text-[var(--theme-text-white)] text-xs font-bold hover:bg-[var(--theme-button-hover)] hover:text-[var(--theme-psycho)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]")}
         >
           {paused ? 'Resume' : 'Pause'}
         </button>
