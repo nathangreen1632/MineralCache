@@ -18,11 +18,14 @@ export type AdminPulse = {
   gmvYesterdayCents: number;
   activeAuctions: number;
   auctionsEndingSoon: number;
+  auctionsToday: number;
+  auctionsYesterday: number;
   newUsersToday: number;
   newUsersYesterday: number;
   ordersSeries: PulsePoint[];
   gmvSeries: PulsePoint[];
   newUsersSeries: PulsePoint[];
+  auctionsSeries: PulsePoint[];
   lateShipments: number;
   payoutsReadyCents: number;
   paymentIncidents: number;
@@ -85,11 +88,14 @@ export async function getAdminPulseSvc(): Promise<AdminPulse> {
     gmvYesterdayRaw,
     activeAuctions,
     auctionsEndingSoon,
+    auctionsToday,
+    auctionsYesterday,
     newUsersToday,
     newUsersYesterday,
     ordersSeries,
     gmvSeries,
     newUsersSeries,
+    auctionsSeries,
     lateShipments,
     paymentIncidents,
   ] = await Promise.all([
@@ -102,6 +108,16 @@ export async function getAdminPulseSvc(): Promise<AdminPulse> {
       where: {
         status: 'live',
         endAt: { [Op.lte]: new Date(now.getTime() + 24 * 60 * 60 * 1000) },
+      },
+    }),
+    Auction.count({
+      where: {
+        endAt: { [Op.between]: [todayStart, todayEnd] },
+      },
+    }),
+    Auction.count({
+      where: {
+        endAt: { [Op.between]: [yesterdayStart, yesterdayEnd] },
       },
     }),
     User.count({ where: { createdAt: { [Op.between]: [todayStart, todayEnd] } } }),
@@ -120,6 +136,9 @@ export async function getAdminPulseSvc(): Promise<AdminPulse> {
     dailySeries(7, (start, end) =>
       User.count({ where: { createdAt: { [Op.between]: [start, end] } } })
     ),
+    dailySeries(7, (start, end) =>
+      Auction.count({ where: { endAt: { [Op.between]: [start, end] } } })
+    ),
     OrderItem.count({
       where: {
         shippedAt: { [Op.is]: null },
@@ -134,7 +153,6 @@ export async function getAdminPulseSvc(): Promise<AdminPulse> {
     }),
   ]);
 
-  // This part replaces the OrderVendor.sum(... include: ...) that TS was complaining about
   const payoutRows = await OrderVendor.findAll({
     where: {
       payoutStatus: 'holding',
@@ -168,15 +186,17 @@ export async function getAdminPulseSvc(): Promise<AdminPulse> {
     gmvYesterdayCents: Number.isFinite(gmvYesterdayCents) ? gmvYesterdayCents : 0,
     activeAuctions: Number(activeAuctions) || 0,
     auctionsEndingSoon: Number(auctionsEndingSoon) || 0,
+    auctionsToday: Number(auctionsToday) || 0,
+    auctionsYesterday: Number(auctionsYesterday) || 0,
     newUsersToday: Number(newUsersToday) || 0,
     newUsersYesterday: Number(newUsersYesterday) || 0,
     ordersSeries,
     gmvSeries,
     newUsersSeries,
+    auctionsSeries,
     lateShipments: Number(lateShipments) || 0,
     payoutsReadyCents,
     paymentIncidents: Number(paymentIncidents) || 0,
-    // You don't have an email log table yet, so keep this as 0 for now
     emailIncidents: 0,
   };
 }
