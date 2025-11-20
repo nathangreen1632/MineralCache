@@ -22,7 +22,7 @@ const FluorSchema = z.object({
 const Schema = z
   .object({
     title: z.string().max(160).optional().nullable(),
-    description: z.string().max(8000).optional().nullable(),
+    description: z.string().max(1200).optional().nullable(),
     species: z.string().max(120).optional().nullable(),
     locality: z.string().max(240).optional().nullable(),
     synthetic: z.boolean().optional().nullable(),
@@ -397,7 +397,7 @@ export default function ProductForm({
             value={values.description ?? ''}
             onChange={(e) => setField('description', e.target.value)}
             rows={5}
-            maxLength={8000}
+            maxLength={1200}
           />
           {errs.description && <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>{errs.description}</p>}
         </div>
