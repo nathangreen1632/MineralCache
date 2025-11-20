@@ -32,7 +32,7 @@ const fluorescence = z.object({
 export const createProductSchema = z
   .object({
     title: z.string().trim().min(2).max(140),
-    description: z.string().trim().max(5000).optional().nullable(),
+    description: z.string().trim().max(1200).optional().nullable(),
     species: nonEmpty.max(140),
     locality: z.string().trim().max(200).optional().nullable(),
     synthetic: z.coerce.boolean().optional().default(false),
