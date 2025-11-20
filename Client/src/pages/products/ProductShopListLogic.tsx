@@ -196,19 +196,6 @@ export function useProductShopListController() {
   }, [params]);
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      const base = paramsRef.current;
-      const next = new URLSearchParams(base);
-      const trimmed = inputQ.trim();
-      if (trimmed) next.set('q', trimmed);
-      else next.delete('q');
-      next.set('page', '1');
-      setParams(next, { replace: true });
-    }, 300);
-    return () => clearTimeout(t);
-  }, [inputQ, setParams]);
-
-  useEffect(() => {
     let alive = true;
 
     (async () => {
@@ -274,8 +261,10 @@ export function useProductShopListController() {
 
     const minCents = dollarsStrToCents(form.priceMinDollars);
     const maxCents = dollarsStrToCents(form.priceMaxDollars);
+    const trimmedQ = inputQ.trim();
 
     updateQuery({
+      q: trimmedQ || undefined,
       species: form.species.trim() || undefined,
       vendorSlug: normalizeVendorToSlugish(form.vendorSlug) || undefined,
       onSale: form.onSale || undefined,

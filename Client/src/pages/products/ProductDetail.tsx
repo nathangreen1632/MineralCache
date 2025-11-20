@@ -192,7 +192,7 @@ export default function ProductDetail(): React.ReactElement {
           {p.locality ? ` ${p.locality}` : ''}
         </div>
 
-        <div className="mt-0.5 text-lg text-[var(--theme-text)]">
+        <div className="-mt-4 text-lg text-[var(--theme-text)]">
           <span className="opacity-75">Sold by:</span>{' '}
           {(p as any).vendorSlug ? (
             <Link
@@ -205,11 +205,11 @@ export default function ProductDetail(): React.ReactElement {
           ) : null}
         </div>
 
-        <div className="text-xl font-bold text-[var(--theme-success)]">{priceEl}</div>
+        <div className="text-xl -mb-0 -mt-4 font-bold text-[var(--theme-success)]">{priceEl}</div>
 
         {auctionId ? <AuctionPanel auctionId={auctionId} /> : null}
 
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 mt-2 text-sm">
           <dt className="opacity-80">Size</dt>
           <dd>{sizeLabel(p)}</dd>
 
@@ -285,14 +285,15 @@ export default function ProductDetail(): React.ReactElement {
               This item is currently at auction. Add to cart is disabled until the auction ends.
             </p>
           )}
-
-          {p.description && (
-            <div className="lg:col-span-2 rounded-xl border p-4 mt-6" style={card}>
-              <h2 className="mb-2 text-lg font-semibold text-[var(--theme-text)]">Description</h2>
-              <p className="whitespace-pre-wrap text-sm opacity-90">{p.description}</p>
-            </div>
-          )}
         </div>
+
+        {p.description && (
+          <div
+            className="lg:col-span-2 rounded-xl border p-4 mt-2 shadow-[0_3px_12px_var(--theme-shadow-carousel)]" style={card}>
+            <h2 className="mb-2 text-lg font-semibold text-[var(--theme-text)]">Description</h2>
+            <p className="whitespace-pre-wrap text-sm opacity-90">{p.description}</p>
+          </div>
+        )}
       </div>
     </section>
   );

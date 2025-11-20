@@ -14,6 +14,7 @@ import {
   patchAdminSettings,
   promoteUserByEmail,
 } from '../../controllers/admin/admin.controller.js';
+import { getAdminPulse } from '../../controllers/admin/pulse.controller.js';
 import { shippingRulesRouter } from './shippingRules.route.js';
 import { adminListOrdersQuerySchema } from '../../validation/adminOrders.schema.js';
 import {
@@ -25,6 +26,8 @@ import {
 import { runPayoutsNow } from '../../controllers/admin/payouts.controller.js';
 
 const router: Router = Router();
+
+router.get('/pulse', requireAdmin, getAdminPulse);
 
 router.get('/vendor-apps', requireAdmin, validateQuery(adminListVendorsSchema), listVendorApps);
 router.post('/vendor-apps/:id/approve', requireAdmin, approveVendor);

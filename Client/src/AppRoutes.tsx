@@ -38,6 +38,7 @@ import AdminOrders from './pages/admin/AdminOrders';
 import AdminOrderDetail from './pages/admin/AdminOrderDetail';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminAuctionsPage from './pages/admin/AdminAuctionsPage';
+import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 
 // Vendor product CRUD
 import ProductCreate from './pages/products/ProductCreate';
@@ -210,7 +211,14 @@ export default function AppRoutes(): React.ReactElement {
             </RequireRole>
           }
         />
-
+        <Route
+          path="admin"
+          element={
+            <RequireRole role="admin">
+              <AdminDashboardPage />
+            </RequireRole>
+          }
+        />
         <Route
           path="products/new"
           element={
