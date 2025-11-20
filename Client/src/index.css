@@ -289,7 +289,99 @@ html[data-theme="dark"] {
 }
 
 /* ================================ FORCED LIGHT (explicit override) ================================ */
-html[data-theme="light"] { color-scheme: light; }
+html[data-theme="light"] {
+  color-scheme: light;
+
+  /* Base palette (same as :root light) */
+  --c-a: #FAFAFA;
+  --c-b: #F2EEED;
+  --c-c: #EDDEDE;
+  --c-d: #ECD4CA;
+  --c-e: #300D0D;
+
+  /* Extended palette (complements, lightened for UI) */
+  --c-f: #EAE9EC;
+  --c-g: #4DA167;
+  --c-h: #E9D7DA;
+  --c-i: #D6F4F5;
+  --c-j: #38302E;
+  --c-k: #343036;
+  --c-l: #E9D7E1;
+  --c-m: #C1EDF0;
+  --c-n: #F2F2F2;
+  --c-o: #F5AF02;
+  --c-p: #000000;
+  --c-q: #000000;
+
+  /* LIGHT theme mapping (mirror of :root) */
+  --theme-bg: var(--c-b);
+  --theme-surface: var(--c-a);
+  --theme-surface-alt: var(--c-b);
+  --theme-text: var(--c-e);
+  --theme-text-white: var(--c-a);
+  --theme-accent: var(--c-e);
+  --theme-border: var(--c-c);
+  --theme-strip: var(--c-b);
+  --theme-strip-text: var(--c-e);
+  --theme-textbox: var(--c-f);
+  --theme-placeholder: var(--c-e);
+  --theme-pencil: var(--c-e);
+  --theme-superscript: var(--c-e);
+  --theme-moveto: var(--c-f);
+  --theme-scripture: var(--c-f);
+  --theme-verse: var(--c-f);
+  --theme-card-number: var(--c-e);
+  --theme-shadow-carousel: var(--c-e);
+  --theme-shadow-categories: var(--c-e);
+  --theme-shadow-onSale: var(--c-e);
+  --theme-text-black: var(--c-p);
+  --theme-text-dark: var(--c-b);
+  --theme-shadow-black: rgba(48, 13, 13, 0.5);
+
+  /* buttons */
+  --theme-button: var(--c-e);
+  --theme-button-blue: var(--c-d);
+  --theme-button-blue-hover: var(--c-c);
+  --theme-button-gray: var(--c-c);
+  --theme-button-dark: var(--c-a);
+  --theme-button-yellow: var(--c-o);
+  --theme-button-hover: var(--c-g);
+  --theme-pill-green: var(--c-l);
+  --theme-pill-orange: var(--c-m);
+
+  /* links */
+  --theme-link: var(--c-j);
+  --theme-link-hover: var(--c-p);
+
+  /* semantic */
+  --theme-success: var(--c-g);
+  --theme-warning: var(--c-o);
+  --theme-info: var(--c-j);
+  --theme-psycho: var(--c-q);
+  --theme-psycho-inverse: var(--c-p);
+
+  /* cards & interactive */
+  --theme-card: var(--c-b);
+  --theme-card-hover: var(--c-c);
+  --theme-card-hover-alt: var(--c-b);
+  --theme-card-alt-inverse: var(--c-h);
+  --theme-card-alt-hover: var(--c-n);
+  --theme-card-alt: var(--c-f);
+  --theme-hover: var(--c-d);
+  --theme-category: var(--c-d);
+
+  /* focus & elevation */
+  --theme-focus: var(--c-d);
+  --theme-shadow: rgba(48, 13, 13, 0.25);
+
+  /* error */
+  --theme-error: #ef4444;
+  --theme-button-error: #c43838;
+
+  /* LIGHT scrollbar */
+  --theme-scrollbar-track: var(--theme-surface);
+  --theme-scrollbar-thumb: var(--theme-accent);
+}
 
 /* ========================================= GLOBALS ========================================= */
 
