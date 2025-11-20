@@ -8,7 +8,7 @@ const ApplySchema = z.object({
   displayName: z.string().min(2, 'Please enter at least 2 characters.').max(120, 'Max 120 chars.'),
   bio: z
     .string()
-    .max(5000, 'Max 5000 chars.')
+    .max(1000, 'Max 1000 chars.')
     .optional()
     .nullable()
     .transform((v) => (v === '' ? null : v ?? null)),
@@ -299,7 +299,7 @@ export default function VendorApply(): React.ReactElement {
               required
               rows={4}
               placeholder="Tell buyers about your specialization, locality focus, etc."
-              maxLength={5000}
+              maxLength={1000}
             />
             {errors.bio && (
               <p className="mt-1 text-xs" style={{ color: 'var(--theme-error)' }}>
