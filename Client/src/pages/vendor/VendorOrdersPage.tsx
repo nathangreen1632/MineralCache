@@ -99,6 +99,7 @@ export default function VendorOrdersPage(): React.ReactElement {
     tracking: string;
   }>({ open: false, orderId: null, carrier: 'usps', tracking: '' });
   const [showShipConfirm, setShowShipConfirm] = useState(false);
+  const [deliverConfirmOrderId, setDeliverConfirmOrderId] = useState<number | null>(null);
 
   const query = useMemo(() => {
     const p = new URLSearchParams();
@@ -194,6 +195,7 @@ export default function VendorOrdersPage(): React.ReactElement {
 
   useEffect(() => {
     setSelectedByOrder({});
+    setDeliverConfirmOrderId(null);
     void load();
   }, [tab, page]);
 
@@ -263,6 +265,7 @@ export default function VendorOrdersPage(): React.ReactElement {
       return;
     }
     clearSelection(orderId);
+    setDeliverConfirmOrderId(null);
     await load();
   }
 
@@ -375,7 +378,7 @@ export default function VendorOrdersPage(): React.ReactElement {
                     <button
                       type="button"
                       disabled={selected.size === 0}
-                      onClick={() => void doDeliver(o.orderId)}
+                      onClick={() => setDeliverConfirmOrderId(o.orderId)}
                       className={pressBtn("inline-flex rounded-xl px-3 py-1 border bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] hover:text-[var(--theme-psycho)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]")}
                     >
                       Mark Delivered
@@ -459,6 +462,20 @@ export default function VendorOrdersPage(): React.ReactElement {
                 <div className="text-sm opacity-80">Placed {new Date(o.createdAt).toLocaleString()}</div>
                 <div className="text-base font-semibold">Total <span className="text-[var(--theme-success)]">{centsToUsd(o.totalCents)}</span></div>
               </div>
+
+              {showDeliver && deliverConfirmOrderId === o.orderId && selected.size > 0 && (
+                <div className="mt-3 border-t border-[var(--theme-border)] pt-3">
+                  <ConfirmBar
+                    message="Mark these selected item(s) as delivered? This cannot be changed later."
+                    cancelLabel="Go back"
+                    confirmLabel="Confirm delivered"
+                    onCancel={() => setDeliverConfirmOrderId(null)}
+                    onConfirm={() => {
+                      void doDeliver(o.orderId);
+                    }}
+                  />
+                </div>
+              )}
             </div>
           );
         })
