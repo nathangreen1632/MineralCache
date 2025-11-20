@@ -207,6 +207,14 @@ export default function ProductDetail(): React.ReactElement {
 
         <div className="text-xl font-bold text-[var(--theme-success)]">{priceEl}</div>
 
+        {p.description && (
+          <div
+            className="lg:col-span-2 rounded-xl border p-4 mt-6 shadow-[0_3px_12px_var(--theme-shadow-carousel)]" style={card}>
+            <h2 className="mb-2 text-lg font-semibold text-[var(--theme-text)]">Description</h2>
+            <p className="whitespace-pre-wrap text-sm opacity-90">{p.description}</p>
+          </div>
+        )}
+
         {auctionId ? <AuctionPanel auctionId={auctionId} /> : null}
 
         <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
@@ -284,13 +292,6 @@ export default function ProductDetail(): React.ReactElement {
             <p className="text-base text-[var(--theme-error)] opacity-80">
               This item is currently at auction. Add to cart is disabled until the auction ends.
             </p>
-          )}
-
-          {p.description && (
-            <div className="lg:col-span-2 rounded-xl border p-4 mt-6" style={card}>
-              <h2 className="mb-2 text-lg font-semibold text-[var(--theme-text)]">Description</h2>
-              <p className="whitespace-pre-wrap text-sm opacity-90">{p.description}</p>
-            </div>
           )}
         </div>
       </div>
