@@ -32,6 +32,9 @@ type AdminPulseRes = {
   payoutsReadyCents: number;
   paymentIncidents: number;
   emailIncidents: number;
+  auctionsToday: number;
+  auctionsYesterday: number;
+  auctionsSeries?: PulsePoint[];
 };
 
 type LoadState =
@@ -219,13 +222,16 @@ export default function AdminDashboardPage(): React.ReactElement {
 
   const kpis: Kpi[] = useMemo(() => {
     if (!pulse) return [];
+
     const ordersTrend = computeTrend(pulse.ordersToday, pulse.ordersYesterday);
     const gmvTrend = computeTrend(pulse.gmvTodayCents, pulse.gmvYesterdayCents);
     const usersTrend = computeTrend(pulse.newUsersToday, pulse.newUsersYesterday);
+    const auctionsTrend = computeTrend(pulse.auctionsToday, pulse.auctionsYesterday);
 
     const ordersSeries = normalizeSeries(pulse.ordersSeries);
     const gmvSeries = normalizeSeries(pulse.gmvSeries);
     const usersSeries = normalizeSeries(pulse.newUsersSeries);
+    const auctionsSeries = normalizeSeries(pulse.auctionsSeries);
 
     const out: Kpi[] = [];
 
@@ -255,8 +261,8 @@ export default function AdminDashboardPage(): React.ReactElement {
         pulse.auctionsEndingSoon === 0
           ? 'No auctions ending soon'
           : `${pulse.auctionsEndingSoon} ending in 24h`,
-      series: [],
-      trend: { dir: 'flat', deltaPct: null },
+      series: auctionsSeries,
+      trend: auctionsTrend,
     });
 
     out.push({
