@@ -197,7 +197,7 @@ export default function AuctionPanel({ auctionId }: Readonly<Props>): React.Reac
     return (
       <div
         className="rounded-2xl border bg-[var(--theme-surface)] border-[var(--theme-border)] p-6"
-        style={{ boxShadow: '0 10px 30px var(--theme-shadow)' }}
+        style={{ boxShadow: '0 3px 12px var(--theme-shadow)' }}
       >
         Loading auction…
       </div>
