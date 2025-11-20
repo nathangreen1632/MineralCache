@@ -69,9 +69,10 @@
 
     /* semantic */
     --theme-success: var(--c-g);
-    --theme-warning: var(--c-i);
+    --theme-warning: var(--c-o);
     --theme-info: var(--c-j);
     --theme-psycho: var(--c-q);
+    --theme-psycho-inverse: var(--c-p);
 
     /* cards & interactive */
     --theme-card: var(--c-b);
@@ -164,9 +165,10 @@
 
     /* semantic */
     --theme-success: var(--c-g);
-    --theme-warning: var(--c-i);
+    --theme-warning: var(--c-o);
     --theme-info: var(--c-j);
     --theme-psycho: var(--c-q);
+    --theme-psycho-inverse: var(--c-p);
 
     /* cards & interactive */
     --theme-card: var(--c-d);
@@ -258,9 +260,10 @@ html[data-theme="dark"] {
 
   /* semantic */
   --theme-success: var(--c-g);
-  --theme-warning: var(--c-i);
+  --theme-warning: var(--c-o);
   --theme-info: var(--c-j);
   --theme-psycho: var(--c-q);
+  --theme-psycho-inverse: var(--c-p);
 
   /* cards & interactive */
   --theme-card: var(--c-d);
