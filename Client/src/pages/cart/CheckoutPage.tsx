@@ -365,6 +365,7 @@ function CardForm({ totalCents }: Readonly<{ totalCents: number }>) {
               className="w-full rounded-xl border px-3 py-2 outline-none bg-[var(--theme-textbox)] text-[var(--theme-pencil)]"
               value={shipping.email}
               onChange={handleShippingChange('email')}
+              required
             />
           </div>
         </div>
