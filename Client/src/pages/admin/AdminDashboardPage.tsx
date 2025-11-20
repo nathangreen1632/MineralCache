@@ -81,7 +81,10 @@ type MiniSparklineProps = {
   'aria-label'?: string;
 };
 
-function MiniSparkline({ values, 'aria-label': ariaLabel }: Readonly<MiniSparklineProps>): React.ReactElement {
+function MiniSparkline({
+                         values,
+                         'aria-label': ariaLabel,
+                       }: Readonly<MiniSparklineProps>): React.ReactElement {
   if (!values || values.length === 0) {
     return (
       <div
@@ -149,7 +152,7 @@ function TrendBadge({ trend }: Readonly<TrendBadgeProps>): React.ReactElement {
   }
 
   return (
-    <div className="mt-1 inline-flex items-center gap-1 text-xs opacity-80" aria-hidden="true">
+    <div className="mt-1 inline-flex items-center gap-1 text-sm opacity-80" aria-hidden="true">
       {icon}
       <span>{text}</span>
     </div>
@@ -166,27 +169,25 @@ type StatusChipProps = {
 
 function StatusChip({ label, description, severity }: Readonly<StatusChipProps>): React.ReactElement {
   let bg = 'var(--theme-card-alt)';
-  let text = 'var(--theme-text)';
+  let text = 'var(--theme-psycho)';
   let border = 'var(--theme-border)';
 
   if (severity === 'warn') {
-    bg = 'var(--theme-warning)';
-    text = 'var(--theme-text)';
-    border = 'var(--theme-border)';
+    bg = 'var(--theme-button-yellow)';
   } else if (severity === 'error') {
     bg = 'var(--theme-error)';
-    text = 'var(--theme-text-white)';
+    text = 'var(--theme-text)';
     border = 'var(--theme-error)';
   }
 
   return (
     <div
-      className="flex items-center justify-between gap-2 rounded-full border px-3 py-1 text-xs"
+      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border px-3 py-1 text-xs"
       style={{ background: bg, color: text, borderColor: border }}
       role="text"
     >
-      <span className="font-semibold">{label}</span>
-      <span className="opacity-90">{description}</span>
+      <span className="font-semibold text-base">{label}</span>
+      <span className="opacity-90 text-base">{description}</span>
     </div>
   );
 }
@@ -318,14 +319,14 @@ export default function AdminDashboardPage(): React.ReactElement {
   };
 
   const innerCardStyle: React.CSSProperties = {
-    background: 'var(--theme-card)',
+    background: 'var(--theme-strip)',
     color: 'var(--theme-text)',
     borderColor: 'var(--theme-border)',
   };
 
   if (state.kind === 'loading' || state.kind === 'idle') {
     return (
-      <section className="mx-auto max-w-6xl px-6 py-10 space-y-6">
+      <section className="mx-auto max-w-6xl px-4 sm:px-6 py-8 sm:py-10 space-y-6">
         <header className="flex items-center gap-3">
           <Activity className="h-6 w-6 text-[var(--theme-link)]" aria-hidden="true" />
           <div>
@@ -335,7 +336,7 @@ export default function AdminDashboardPage(): React.ReactElement {
             </p>
           </div>
         </header>
-        <div className="rounded-2xl border p-6" style={cardStyle} aria-busy="true">
+        <div className="rounded-2xl border p-4 sm:p-6" style={cardStyle} aria-busy="true">
           <div className="grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1.1fr)]">
             <div className="space-y-4">
               <div
@@ -366,7 +367,7 @@ export default function AdminDashboardPage(): React.ReactElement {
 
   if (state.kind === 'error') {
     return (
-      <section className="mx-auto max-w-6xl px-6 py-10 space-y-6">
+      <section className="mx-auto max-w-6xl px-4 sm:px-6 py-8 sm:py-10 space-y-6">
         <header className="flex items-center gap-3">
           <Activity className="h-6 w-6 text-[var(--theme-link)]" aria-hidden="true" />
           <div>
@@ -377,7 +378,7 @@ export default function AdminDashboardPage(): React.ReactElement {
           </div>
         </header>
         <div
-          className="rounded-2xl border p-6 flex items-center gap-3"
+          className="rounded-2xl border p-4 sm:p-6 flex items-center gap-3"
           style={cardStyle}
           role="alert"
           aria-live="polite"
@@ -391,50 +392,54 @@ export default function AdminDashboardPage(): React.ReactElement {
 
   if (!pulse) {
     return (
-      <section className="mx-auto max-w-6xl px-6 py-10">
+      <section className="mx-auto max-w-6xl px-4 sm:px-6 py-8 sm:py-10">
         <h1 className="text-3xl font-semibold text-[var(--theme-text)]">Admin Dashboard</h1>
       </section>
     );
   }
 
   return (
-    <section className="mx-auto max-w-8xl px-6 py-10 space-y-6">
+    <section className="mx-auto max-w-8xl px-4 sm:px-6 py-8 sm:py-10 space-y-6">
       <header className="flex items-center gap-3">
         <Activity className="h-6 w-6 text-[var(--theme-link)]" aria-hidden="true" />
         <div>
-          <h1 className="text-3xl font-semibold text-[var(--theme-text)]">Admin Dashboard</h1>
-          <p className="mt-1 text-sm text-[var(--theme-text)] opacity-80">
+          <h1 className="text-4xl font-semibold text-[var(--theme-text)]">Admin Dashboard</h1>
+          <p className="mt-1 text-base text-[var(--theme-text)] opacity-80">
             High-level pulse of orders, auctions, users, and operations.
           </p>
         </div>
       </header>
 
       <div
-        className="rounded-2xl border p-6 h-[35rem]"
+        className="rounded-2xl border p-4 sm:p-6 md:min-h-[50vh]"
         style={cardStyle}
         aria-label="Marketplace pulse"
         role="text"
       >
-        <div className="grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1.1fr)] items-stretch">
-          <div className="space-y-4 h-[32rem]" role="text" aria-label="Key marketplace metrics">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.1fr)] items-stretch">
+          <div
+            className="space-y-4 lg:min-h-[46vh] xl:min-h-[52vh]"
+            role="text"
+            aria-label="Key marketplace metrics"
+          >
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold tracking-wide uppercase opacity-80">
+              <h2 className="text-base font-semibold tracking-wide uppercase opacity-80">
                 Last 24 hours
               </h2>
-              <span className="text-xs opacity-70">Rolling 7-day trend</span>
+              <span className="text-sm opacity-70">Rolling 7-day trend</span>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               {kpis.map((kpi) => (
                 <div
                   key={kpi.key}
-                  className="flex flex-col justify-between rounded-xl border px-4 py-3 h-57"
+                  className="flex flex-col justify-between rounded-xl border px-4 py-3 lg:min-h-[21vh] xl:min-h-[24vh]"
                   style={innerCardStyle}
                   role="text"
                   aria-label={kpi.label}
                 >
                   <div className="flex items-baseline justify-between gap-2">
                     <div>
-                      <p className="text-xs uppercase tracking-wide opacity-80">{kpi.label}</p>
+                      <p className="text-xl uppercase tracking-wide opacity-80">{kpi.label}</p>
                       <p className="mt-1 text-xl font-semibold">{kpi.primary}</p>
                     </div>
                     <div className="ml-2 w-24">
@@ -445,7 +450,7 @@ export default function AdminDashboardPage(): React.ReactElement {
                     </div>
                   </div>
                   <div className="mt-2 flex flex-col">
-                    <span className="text-xs opacity-80">{kpi.secondary}</span>
+                    <span className="text-xl opacity-80">{kpi.secondary}</span>
                     <TrendBadge trend={kpi.trend} />
                   </div>
                 </div>
@@ -454,7 +459,7 @@ export default function AdminDashboardPage(): React.ReactElement {
           </div>
 
           <aside
-            className="flex flex-col justify-between gap-4 rounded-xl border p-4"
+            className="mt-4 md:mt-0 flex flex-col justify-between gap-4 rounded-xl border p-4"
             style={innerCardStyle}
             role="text"
             aria-label="Operational status"
@@ -462,18 +467,18 @@ export default function AdminDashboardPage(): React.ReactElement {
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 {hasAnyIssue ? (
-                  <AlertCircle className="h-5 w-5 text-[var(--theme-warning)]" aria-hidden="true" />
+                  <AlertCircle className="h-7 w-7 text-[var(--theme-warning)]" aria-hidden="true" />
                 ) : (
                   <CheckCircle2
-                    className="h-5 w-5 text-[var(--theme-success)]"
+                    className="h-7 w-7 text-[var(--theme-success)]"
                     aria-hidden="true"
                   />
                 )}
                 <div className="flex flex-col">
-                  <p className="text-sm font-semibold">
+                  <p className="uppercase text-base font-semibold">
                     {hasAnyIssue ? 'Attention needed' : 'All clear'}
                   </p>
-                  <p className="text-xs opacity-80">
+                  <p className="text-sm opacity-80">
                     {hasAnyIssue
                       ? 'Some areas need review.'
                       : 'Nothing urgent needs your attention.'}
@@ -505,7 +510,7 @@ export default function AdminDashboardPage(): React.ReactElement {
               />
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-2 text-xs opacity-80">
+            <div className="mt-3 flex flex-wrap gap-2 text-base opacity-80">
               <span>Quick links:</span>
               <a
                 href="/admin/orders"
