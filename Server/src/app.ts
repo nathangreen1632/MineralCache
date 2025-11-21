@@ -35,17 +35,44 @@ app.set('trust proxy', true);
 app.use('/api/webhooks', webhooksRouter);
 
 const cspDirectives = helmet.contentSecurityPolicy.getDefaultDirectives();
-cspDirectives['script-src'] = ["'self'", 'https://js.stripe.com'];
-cspDirectives['frame-src'] = ["'self'", 'https://js.stripe.com'];
-cspDirectives['connect-src'] = ["'self'", 'https://api.stripe.com'];
+
+cspDirectives['script-src'] = [
+  "'self'",
+  'https://js.stripe.com',
+];
+
+cspDirectives['frame-src'] = [
+  "'self'",
+  'https://js.stripe.com',
+  'https://payments.stripe.com',
+  'https://checkout.link.com',
+];
+
+cspDirectives['connect-src'] = [
+  "'self'",
+  'https://api.stripe.com',
+  'https://js.stripe.com',
+  'https://r.stripe.com',
+  'https://checkout.link.com',
+  'https://checkout-cookies.stripe.com',
+];
+
 cspDirectives['img-src'] = [
   "'self'",
   'data:',
   'https://www.gravatar.com',
   'https://secure.gravatar.com',
   'https://q.stripe.com',
+  'https://js.stripe.com',
+  'https://b.stripecdn.com',
+  'https://files.stripe.com',
 ];
-cspDirectives['style-src'] = ["'self'", 'https:', "'unsafe-inline'"];
+
+cspDirectives['style-src'] = [
+  "'self'",
+  'https:',
+  "'unsafe-inline'",
+];
 
 app.use(
   helmet({
