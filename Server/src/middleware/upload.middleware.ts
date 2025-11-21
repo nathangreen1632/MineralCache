@@ -1,13 +1,10 @@
-// Server/src/middleware/upload.middleware.ts
 import type { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
 
-// ---- limits (env-overridable) ----
 const MAX_FILES = Number(process.env.UPLOAD_MAX_FILES ?? 6);
 const MAX_FILE_BYTES = Number(
   process.env.UPLOAD_MAX_FILE_BYTES ?? 10 * 1024 * 1024
-); // 10MB/file
-// Total batch size across all images in a single request (default 20MB)
+);
 const MAX_BATCH_BYTES = Number(
   process.env.UPLOAD_MAX_BATCH_BYTES ?? 20 * 1024 * 1024
 );
@@ -20,7 +17,6 @@ const ALLOWED_MIME = new Set([
   'image/heif',
 ]);
 
-// Memory storage; sharp derivatives happen later in the controller
 const storage = multer.memoryStorage();
 
 const fileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
@@ -42,10 +38,6 @@ export const uploadPhotos = multer({
 
 type UploadedFileLike = { size?: number };
 
-// ------------------------------
-// Total-batch size limiter
-// Must run *after* Multer so we can sum file sizes.
-// ------------------------------
 export function enforceTotalBatchBytes(
   req: Request,
   res: Response,
@@ -65,7 +57,9 @@ export function enforceTotalBatchBytes(
       code: 'UPLOAD_TOTAL_LIMIT',
       totalBytes,
       limitBytes: MAX_BATCH_BYTES,
-      message: `Total images must be ≤ ${Math.round(MAX_BATCH_BYTES / 1048576)}MB.`,
+      message: `Total images must be ≤ ${Math.round(
+        MAX_BATCH_BYTES / 1048576
+      )}MB.`,
     });
     return;
   }
