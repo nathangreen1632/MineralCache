@@ -24,5 +24,5 @@
     /* Added for Vite/Node globals */
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "vitest.config.ts"]
+  "include": ["vite.config.ts", "vitest.config.ts", "src/types/**/*.d.ts"]
 }
