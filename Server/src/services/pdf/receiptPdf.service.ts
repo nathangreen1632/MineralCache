@@ -34,7 +34,7 @@ export type ReceiptData = {
   orderNumber?: string | null;
 };
 
-function writeKeyValue(doc: PDFKit.PDFDocument, key: string, value?: string | null): void {
+function writeKeyValue(doc: any, key: string, value?: string | null): void {
   if (!value) return;
   doc.font('Helvetica-Bold').text(key, { continued: true });
   doc.font('Helvetica').text(` ${value}`);
@@ -45,7 +45,7 @@ export async function buildReceiptPdf(data: ReceiptData): Promise<Buffer> {
     const doc = new PDFDocument({ size: 'LETTER', margin: 50 });
 
     const chunks: Buffer[] = [];
-    doc.on('data', (c) => chunks.push(c as Buffer));
+    doc.on('data', (c: Buffer) => chunks.push(c));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
 
     const brand = (data.brandName && String(data.brandName)) || 'Mineral Cache';
@@ -187,7 +187,8 @@ export async function buildReceiptPdf(data: ReceiptData): Promise<Buffer> {
     doc.text(centsToUsd(data.totalCents), 470, totalY, { width: 90, align: 'right' });
 
     doc.moveDown(1.2);
-    doc.font('Helvetica-Oblique')
+    doc
+      .font('Helvetica-Oblique')
       .fontSize(10)
       .text(`Thank you for your purchase from ${brand}.`, { align: 'center' });
 
