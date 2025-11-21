@@ -21,8 +21,8 @@ services:
           property: connectionString
     disk:
       name: uploads
-      mountPath: /var/data
-      sizeGB: 10
+      mountPath: /var/data/uploads
+      sizeGB: 1
 
 databases:
   - name: MineralCache-db
