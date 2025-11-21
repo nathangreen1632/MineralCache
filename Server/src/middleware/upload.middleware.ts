@@ -19,12 +19,15 @@ const ALLOWED_MIME = new Set([
 
 const storage = multer.memoryStorage();
 
-const fileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
-  if (!ALLOWED_MIME.has(file.mimetype)) {
+type FileLike = { mimetype?: string | null };
+type FileFilterCb = (error: Error | null, acceptFile?: boolean) => void;
+
+const fileFilter = (_req: Request, file: FileLike, cb: FileFilterCb): void => {
+  if (!file.mimetype || !ALLOWED_MIME.has(file.mimetype)) {
     cb(new Error('Unsupported image type'));
     return;
   }
-  cb(null as any, true);
+  cb(null, true);
 };
 
 export const uploadPhotos = multer({
