@@ -69,6 +69,13 @@ export function imageUrlForCard(p: any): string | null {
     typeof p?.primaryImageUrl === 'string' ? p.primaryImageUrl.trim() : '';
 
   if (direct) {
+    if (
+      direct.startsWith('http://') ||
+      direct.startsWith('https://') ||
+      direct.startsWith('/uploads/')
+    ) {
+      return direct;
+    }
     return joinUrl(API_BASE, direct);
   }
 
@@ -78,12 +85,18 @@ export function imageUrlForCard(p: any): string | null {
   const rel = rec.v800Path || rec.v320Path || rec.v1600Path || rec.origPath || null;
   if (!rel) return null;
 
-  const withPrefix =
-    rel.startsWith('/') || rel.startsWith('http://') || rel.startsWith('https://')
+  const basePath =
+    rel.startsWith('http://') ||
+    rel.startsWith('https://') ||
+    rel.startsWith('/uploads/')
       ? rel
-      : `/uploads/${rel}`;
+      : `/uploads/${rel.replace(/^\/+/, '')}`;
 
-  return joinUrl(API_BASE, withPrefix);
+  if (basePath.startsWith('/uploads/')) {
+    return basePath;
+  }
+
+  return joinUrl(API_BASE, basePath);
 }
 
 function normalizeVendorToSlugish(input: string): string {
