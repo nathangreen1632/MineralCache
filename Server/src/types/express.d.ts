@@ -24,6 +24,7 @@ declare global {
  */
 declare module 'express-serve-static-core' {
   interface Request {
+    session?: any;
     files?: any;
   }
 }
