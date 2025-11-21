@@ -65,11 +65,24 @@ function selectImageRecord(p: any): AnyImage | null {
 }
 
 export function imageUrlForCard(p: any): string | null {
+  const direct =
+    typeof p?.primaryImageUrl === 'string' ? p.primaryImageUrl.trim() : '';
+
+  if (direct) {
+    return joinUrl(API_BASE, direct);
+  }
+
   const rec = selectImageRecord(p);
   if (!rec) return null;
+
   const rel = rec.v800Path || rec.v320Path || rec.v1600Path || rec.origPath || null;
   if (!rel) return null;
-  const withPrefix = rel.startsWith('/uploads/') ? rel : `/uploads/${rel}`;
+
+  const withPrefix =
+    rel.startsWith('/') || rel.startsWith('http://') || rel.startsWith('https://')
+      ? rel
+      : `/uploads/${rel}`;
+
   return joinUrl(API_BASE, withPrefix);
 }
 
