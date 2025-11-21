@@ -34,7 +34,23 @@ app.set('trust proxy', true);
 
 app.use('/api/webhooks', webhooksRouter);
 
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'same-site' } }));
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'same-site' },
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        'img-src': [
+          "'self'",
+          'data:',
+          'https://www.gravatar.com',
+          'https://secure.gravatar.com',
+        ],
+      },
+    },
+  }),
+);
+
 app.use(compression());
 app.use(morgan('tiny'));
 
