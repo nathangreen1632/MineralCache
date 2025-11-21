@@ -77,6 +77,7 @@ cspDirectives['style-src'] = [
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: 'same-site' },
+    crossOriginOpenerPolicy: false,
     contentSecurityPolicy: {
       directives: cspDirectives,
     },
