@@ -34,19 +34,24 @@ app.set('trust proxy', true);
 
 app.use('/api/webhooks', webhooksRouter);
 
+const cspDirectives = helmet.contentSecurityPolicy.getDefaultDirectives();
+cspDirectives['script-src'] = ["'self'", 'https://js.stripe.com'];
+cspDirectives['frame-src'] = ["'self'", 'https://js.stripe.com'];
+cspDirectives['connect-src'] = ["'self'", 'https://api.stripe.com'];
+cspDirectives['img-src'] = [
+  "'self'",
+  'data:',
+  'https://www.gravatar.com',
+  'https://secure.gravatar.com',
+  'https://q.stripe.com',
+];
+cspDirectives['style-src'] = ["'self'", 'https:', "'unsafe-inline'"];
+
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: 'same-site' },
     contentSecurityPolicy: {
-      directives: {
-        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        'img-src': [
-          "'self'",
-          'data:',
-          'https://www.gravatar.com',
-          'https://secure.gravatar.com',
-        ],
-      },
+      directives: cspDirectives,
     },
   }),
 );
