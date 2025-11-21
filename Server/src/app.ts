@@ -60,6 +60,7 @@ cspDirectives['connect-src'] = [
 cspDirectives['img-src'] = [
   "'self'",
   'data:',
+  'blob:',
   'https://www.gravatar.com',
   'https://secure.gravatar.com',
   'https://q.stripe.com',
