@@ -28,4 +28,4 @@ databases:
   - name: MineralCache-db
     plan: basic-256mb
     ipAllowList: []
-    diskSizeGB: 1
+    diskSizeGB: 01
