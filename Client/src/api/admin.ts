@@ -5,7 +5,7 @@ import { get, patch } from '../lib/api';
    ORDERS (Admin)
    ========================= */
 
-export type AdminOrderStatus = 'pending_payment' | 'paid' | 'failed' | 'refunded';
+export type AdminOrderStatus = 'pending_payment' | 'paid' | 'cancelled' | 'refunded';
 
 export type AdminOrderListItem = {
   id: number;
@@ -13,7 +13,9 @@ export type AdminOrderListItem = {
   status: AdminOrderStatus;
   buyerId: number;
   buyerName?: string | null;
+  buyerEmail?: string | null;
   vendorCount?: number;
+  vendorSlugs?: string[];
   itemCount: number;
   subtotalCents: number;
   shippingCents: number;
@@ -62,7 +64,7 @@ export function getAdminOrder(id: number) {
       vendors?: Array<{
         vendorId: number;
         displayName?: string | null;
-        shippingCents?: number;
+        vendorTotalCents: number;
       }>;
       items: Array<{
         productId: number;
@@ -72,6 +74,10 @@ export function getAdminOrder(id: number) {
         unitPriceCents: number;
         quantity: number;
         lineTotalCents: number;
+        shipCarrier?: string | null;
+        shipTracking?: string | null;
+        shippedAt?: string | null;
+        deliveredAt?: string | null;
       }>;
     };
   }>(`/admin/orders/${id}`);
