@@ -10,11 +10,26 @@ import { centsToUsd } from '../../utils/money.util';
 
 type StatusFilter = 'all' | AdminOrderStatus;
 
+function statusClass(status: AdminOrderStatus): string {
+  switch (status) {
+    case 'cancelled':
+      return 'text-[var(--theme-error)]';
+    case 'paid':
+      return 'text-[var(--theme-success)]';
+    case 'pending_payment':
+      return 'text-[var(--theme-warning-alt)]';
+    case 'refunded':
+      return 'text-[var(--theme-refund)]';
+    default:
+      return '';
+  }
+}
+
 export default function AdminOrders(): React.ReactElement {
   const [status, setStatus] = useState<StatusFilter>('all');
   const [vendorId, setVendorId] = useState<string>('');
-  const [from, setFrom] = useState<string>(''); // YYYY-MM-DD
-  const [to, setTo] = useState<string>('');     // YYYY-MM-DD
+  const [from, setFrom] = useState<string>('');
+  const [to, setTo] = useState<string>('');
   const [page, setPage] = useState(1);
 
   const [busy, setBusy] = useState(false);
@@ -27,15 +42,13 @@ export default function AdminOrders(): React.ReactElement {
     pageSize: number;
     total: number;
     totalPages: number;
-  }>({ items: [], page: 1, pageSize: 25, total: 0, totalPages: 0 });
+  }>({ items: [], page: 1, pageSize: 15, total: 0, totalPages: 0 });
 
-  // Refund modal + action state
   const [confirmRefundId, setConfirmRefundId] = useState<number | null>(null);
   const [actBusy, setActBusy] = useState(false);
 
-  // ✅ NEW: CSV URL reflecting current filters
   const csvHref = useMemo(() => {
-    const sort: 'newest' | 'oldest' | 'amount_desc' | 'amount_asc' = 'newest'; // ← must match server schema
+    const sort: 'newest' | 'oldest' | 'amount_desc' | 'amount_asc' = 'newest';
     return adminOrdersCsvUrl({
       status,
       vendorId: vendorId || null,
@@ -55,7 +68,7 @@ export default function AdminOrders(): React.ReactElement {
       from: from || undefined,
       to: to || undefined,
       page: p,
-      pageSize: 25,
+      pageSize: 15,
     });
     setBusy(false);
     if (error || !payload) {
@@ -65,15 +78,20 @@ export default function AdminOrders(): React.ReactElement {
     setData(payload);
   }
 
-  useEffect(() => { void load(1); /* eslint-disable-next-line */ }, [status, from, to, vendorId]);
+  useEffect(() => {
+    void load(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, from, to, vendorId]);
 
   const canPrev = useMemo(() => page > 1, [page]);
   const canNext = useMemo(() => page < (data?.totalPages || 1), [page, data?.totalPages]);
 
-  // styles
-  const card = { background: 'var(--theme-surface)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' } as const;
+  const card = {
+    background: 'var(--theme-surface)',
+    color: 'var(--theme-text)',
+    borderColor: 'var(--theme-border)',
+  } as const;
 
-  // --- Admin refund POST helper (no new imports) ---
   async function refundOrder(orderId: number) {
     setActBusy(true);
     setFlash(null);
@@ -84,14 +102,15 @@ export default function AdminOrders(): React.ReactElement {
       });
       const ok = res.ok;
       let body: any = null;
-      try { body = await res.json(); } catch { /* ignore */ }
+      try {
+        body = await res.json();
+      } catch {}
 
       if (!ok) {
         const err = (body && (body.error || body.message)) || `HTTP ${res.status}`;
         setFlash({ kind: 'error', text: `Refund failed: ${err}` });
       } else {
         setFlash({ kind: 'success', text: `Refund issued for order #${orderId}.` });
-        // Reload current page to reflect new status
         await load(page);
       }
     } catch (e: any) {
@@ -101,7 +120,6 @@ export default function AdminOrders(): React.ReactElement {
       setConfirmRefundId(null);
     }
   }
-  // -------------------------------------------------
 
   return (
     <section className="mx-auto max-w-8xl px-6 py-10 space-y-4">
@@ -130,27 +148,33 @@ export default function AdminOrders(): React.ReactElement {
         </div>
       )}
 
-      {/* Filters */}
       <div className="rounded-2xl border p-4 grid md:grid-cols-4 gap-3" style={card}>
         <div className="grid gap-1">
-          <label className="text-xs opacity-70" htmlFor="statusFilter">Status</label>
+          <label className="text-xs opacity-70" htmlFor="statusFilter">
+            Status
+          </label>
           <select
             id="statusFilter"
             value={status}
-            onChange={(e) => { setStatus(e.target.value as StatusFilter); setPage(1); }}
+            onChange={(e) => {
+              setStatus(e.target.value as StatusFilter);
+              setPage(1);
+            }}
             className="rounded border px-2 py-1 bg-[var(--theme-textbox)]"
             style={{ borderColor: 'var(--theme-border)' }}
           >
             <option value="all">All</option>
             <option value="pending_payment">Pending payment</option>
             <option value="paid">Paid</option>
-            <option value="failed">Failed</option>
+            <option value="cancelled">Cancelled</option>
             <option value="refunded">Refunded</option>
           </select>
         </div>
 
         <div className="grid gap-1">
-          <label className="text-xs opacity-70" htmlFor="vendorIdFilter">Vendor ID</label>
+          <label className="text-xs opacity-70" htmlFor="vendorIdFilter">
+            Vendor ID
+          </label>
           <input
             id="vendorIdFilter"
             value={vendorId}
@@ -162,7 +186,9 @@ export default function AdminOrders(): React.ReactElement {
         </div>
 
         <div className="grid gap-1">
-          <label className="text-xs opacity-70" htmlFor="fromDateFilter">From (UTC)</label>
+          <label className="text-xs opacity-70" htmlFor="fromDateFilter">
+            From (UTC)
+          </label>
           <input
             id="fromDateFilter"
             type="date"
@@ -174,7 +200,9 @@ export default function AdminOrders(): React.ReactElement {
         </div>
 
         <div className="grid gap-1">
-          <label className="text-xs opacity-70" htmlFor="toDateFilter">To (UTC)</label>
+          <label className="text-xs opacity-70" htmlFor="toDateFilter">
+            To (UTC)
+          </label>
           <input
             id="toDateFilter"
             type="date"
@@ -188,14 +216,16 @@ export default function AdminOrders(): React.ReactElement {
         <div className="md:col-span-4 flex items-center gap-3">
           <button
             type="button"
-            onClick={() => { setPage(1); void load(1); }}
+            onClick={() => {
+              setPage(1);
+              void load(1);
+            }}
             className="inline-flex rounded-lg px-3 py-2 text-sm font-semibold"
             style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
           >
             Apply filters
           </button>
 
-          {/* ✅ NEW: Export CSV */}
           <a
             href={csvHref}
             className="inline-flex rounded-lg px-3 py-2 text-sm font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
@@ -207,7 +237,6 @@ export default function AdminOrders(): React.ReactElement {
         </div>
       </div>
 
-      {/* Table */}
       <div className="rounded-2xl border overflow-x-auto" style={card}>
         {busy ? (
           <div className="p-6">
@@ -224,60 +253,98 @@ export default function AdminOrders(): React.ReactElement {
               <th className="px-4 py-3">Items</th>
               <th className="px-4 py-3">Vendors</th>
               <th className="px-4 py-3">Total</th>
-              <th className="px-4 py-3"></th>
+              <th className="px-4 py-3" />
             </tr>
             </thead>
             <tbody>
             {data.items.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-xs opacity-70">No results.</td>
+                <td colSpan={8} className="px-4 py-8 text-center text-xs opacity-70">
+                  No results.
+                </td>
               </tr>
-            ) : data.items.map((o) => {
-              const canRefund = o.status === 'paid';
-              return (
-                <tr key={o.id} className="border-b last:border-b-0" style={{ borderColor: 'var(--theme-border)' }}>
-                  <td className="px-4 py-3 font-semibold">#{o.id}</td>
-                  <td className="px-4 py-3">{new Date(o.createdAt).toLocaleString()}</td>
-                  <td className="px-4 py-3">{o.buyerName ? `${o.buyerName} (#${o.buyerId})` : `#${o.buyerId}`}</td>
-                  <td className="px-4 py-3 capitalize">{o.status.replace('_', ' ')}</td>
-                  <td className="px-4 py-3">{o.itemCount}</td>
-                  <td className="px-4 py-3">{o.vendorCount ?? '—'}</td>
-                  <td className="px-4 py-3 font-semibold">{centsToUsd(o.totalCents)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={`/admin/orders/${o.id}`}
-                        className="inline-flex rounded-lg px-3 py-1 text-xs font-semibold ring-1 ring-inset"
-                        style={{ borderColor: 'var(--theme-border)' }}
-                      >
-                        View
-                      </a>
-                      <button
-                        type="button"
-                        disabled={!canRefund || actBusy}
-                        onClick={() => setConfirmRefundId(o.id)}
-                        className="inline-flex rounded-lg px-3 py-1 text-xs font-semibold ring-1 ring-inset disabled:opacity-50"
-                        style={{ borderColor: 'var(--theme-border)' }}
-                        title={canRefund ? 'Issue full refund' : 'Refund disabled (status not paid)'}
-                      >
-                        Refund
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
+            ) : (
+              data.items.map((o: AdminOrderListItem) => {
+                const canRefund = o.status === 'paid';
+
+                let buyerLabel = `#${o.buyerId}`;
+                if (o.buyerEmail) {
+                  buyerLabel = `${o.buyerEmail}`;
+                } else if (o.buyerName) {
+                  buyerLabel = `${o.buyerName}`;
+                }
+
+                let vendorsLabel: string | number;
+                if (o.vendorSlugs && o.vendorSlugs.length > 0) {
+                  vendorsLabel = o.vendorSlugs.join(', ');
+                } else if (typeof o.vendorCount === 'number') {
+                  vendorsLabel = o.vendorCount;
+                } else {
+                  vendorsLabel = '—';
+                }
+
+                return (
+                  <tr
+                    key={o.id}
+                    className="border-b last:border-b-0"
+                    style={{ borderColor: 'var(--theme-border)' }}
+                  >
+                    <td className="px-4 py-3 font-semibold">#{o.id}</td>
+                    <td className="px-4 py-3">
+                      {new Date(o.createdAt).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-[var(--theme-link)]">{buyerLabel}</td>
+                    <td className={`px-4 py-3 uppercase ${statusClass(o.status)}`}>
+                      {o.status.replace('_', ' ')}
+                    </td>
+                    <td className="px-4 py-3">{o.itemCount}</td>
+                    <td className="px-4 py-3 capitalize">{vendorsLabel}</td>
+                    <td className="px-4 py-3 font-semibold text-[var(--theme-success)]">
+                      {centsToUsd(o.totalCents)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={`/admin/orders/${o.id}`}
+                          className="inline-flex rounded-lg px-3 py-1 text-xs font-semibold ring-1 ring-inset"
+                          style={{ borderColor: 'var(--theme-border)' }}
+                        >
+                          View
+                        </a>
+                        <button
+                          type="button"
+                          disabled={!canRefund || actBusy}
+                          onClick={() => setConfirmRefundId(o.id)}
+                          className="inline-flex rounded-lg px-3 py-1 text-xs font-semibold ring-1 ring-inset disabled:opacity-50"
+                          style={{ borderColor: 'var(--theme-border)' }}
+                          title={
+                            canRefund
+                              ? 'Issue full refund'
+                              : 'Refund disabled (status not paid)'
+                          }
+                        >
+                          Refund
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
             </tbody>
           </table>
         )}
       </div>
 
-      {/* Pagination */}
       <div className="flex items-center gap-2">
         <button
           type="button"
           disabled={busy || !canPrev}
-          onClick={() => { const n = Math.max(1, page - 1); setPage(n); void load(n); }}
+          onClick={() => {
+            const n = Math.max(1, page - 1);
+            setPage(n);
+            void load(n);
+          }}
           className="inline-flex rounded-lg px-3 py-2 text-sm font-semibold ring-1 ring-inset disabled:opacity-60"
           style={{ borderColor: 'var(--theme-border)' }}
         >
@@ -289,7 +356,11 @@ export default function AdminOrders(): React.ReactElement {
         <button
           type="button"
           disabled={busy || !canNext}
-          onClick={() => { const n = page + 1; setPage(n); void load(n); }}
+          onClick={() => {
+            const n = page + 1;
+            setPage(n);
+            void load(n);
+          }}
           className="inline-flex rounded-lg px-3 py-2 text-sm font-semibold ring-1 ring-inset disabled:opacity-60"
           style={{ borderColor: 'var(--theme-border)' }}
         >
@@ -297,7 +368,6 @@ export default function AdminOrders(): React.ReactElement {
         </button>
       </div>
 
-      {/* Refund confirm modal */}
       {confirmRefundId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
@@ -312,9 +382,12 @@ export default function AdminOrders(): React.ReactElement {
             aria-modal="true"
             aria-labelledby="refundDialogTitle"
           >
-            <div id="refundDialogTitle" className="text-lg font-semibold">Issue refund?</div>
+            <div id="refundDialogTitle" className="text-lg font-semibold">
+              Issue refund?
+            </div>
             <div className="text-sm opacity-80">
-              This will create a full refund for order #{confirmRefundId} and set the status to <em>refunded</em>.
+              This will create a full refund for order #{confirmRefundId} and set the
+              status to <em>refunded</em>.
             </div>
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
@@ -328,10 +401,15 @@ export default function AdminOrders(): React.ReactElement {
               </button>
               <button
                 type="button"
-                onClick={() => { if (confirmRefundId != null) void refundOrder(confirmRefundId); }}
+                onClick={() => {
+                  if (confirmRefundId != null) void refundOrder(confirmRefundId);
+                }}
                 disabled={actBusy}
                 className="rounded-lg px-3 py-2 text-sm font-semibold"
-                style={{ background: 'var(--theme-button)', color: 'var(--theme-text-white)' }}
+                style={{
+                  background: 'var(--theme-button)',
+                  color: 'var(--theme-text-white)',
+                }}
               >
                 {actBusy ? 'Refunding…' : 'Refund'}
               </button>
