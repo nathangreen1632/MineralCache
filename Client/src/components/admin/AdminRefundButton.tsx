@@ -8,7 +8,6 @@ export default function AdminRefundButton({ orderId, disabled }: Readonly<{ orde
   async function onRefund() {
     if (busy) return;
     setMsg(null);
-    // simple confirm
     if (!confirm('Refund this order in full?')) return;
 
     setBusy(true);
@@ -19,7 +18,6 @@ export default function AdminRefundButton({ orderId, disabled }: Readonly<{ orde
       return;
     }
     setMsg('Refund created.');
-    // Up to the parent to refresh order status; this is a stateless button
   }
 
   return (
@@ -29,7 +27,7 @@ export default function AdminRefundButton({ orderId, disabled }: Readonly<{ orde
         disabled={!!disabled || busy}
         className="rounded-xl px-4 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] disabled:opacity-50"
       >
-        {busy ? 'Refunding…' : 'Refund Order'}
+        {busy ? 'Refunding…' : 'Refund Entire Order'}
       </button>
       {msg && <div className="text-sm opacity-80">{msg}</div>}
     </div>
