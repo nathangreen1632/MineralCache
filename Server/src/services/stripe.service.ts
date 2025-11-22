@@ -98,6 +98,16 @@ export async function createPaymentIntent(args: {
   }
 }
 
+export async function retrievePaymentIntent(
+  paymentIntentId: string
+): Promise<Stripe.PaymentIntent | null> {
+  const status = getStripeStatus();
+  if (!status.enabled || !status.ready || !stripe) {
+    throw new Error('Stripe disabled');
+  }
+  return stripe.paymentIntents.retrieve(paymentIntentId);
+}
+
 export function verifyStripeWebhook(rawBody: Buffer, sig: string | null) {
   const status = getStripeStatus();
   if (!status.enabled || !status.ready || !stripe) throw new Error('Stripe disabled');
