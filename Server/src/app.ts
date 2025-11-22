@@ -20,6 +20,7 @@ import webhooksRouter from './routes/webhooks.route.js';
 import { registerUploadsStatic } from './middleware/uploadsStatic.js';
 import { publicRouter } from './routes/public.routes.js';
 import { initializePayoutsScheduler } from './jobs/payouts.job.js';
+import { initializePendingPaymentsScheduler } from './jobs/pendingPayments.job.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -148,6 +149,7 @@ app.use('/api/public', publicRouter);
 app.use('/api', apiRouter);
 
 initializePayoutsScheduler();
+initializePendingPaymentsScheduler();
 
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(CLIENT_DIST_DIR, { index: false }));
