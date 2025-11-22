@@ -65,12 +65,38 @@ function selectImageRecord(p: any): AnyImage | null {
 }
 
 export function imageUrlForCard(p: any): string | null {
+  const direct =
+    typeof p?.primaryImageUrl === 'string' ? p.primaryImageUrl.trim() : '';
+
+  if (direct) {
+    if (
+      direct.startsWith('http://') ||
+      direct.startsWith('https://') ||
+      direct.startsWith('/uploads/')
+    ) {
+      return direct;
+    }
+    return joinUrl(API_BASE, direct);
+  }
+
   const rec = selectImageRecord(p);
   if (!rec) return null;
+
   const rel = rec.v800Path || rec.v320Path || rec.v1600Path || rec.origPath || null;
   if (!rel) return null;
-  const withPrefix = rel.startsWith('/uploads/') ? rel : `/uploads/${rel}`;
-  return joinUrl(API_BASE, withPrefix);
+
+  const basePath =
+    rel.startsWith('http://') ||
+    rel.startsWith('https://') ||
+    rel.startsWith('/uploads/')
+      ? rel
+      : `/uploads/${rel.replace(/^\/+/, '')}`;
+
+  if (basePath.startsWith('/uploads/')) {
+    return basePath;
+  }
+
+  return joinUrl(API_BASE, basePath);
 }
 
 function normalizeVendorToSlugish(input: string): string {

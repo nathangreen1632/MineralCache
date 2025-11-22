@@ -140,13 +140,20 @@ export async function createAccountLink(args: {
   if (!status.enabled || !status.ready || !stripe) {
     return { url: null, error: 'Stripe is not configured' };
   }
+
   try {
+    let base = args.platformBaseUrl;
+    while (base.endsWith('/')) {
+      base = base.slice(0, -1);
+    }
+
     const link = await stripe.accountLinks.create({
       account: args.accountId,
       type: 'account_onboarding',
-      refresh_url: `${args.platformBaseUrl}/vendor/onboarding/refresh`,
-      return_url: `${args.platformBaseUrl}/vendor/dashboard`,
+      refresh_url: `${base}/vendor/onboarding/refresh`,
+      return_url: `${base}/vendor/dashboard?stripe=return`,
     });
+
     return { url: link.url || null };
   } catch (e: any) {
     return { url: null, error: e?.message || 'Failed to create onboarding link' };
@@ -220,4 +227,3 @@ export async function createVendorTransfer(args: {
     return { ok: false, error: String(err?.message || err) };
   }
 }
-

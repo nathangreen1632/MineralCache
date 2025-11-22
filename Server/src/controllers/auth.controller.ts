@@ -2,7 +2,7 @@
 import type { Request, Response } from 'express';
 import { z, type ZodError } from 'zod';
 import bcrypt from 'bcryptjs';
-import { Op, fn, col, where as sqlWhere } from 'sequelize';
+import { Op } from 'sequelize';
 import { User } from '../models/user.model.js';
 import { PasswordReset } from '../models/passwordReset.model.js';
 import {
@@ -71,28 +71,27 @@ export async function register(req: Request, res: Response): Promise<void> {
   }
   const { email, password, name } = parsed.data;
 
-  const normEmail = email.trim().toLowerCase();
+  const normEmail = lowerEmail(email);
 
-  const existing = await User.findOne({ where: { email: { [Op.iLike]: normEmail } } });
+  const existing = await User.findOne({ where: { email: normEmail } });
   if (existing) {
-    logWarn('auth.register.email_in_use', { ...obsCtx(req) });
-    res.status(409).json({ error: 'Email in use' });
+    logWarn('auth.register.email_taken', { ...obsCtx(req) });
+    res.status(409).json({ error: 'Email already registered' });
     return;
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const hash = await bcrypt.hash(password, 10);
   const now = new Date();
+
   const user = await User.create({
     email: normEmail,
-    passwordHash,
+    passwordHash: hash,
     role: 'buyer',
     dobVerified18: false,
     name,
     createdAt: now,
     updatedAt: now,
   } as any);
-
-  logInfo('auth.register.created', { ...obsCtx(req), newUserId: Number(user.id) });
 
   rotateSession(req);
   setSessionUser(req, {
@@ -102,7 +101,8 @@ export async function register(req: Request, res: Response): Promise<void> {
     email: user.email,
   });
 
-  res.status(201).json({ id: Number(user.id), email: user.email });
+  logInfo('auth.register.success', { ...obsCtx(req), userId: Number(user.id) });
+  res.status(201).json({ ok: true });
 }
 
 export async function login(req: Request, res: Response): Promise<void> {
@@ -113,11 +113,10 @@ export async function login(req: Request, res: Response): Promise<void> {
     return;
   }
   const { email, password } = parsed.data;
-  const normEmail = email.trim().toLowerCase();
+  const normEmail = lowerEmail(email);
 
-  const whereEmailEq = sqlWhere(fn('lower', col('email')), normEmail);
   const user = await User.findOne({
-    where: whereEmailEq as any,
+    where: { email: normEmail },
     attributes: ['id', 'email', 'role', 'dobVerified18', 'passwordHash', 'updatedAt', 'createdAt'],
     order: [
       ['updatedAt', 'DESC'],
@@ -127,6 +126,17 @@ export async function login(req: Request, res: Response): Promise<void> {
 
   if (!user) {
     logWarn('auth.login.user_not_found', { ...obsCtx(req) });
+    res.status(401).json({ error: 'Invalid credentials' });
+    return;
+  }
+
+  if (lowerEmail(user.email) !== normEmail) {
+    logWarn('auth.login.email_mismatch', {
+      ...obsCtx(req),
+      requestedEmail: normEmail,
+      userEmail: lowerEmail(user.email),
+      userId: Number(user.id),
+    });
     res.status(401).json({ error: 'Invalid credentials' });
     return;
   }
@@ -249,19 +259,24 @@ function lowerEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-export async function forgotPassword(req: Request, res: Response) {
+export async function forgotPassword(req: Request, res: Response): Promise<void> {
   const parsed = forgotPasswordSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn('auth.forgot.invalid_input', { ...obsCtx(req) });
     res.status(400).json({ error: 'Invalid request' });
     return;
   }
+
   const email = lowerEmail(parsed.data.email);
 
   try {
     const user = await User.findOne({
-      where: sqlWhere(fn('lower', col('email')), email),
+      where: { email },
       attributes: ['id', 'email'],
+      order: [
+        ['updatedAt', 'DESC'],
+        ['id', 'DESC'],
+      ],
     });
 
     const code = genOtp6();
@@ -270,37 +285,59 @@ export async function forgotPassword(req: Request, res: Response) {
     const expiresAt = new Date(Date.now() + ttlMs);
 
     if (user) {
-      await PasswordReset.create({userId: Number(user.id), codeHash: hash, expiresAt} as any);
+      await PasswordReset.create({
+        userId: Number(user.id),
+        codeHash: hash,
+        expiresAt,
+      } as any);
+
       try {
-        await sendOtpEmail({to: {email: user.email, name: null}, code, minutes: 10});
+        await sendOtpEmail({
+          to: { email: user.email, name: null },
+          code,
+          minutes: 10,
+        });
       } catch (e: any) {
-        logWarn('auth.forgot.email_failed', {...obsCtx(req), userId: Number(user.id), error: e?.message || String(e)});
+        logWarn('auth.forgot.email_failed', {
+          ...obsCtx(req),
+          userId: Number(user.id),
+          error: e?.message || String(e),
+        });
       }
     }
 
-      res.json({ ok: true });
-  } catch (e) {
-    logWarn('auth.forgot.error', { ...obsCtx(req), msg: String((e as any)?.message || e) });
+    res.json({ ok: true });
+  } catch (e: any) {
+    logWarn('auth.forgot.error', {
+      ...obsCtx(req),
+      msg: String(e?.message || e),
+    });
     res.json({ ok: true });
   }
 }
 
-export async function resetPassword(req: Request, res: Response) {
+export async function resetPassword(req: Request, res: Response): Promise<void> {
   const parsed = resetPasswordSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn('auth.reset.invalid_input', { ...obsCtx(req) });
     res.status(400).json({ error: 'Invalid request' });
     return;
   }
+
   const email = lowerEmail(parsed.data.email);
   const code = parsed.data.code;
   const newPassword = parsed.data.newPassword;
 
   try {
     const user = await User.findOne({
-      where: sqlWhere(fn('lower', col('email')), email),
+      where: { email },
       attributes: ['id', 'email', 'passwordHash'],
+      order: [
+        ['updatedAt', 'DESC'],
+        ['id', 'DESC'],
+      ],
     });
+
     if (!user) {
       res.status(400).json({ error: 'Invalid code' });
       return;
@@ -331,8 +368,8 @@ export async function resetPassword(req: Request, res: Response) {
 
     logInfo('auth.reset.success', { ...obsCtx(req), userId: Number(user.id) });
     res.json({ ok: true });
-  } catch (e) {
-    logWarn('auth.reset.error', { ...obsCtx(req), msg: String((e as any)?.message || e) });
+  } catch (e: any) {
+    logWarn('auth.reset.error', { ...obsCtx(req), msg: String(e?.message || e) });
     res.status(500).json({ error: 'Failed to reset password' });
   }
 }

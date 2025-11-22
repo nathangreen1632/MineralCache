@@ -9,6 +9,7 @@ import {
   type ListVendorProductsParams,
 } from '../../api/vendor';
 import { centsToUsd } from '../../utils/money.util';
+import { pressBtn } from '../../ui/press.ts';
 
 type Load =
   | { kind: 'idle' }
@@ -23,7 +24,7 @@ export default function VendorProductsTable(): React.ReactElement {
   const [status, setStatus] = useState<ListVendorProductsParams['status']>('active');
   const [sort, setSort] = useState<ListVendorProductsParams['sort']>('newest');
   const [page, setPage] = useState(1);
-  const pageSize = 100;
+  const pageSize = 12;
 
   useEffect(() => {
     let alive = true;
@@ -37,7 +38,9 @@ export default function VendorProductsTable(): React.ReactElement {
       }
       setState({ kind: 'loaded', items: data.items ?? [], total: data.total ?? 0 });
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [page, pageSize, status, sort]);
 
   async function toggleOnSale(p: VendorProductRow, next: boolean) {
@@ -94,7 +97,9 @@ export default function VendorProductsTable(): React.ReactElement {
   if (state.kind === 'error') {
     return (
       <div className="rounded-2xl border p-6 grid gap-3" style={card}>
-        <div className="text-sm" style={{ color: 'var(--theme-error)' }}>{state.message}</div>
+        <div className="text-sm" style={{ color: 'var(--theme-error)' }}>
+          {state.message}
+        </div>
       </div>
     );
   }
@@ -105,9 +110,13 @@ export default function VendorProductsTable(): React.ReactElement {
   const totalPages =
     state.kind === 'loaded' ? Math.max(1, Math.ceil((state.total ?? 0) / pageSize)) : 1;
 
+  function goToPage(next: number) {
+    const clamped = Math.min(Math.max(1, next), totalPages);
+    setPage(clamped);
+  }
+
   return (
     <div className="rounded-2xl border" style={card}>
-      {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 p-4">
         <label className="inline-flex items-center gap-2">
           <span className="text-sm">Show</span>
@@ -115,7 +124,10 @@ export default function VendorProductsTable(): React.ReactElement {
             aria-label="Filter products by status"
             className="rounded-xl border px-3 py-2 bg-[var(--theme-surface)] border-[var(--theme-border)]"
             value={status ?? 'active'}
-            onChange={(e) => { setPage(1); setStatus(e.target.value as ListVendorProductsParams['status']); }}
+            onChange={e => {
+              setPage(1);
+              setStatus(e.target.value as ListVendorProductsParams['status']);
+            }}
           >
             <option value="active">Active</option>
             <option value="archived">Archived</option>
@@ -129,7 +141,10 @@ export default function VendorProductsTable(): React.ReactElement {
             aria-label="Sort products"
             className="rounded-xl border px-3 py-2 bg-[var(--theme-surface)] border-[var(--theme-border)]"
             value={sort ?? 'newest'}
-            onChange={(e) => { setPage(1); setSort(e.target.value as ListVendorProductsParams['sort']); }}
+            onChange={e => {
+              setPage(1);
+              setSort(e.target.value as ListVendorProductsParams['sort']);
+            }}
           >
             <option value="newest">Newest</option>
             <option value="oldest">Oldest</option>
@@ -150,7 +165,6 @@ export default function VendorProductsTable(): React.ReactElement {
         </div>
       ) : null}
 
-      {/* Table */}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead style={headerStyle}>
@@ -164,7 +178,7 @@ export default function VendorProductsTable(): React.ReactElement {
           </tr>
           </thead>
           <tbody>
-          {items.map((p) => (
+          {items.map(p => (
             <tr key={p.id} className="border-t border-[var(--theme-border)]">
               <td className="px-4 py-3">
                 <div className="flex items-center gap-3">
@@ -172,8 +186,8 @@ export default function VendorProductsTable(): React.ReactElement {
                     <img
                       src={p.primaryPhotoUrl}
                       alt=""
-                      width={48}
-                      height={48}
+                      width={100}
+                      height={100}
                       className="rounded-lg object-cover"
                       style={{ background: 'var(--theme-card)' }}
                     />
@@ -186,14 +200,16 @@ export default function VendorProductsTable(): React.ReactElement {
                   </div>
                 </div>
               </td>
-              <td className="px-4 py-3 text-[var(--theme-success)]">{centsToUsd(p.priceCents)}</td>
+              <td className="px-4 py-3 text-[var(--theme-success)]">
+                {centsToUsd(p.priceCents)}
+              </td>
               <td className="px-4 py-3">{p.photoCount ?? 0}</td>
               <td className="px-4 py-3">
                 <label className="inline-flex items-center gap-2">
                   <input
                     type="checkbox"
                     checked={!!p.onSale}
-                    onChange={(e) => toggleOnSale(p, e.target.checked)}
+                    onChange={e => toggleOnSale(p, e.target.checked)}
                   />
                   <span>On sale</span>
                 </label>
@@ -203,7 +219,7 @@ export default function VendorProductsTable(): React.ReactElement {
                   <input
                     type="checkbox"
                     checked={!!p.archived}
-                    onChange={(e) => toggleArchived(p, e.target.checked)}
+                    onChange={e => toggleArchived(p, e.target.checked)}
                   />
                   <span>Archived</span>
                 </label>
@@ -229,30 +245,47 @@ export default function VendorProductsTable(): React.ReactElement {
         </table>
       </div>
 
-      {/* Footer with pager & hint */}
-      <div className="flex items-center justify-between p-4">
-        <div className="text-xs opacity-70">
-          Tip: Archive removes items from Active view. Switch “Show → Archived” to revive them.
-        </div>
-        <div className="inline-flex gap-2">
-          <button
-            type="button"
-            className="inline-flex rounded-xl px-3 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page <= 1}
-            aria-label="Previous page"
+      <div className="flex items-center justify-end p-4">
+        {/*<div className="text-xs opacity-70">*/}
+        {/*  Tip: Archive removes items from Active view. Switch “Show → Archived” to revive them.*/}
+        {/*</div>*/}
+
+        <div className="flex items-center gap-3">
+          <div
+            className="text-xs opacity-70"
+            aria-live="polite"
           >
-            Prev
-          </button>
-          <button
-            type="button"
-            className="inline-flex rounded-xl px-3 py-2 font-semibold bg-[var(--theme-button)] text-[var(--theme-text-white)] hover:bg-[var(--theme-button-hover)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--theme-focus)] focus-visible:ring-offset-[var(--theme-surface)]"
-            onClick={() => setPage(p => p + 1)}
-            disabled={page >= totalPages}
-            aria-label="Next page"
-          >
-            Next
-          </button>
+            Page {page} / {totalPages}
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => goToPage(page - 1)}
+              className={pressBtn('rounded px-3 py-1 text-sm disabled:opacity-50')}
+              style={{
+                background: 'var(--theme-surface)',
+                color: 'var(--theme-text)',
+                border: '1px solid var(--theme-border)',
+              }}
+            >
+              Prev
+            </button>
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => goToPage(page + 1)}
+              className={pressBtn('rounded px-3 py-1 text-sm disabled:opacity-50')}
+              style={{
+                background: 'var(--theme-surface)',
+                color: 'var(--theme-text)',
+                border: '1px solid var(--theme-border)',
+              }}
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
     </div>

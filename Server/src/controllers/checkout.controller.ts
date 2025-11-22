@@ -223,7 +223,7 @@ async function computeCartTotals(userId: number) {
 }
 
 export async function createCheckoutIntent(req: Request, res: Response): Promise<void> {
-  const u = (req as any).user ?? (req.session as any)?.user ?? null;
+  const u = (req as any).user ?? (req.session)?.user ?? null;
   if (!u?.id) {
     res
       .status(401)

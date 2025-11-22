@@ -1,6 +1,7 @@
 // Server/src/app.ts
 import express, { Express } from 'express';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
@@ -20,6 +21,11 @@ import { registerUploadsStatic } from './middleware/uploadsStatic.js';
 import { publicRouter } from './routes/public.routes.js';
 import { initializePayoutsScheduler } from './jobs/payouts.job.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, '..', '..');
+const CLIENT_DIST_DIR = path.join(ROOT_DIR, 'Client', 'dist');
+
 assertStripeAtBoot();
 
 const app: Express = express();
@@ -28,7 +34,57 @@ app.set('trust proxy', true);
 
 app.use('/api/webhooks', webhooksRouter);
 
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'same-site' } }));
+const cspDirectives = helmet.contentSecurityPolicy.getDefaultDirectives();
+
+cspDirectives['script-src'] = [
+  "'self'",
+  'https://js.stripe.com',
+];
+
+cspDirectives['frame-src'] = [
+  "'self'",
+  'https://js.stripe.com',
+  'https://payments.stripe.com',
+  'https://checkout.link.com',
+];
+
+cspDirectives['connect-src'] = [
+  "'self'",
+  'https://api.stripe.com',
+  'https://js.stripe.com',
+  'https://r.stripe.com',
+  'https://checkout.link.com',
+  'https://checkout-cookies.stripe.com',
+];
+
+cspDirectives['img-src'] = [
+  "'self'",
+  'data:',
+  'blob:',
+  'https://www.gravatar.com',
+  'https://secure.gravatar.com',
+  'https://q.stripe.com',
+  'https://js.stripe.com',
+  'https://b.stripecdn.com',
+  'https://files.stripe.com',
+];
+
+cspDirectives['style-src'] = [
+  "'self'",
+  'https:',
+  "'unsafe-inline'",
+];
+
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'same-site' },
+    crossOriginOpenerPolicy: false,
+    contentSecurityPolicy: {
+      directives: cspDirectives,
+    },
+  }),
+);
+
 app.use(compression());
 app.use(morgan('tiny'));
 
@@ -60,7 +116,9 @@ app.get(READY_PATH, async (_req, res) => {
   if (result.ok) {
     res.json({ ok: true, db: 'up', ts: new Date().toISOString() });
   } else {
-    res.status(503).json({ ok: false, db: 'down', error: result.error, ts: new Date().toISOString() });
+    res
+      .status(503)
+      .json({ ok: false, db: 'down', error: result.error, ts: new Date().toISOString() });
   }
 });
 
@@ -92,9 +150,15 @@ app.use('/api', apiRouter);
 initializePayoutsScheduler();
 
 if (process.env.NODE_ENV === 'production') {
-  const clientDir = path.resolve(process.cwd(), 'Client', 'dist');
-  app.use(express.static(clientDir, { index: false }));
-  app.get('*', (_req, res) => res.sendFile(path.join(clientDir, 'index.html')));
+  app.use(express.static(CLIENT_DIST_DIR, { index: false }));
+
+  app.get('/', (_req, res) => {
+    res.sendFile(path.join(CLIENT_DIST_DIR, 'index.html'));
+  });
+
+  app.get('/*splat', (_req, res) => {
+    res.sendFile(path.join(CLIENT_DIST_DIR, 'index.html'));
+  });
 }
 
 app.use(jsonErrorHandler);
