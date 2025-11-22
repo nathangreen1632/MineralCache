@@ -23,6 +23,8 @@ import {
   exportAdminOrdersCsv,
 } from '../../controllers/admin/orders.controller.js';
 import { runPayoutsNow } from '../../controllers/admin/payouts.controller.js';
+import {runPendingPaymentsNow} from "../../controllers/admin/pendingPayments.controller.js";
+import {burstLimiter} from "../../middleware/rateLimit.middleware.js";
 
 const router: Router = Router();
 
@@ -41,6 +43,7 @@ router.get('/orders.csv', requireAdmin, exportAdminOrdersCsv);
 router.get('/orders', requireAdmin, validateQuery(adminListOrdersQuerySchema), listAdminOrders);
 router.get('/orders/:id', requireAdmin, getAdminOrder);
 router.post('/orders/:id/refund', requireAdmin, refundOrder);
+router.post('/orders/pending-payments/run', requireAdmin, burstLimiter, runPendingPaymentsNow);
 
 router.post('/users/promote', requireAdmin, validateBody(adminPromoteSchema), promoteUserByEmail);
 
