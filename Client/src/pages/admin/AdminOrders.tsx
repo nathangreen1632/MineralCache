@@ -17,7 +17,7 @@ function statusClass(status: AdminOrderStatus): string {
     case 'paid':
       return 'text-[var(--theme-success)]';
     case 'pending_payment':
-      return 'text-[var(--theme-warning-alt)]';
+      return 'text-[var(--theme-warning)]';
     case 'refunded':
       return 'text-[var(--theme-refund)]';
     default:
@@ -283,6 +283,8 @@ export default function AdminOrders(): React.ReactElement {
                   vendorsLabel = '—';
                 }
 
+                const statusClasses = statusClass(o.status);
+
                 return (
                   <tr
                     key={o.id}
@@ -294,12 +296,12 @@ export default function AdminOrders(): React.ReactElement {
                       {new Date(o.createdAt).toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-[var(--theme-link)]">{buyerLabel}</td>
-                    <td className={`px-4 py-3 uppercase ${statusClass(o.status)}`}>
+                    <td className={`px-4 py-3 uppercase ${statusClasses}`}>
                       {o.status.replace('_', ' ')}
                     </td>
                     <td className="px-4 py-3">{o.itemCount}</td>
                     <td className="px-4 py-3 capitalize">{vendorsLabel}</td>
-                    <td className="px-4 py-3 font-semibold text-[var(--theme-success)]">
+                    <td className={`px-4 py-3 font-semibold ${statusClasses}`}>
                       {centsToUsd(o.totalCents)}
                     </td>
                     <td className="px-4 py-3">
