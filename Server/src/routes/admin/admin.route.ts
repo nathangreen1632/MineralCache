@@ -1,7 +1,6 @@
 // Server/src/routes/admin/admin.route.ts
 import { Router } from 'express';
 import { requireAdmin } from '../../middleware/auth.middleware.js';
-import { burstLimiter } from '../../middleware/rateLimit.middleware.js';
 import { validateBody, validateQuery } from '../../middleware/validate.middleware.js';
 import { adminListVendorsSchema, adminRejectSchema } from '../../validation/vendor.schema.js';
 import { updateAdminSettingsSchema } from '../../validation/adminSettings.schema.js';
@@ -33,18 +32,18 @@ router.get('/vendor-apps', requireAdmin, validateQuery(adminListVendorsSchema), 
 router.post('/vendor-apps/:id/approve', requireAdmin, approveVendor);
 router.post('/vendor-apps/:id/reject', requireAdmin, validateBody(adminRejectSchema), rejectVendor);
 
-router.get('/settings', requireAdmin, burstLimiter, getAdminSettings);
-router.patch('/settings', requireAdmin, burstLimiter, validateBody(updateAdminSettingsSchema), patchAdminSettings);
+router.get('/settings', requireAdmin, getAdminSettings);
+router.patch('/settings', requireAdmin, validateBody(updateAdminSettingsSchema), patchAdminSettings);
 
 router.use('/shipping-rules', requireAdmin, shippingRulesRouter);
 
-router.get('/orders.csv', requireAdmin, burstLimiter, exportAdminOrdersCsv);
-router.get('/orders', requireAdmin, burstLimiter, validateQuery(adminListOrdersQuerySchema), listAdminOrders);
-router.get('/orders/:id', requireAdmin, burstLimiter, getAdminOrder);
-router.post('/orders/:id/refund', requireAdmin, burstLimiter, refundOrder);
+router.get('/orders.csv', requireAdmin, exportAdminOrdersCsv);
+router.get('/orders', requireAdmin, validateQuery(adminListOrdersQuerySchema), listAdminOrders);
+router.get('/orders/:id', requireAdmin, getAdminOrder);
+router.post('/orders/:id/refund', requireAdmin, refundOrder);
 
 router.post('/users/promote', requireAdmin, validateBody(adminPromoteSchema), promoteUserByEmail);
 
-router.post('/payouts/run', requireAdmin, burstLimiter, runPayoutsNow);
+router.post('/payouts/run', requireAdmin, runPayoutsNow);
 
 export default router;
