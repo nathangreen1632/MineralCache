@@ -101,13 +101,16 @@ export default function AdminOrders(): React.ReactElement {
         headers: { 'Content-Type': 'application/json' },
       });
       const ok = res.ok;
-      let body: any = null;
+      let body: { error?: string; message?: string } | null;
+
       try {
         body = await res.json();
-      } catch {}
+      } catch {
+        body = null;
+      }
 
       if (!ok) {
-        const err = (body && (body.error || body.message)) || `HTTP ${res.status}`;
+        const err = body?.error ?? body?.message ?? `HTTP ${res.status}`;
         setFlash({ kind: 'error', text: `Refund failed: ${err}` });
       } else {
         setFlash({ kind: 'success', text: `Refund issued for order #${orderId}.` });
@@ -118,6 +121,60 @@ export default function AdminOrders(): React.ReactElement {
     } finally {
       setActBusy(false);
       setConfirmRefundId(null);
+    }
+  }
+
+  async function runPendingPaymentsSweep() {
+    setActBusy(true);
+    setFlash(null);
+    try {
+      const res = await fetch('/api/admin/orders/pending-payments/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const ok = res.ok;
+      let body:
+        | {
+        ok?: boolean;
+        error?: string;
+        message?: string;
+        checked?: number;
+        markedPaid?: number;
+        markedFailed?: number;
+        skipped?: number;
+      }
+        | null;
+
+      try {
+        body = await res.json();
+      } catch {
+        body = null;
+      }
+
+      if (!ok || !body?.ok) {
+        const err = body?.error ?? body?.message ?? `HTTP ${res.status}`;
+        setFlash({ kind: 'error', text: `Pending sweep failed: ${err}` });
+      } else {
+        const {
+          checked = 0,
+          markedPaid = 0,
+          markedFailed = 0,
+          skipped = 0,
+        } = body;
+
+        setFlash({
+          kind: 'success',
+          text: `Pending sweep complete. Checked ${checked}, paid ${markedPaid}, failed ${markedFailed}, skipped ${skipped}.`,
+        });
+        await load(page);
+      }
+    } catch (e: any) {
+      setFlash({
+        kind: 'error',
+        text: `Pending sweep failed: ${e?.message || e || 'Unknown error'}`,
+      });
+    } finally {
+      setActBusy(false);
     }
   }
 
@@ -313,6 +370,20 @@ export default function AdminOrders(): React.ReactElement {
                         >
                           View
                         </a>
+                        <button
+                          type="button"
+                          disabled={o.status !== 'pending_payment' || actBusy}
+                          onClick={() => void runPendingPaymentsSweep()}
+                          className="inline-flex rounded-lg px-3 py-1 text-xs font-semibold ring-1 ring-inset disabled:opacity-50"
+                          style={{ borderColor: 'var(--theme-border)' }}
+                          title={
+                            o.status === 'pending_payment'
+                              ? 'Run pending-payment sweep now'
+                              : 'Available only for pending-payment orders'
+                          }
+                        >
+                          Retry
+                        </button>
                         <button
                           type="button"
                           disabled={!canRefund || actBusy}
