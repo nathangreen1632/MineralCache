@@ -26,6 +26,8 @@
     --c-o: #F5AF02;
     --c-p: #000000;
     --c-q: #000000;
+    --c-r: #ef4444;
+    --c-s: #0F766E;
 
     /* LIGHT theme mapping */
     --theme-bg: var(--c-b);
@@ -70,6 +72,8 @@
     /* semantic */
     --theme-success: var(--c-g);
     --theme-warning: var(--c-o);
+    --theme-error: var(--c-r);
+    --theme-refund: var(--c-s);
     --theme-info: var(--c-j);
     --theme-psycho: var(--c-q);
     --theme-psycho-inverse: var(--c-p);
@@ -89,7 +93,6 @@
     --theme-shadow: rgba(48, 13, 13, 0.25);
 
     /* error */
-    --theme-error: #ef4444;
     --theme-button-error: #c43838;
 
     /* LIGHT scrollbar */
@@ -123,6 +126,8 @@
     --c-o: #F5AF02;
     --c-p: #000000;
     --c-q: #FFFFFF;
+    --c-r: #ef4444;
+    --c-s: #0F766E;
 
     /* DARK theme mapping */
     --theme-bg: var(--c-e);
@@ -166,6 +171,8 @@
     /* semantic */
     --theme-success: var(--c-g);
     --theme-warning: var(--c-o);
+    --theme-error: var(--c-r);
+    --theme-refund: var(--c-s);
     --theme-info: var(--c-j);
     --theme-psycho: var(--c-q);
     --theme-psycho-inverse: var(--c-p);
@@ -185,7 +192,6 @@
     --theme-shadow: rgba(204, 218, 209, 0.25);
 
     /* error */
-    --theme-error: #ef4444;
     --theme-button-error: #c43838;
 
     /* DARK scrollbar */
@@ -218,6 +224,8 @@ html[data-theme="dark"] {
   --c-o: #F5AF02;
   --c-p: #000000;
   --c-q: #FFFFFF;
+  --c-r: #ef4444;
+  --c-s: #0F766E;
 
   /* DARK theme mapping (parity with system dark) */
   --theme-bg: var(--c-e);
@@ -261,6 +269,8 @@ html[data-theme="dark"] {
   /* semantic */
   --theme-success: var(--c-g);
   --theme-warning: var(--c-o);
+  --theme-error: var(--c-r);
+  --theme-refund: var(--c-s);
   --theme-info: var(--c-j);
   --theme-psycho: var(--c-q);
   --theme-psycho-inverse: var(--c-p);
@@ -280,7 +290,6 @@ html[data-theme="dark"] {
   --theme-shadow: rgba(204, 218, 209, 0.25);
 
   /* error */
-  --theme-error: #ef4444;
   --theme-button-error: #c43838;
 
   /* DARK scrollbar */
